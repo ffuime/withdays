@@ -504,6 +504,17 @@ struct SlideElement: Codable, Hashable, Identifiable {
         }
     }
 
+    /// What makes two elements on neighbouring slides "the same" for 移動: the same text, image, shape kind…
+    var matchKey: String {
+        switch content {
+        case .text(let box): "text:" + box.text.plainText
+        case .image(let image): "image:" + image.asset
+        case .shape(let shape): "shape:" + shape.kind.rawValue
+        case .line: "line"
+        case .table(let table): "table:\(table.rows)x\(table.columns):" + table.cells.flatMap { $0 }.map(\.text.plainText).joined(separator: "|")
+        }
+    }
+
     /// Every piece of text in the element, for searching.
     var searchableText: String {
         switch content {
@@ -541,7 +552,7 @@ enum AnimationCategory: String, Codable, CaseIterable {
 }
 
 enum AnimationEffect: String, Codable, CaseIterable {
-    case appear, fade, slideIn, zoom
+    case appear, fade, slideIn, zoom, move
 
     var label: String {
         switch self {
@@ -549,6 +560,7 @@ enum AnimationEffect: String, Codable, CaseIterable {
         case .fade: "フェード"
         case .slideIn: "スライドイン"
         case .zoom: "ズーム"
+        case .move: "移動"
         }
     }
 

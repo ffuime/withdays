@@ -77,12 +77,25 @@ struct ColorRow: View {
 }
 
 /// A slider with its value written beside it.
+/// A slider with its value written beside it. Round values (0, the middle and the ends, or `marks`) hold the thumb
+/// for a little way and tap as it lands on them.
 struct ValueSlider: View {
     let title: String
     @Binding var value: Double
     let range: ClosedRange<Double>
     var step: Double = 1
     var format: (Double) -> String = { String(Int($0.rounded())) }
+    var marks: [Double]?
+
+    /// The round value the thumb is resting on.
+    @State private var resting: Double?
+
+    private var points: [Double] {
+        if let marks { return marks }
+        var points = [range.lowerBound, range.upperBound, (range.lowerBound + range.upperBound) / 2]
+        if range.contains(0) { points.append(0) }
+        return points
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -94,8 +107,21 @@ struct ValueSlider: View {
                     .foregroundStyle(.secondary)
             }
             .font(.system(size: 14))
-            Slider(value: $value, in: range, step: step)
+            Slider(value: Binding(get: { value }, set: settle), in: range, step: step)
                 .tint(SlidesTheme.brand)
+        }
+        .sensoryFeedback(.impact(weight: .light), trigger: resting) { _, new in new != nil }
+    }
+
+    /// Within 2.5 % of the range from a round value, the thumb stays on it.
+    private func settle(_ raw: Double) {
+        let window = (range.upperBound - range.lowerBound) * 0.025
+        if let point = points.min(by: { abs($0 - raw) < abs($1 - raw) }), abs(point - raw) <= window {
+            value = point
+            if resting != point { resting = point }
+        } else {
+            value = raw
+            if resting != nil { resting = nil }
         }
     }
 }

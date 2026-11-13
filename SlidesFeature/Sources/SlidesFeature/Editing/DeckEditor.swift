@@ -231,11 +231,57 @@ final class DeckEditor {
     // MARK: Elements
 
     /// Adds an element in the middle of the slide and selects it.
-    func insert(_ element: SlideElement) {
+    func insert(_ element: SlideElement, at center: CGPoint = CGPoint(x: 960, y: 540)) {
         var placed = element
-        placed.move(by: 960 - Double(placed.frame.center.x), 540 - Double(placed.frame.center.y))
+        placed.move(by: Double(center.x - placed.frame.center.x), Double(center.y - placed.frame.center.y))
         changeCurrentSlide { $0.elements.append(placed) }
         selection = placed.id
+    }
+
+    // MARK: Copy and paste
+
+    func copyElement(_ id: UUID) {
+        guard let element = current.elements.first(where: { $0.id == id }) else { return }
+        ElementClipboard.copy(element, deck: deckID)
+    }
+
+    /// Pastes what's on the pasteboard: a Slides element (where it was, nudged if that spot is taken),
+    /// an image (SVG drawn first), or text as a new text box.
+    func paste() async throws {
+        switch ElementClipboard.read() {
+        case .element(let payload):
+            SlidesFiles.copyAssets(payload.element.assetNames, from: payload.deck, to: deckID)
+            var element = payload.element
+            element.id = UUID()
+            while current.elements.contains(where: { $0.frame == element.frame }) {
+                element.move(by: 40, 40)
+            }
+            changeCurrentSlide { $0.elements.append(element) }
+            selection = element.id
+            for asset in element.assetNames {
+                ImageTextIndexer.shared.index(asset, deck: deckID, context: context)
+            }
+        case .image(let data):
+            try insertImage(try await ImageLoading.usableData(data))
+        case .text(let string):
+            var text = RichText.plain(string, size: 44)
+            text.runs[0].text = string
+            let lines = max(1, string.components(separatedBy: "\n").count)
+            insert(SlideElement(
+                frame: SlideRect(x: 0, y: 0, width: 1200, height: Double(min(lines, 12)) * 66 + 20),
+                content: .text(TextBoxElement(text: text))
+            ))
+        case nil:
+            break
+        }
+    }
+
+    /// The current slide's background on every slide (one step).
+    func applyBackgroundToAll() {
+        let background = current.background
+        change { slides in
+            for index in slides.indices { slides[index].background = background }
+        }
     }
 
     func duplicateElement(_ id: UUID) {
@@ -341,14 +387,14 @@ final class DeckEditor {
     }
 
     /// Saves an image to the deck and puts it on the slide, fitted inside 1280×720; its text is read in the background.
-    func insertImage(_ data: Data) throws {
+    func insertImage(_ data: Data, at center: CGPoint = CGPoint(x: 960, y: 540)) throws {
         let stored = try SlidesFiles.storeImage(data, deck: deckID)
         let scale = min(1280 / stored.size.width, 720 / stored.size.height, 1)
         let size = CGSize(width: stored.size.width * scale, height: stored.size.height * scale)
         insert(SlideElement(
             frame: SlideRect(x: 0, y: 0, width: Double(size.width), height: Double(size.height)),
             content: .image(ImageElement(asset: stored.name, mode: .stretch))
-        ))
+        ), at: center)
         ImageTextIndexer.shared.index(stored.name, deck: deckID, context: context)
     }
 

@@ -51,6 +51,8 @@ struct EditorView: View {
     @State private var photo: PhotosPickerItem?
     @State private var importingImage = false
     @State private var selectAllOnEdit = false
+    @State private var deletingDeck = false
+    @State private var duplicated = 0
     @State private var errorMessage: String?
 
     var body: some View {
@@ -66,7 +68,7 @@ struct EditorView: View {
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
-                ContextToolbar(editor: editor) { sheet = $0 }
+                ContextToolbar(editor: editor, open: { sheet = $0 }, paste: paste)
                     .padding(.vertical, 8)
                     .frame(maxWidth: .infinity)
                     .background(Color(uiColor: .systemGroupedBackground))
@@ -123,6 +125,18 @@ struct EditorView: View {
             }
         }
         .deckExport($export)
+        .sensoryFeedback(.success, trigger: duplicated)
+        .alert("「\(editor.deck.title)」を削除", isPresented: $deletingDeck) {
+            Button("キャンセル", role: .cancel) {}
+            Button("削除", role: .destructive) {
+                finishTyping()
+                let deck = editor.deck
+                if !path.isEmpty { path.removeLast() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { DeckActions.delete(deck, context: context) }
+            }
+        } message: {
+            Text("この操作は取り消せません。")
+        }
         .alert("エラー", isPresented: Binding(get: { errorMessage != nil || editor.saveError != nil }, set: { if !$0 { errorMessage = nil; editor.saveError = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -215,21 +229,30 @@ struct EditorView: View {
 
     private var moreMenu: some View {
         Menu {
-            Button("名前を変更", systemImage: "pencil") { renaming = true }
-            Button(editor.deck.showsGuides ? "ガイドを非表示" : "ガイドを表示", systemImage: "squareshape.split.2x2.dotted") {
-                editor.toggleGuides()
-            }
-            Button("詳細", systemImage: "info.circle") {
-                editor.saveNow()
-                sheet = .details
-            }
-            Menu("書き出し", systemImage: "square.and.arrow.up") {
-                Button("PDF (.pdf)") { startExport(.pdf) }
-                Button("PowerPoint (.pptx)") { startExport(.pptx) }
-            }
-            Button(editor.deck.isFavorite ? "お気に入りから削除" : "お気に入りに追加", systemImage: editor.deck.isFavorite ? "star.slash" : "star") {
-                editor.toggleFavorite()
-            }
+            DeckMenuItems(deck: editor.deck, actions: DeckMenuActions(
+                rename: { renaming = true },
+                duplicate: {
+                    editor.saveNow()
+                    DeckActions.duplicate(editor.deck, context: context)
+                    duplicated += 1
+                },
+                toggleGuides: { editor.toggleGuides() },
+                showDetails: {
+                    editor.saveNow()
+                    sheet = .details
+                },
+                export: startExport,
+                exportCurrent: { format in
+                    finishTyping()
+                    editor.saveNow()
+                    export = ExportRequest(
+                        title: editor.deck.title, deckID: editor.deckID, slide: editor.current,
+                        number: editor.currentIndex + 1, format: format
+                    )
+                },
+                toggleFavorite: { editor.toggleFavorite() },
+                delete: { deletingDeck = true }
+            ))
         } label: {
             Image(systemName: "ellipsis")
                 .font(.system(size: 17, weight: .semibold))
@@ -362,6 +385,16 @@ struct EditorView: View {
             frame: SlideRect(x: 0, y: 0, width: width, height: height),
             content: .table(.make(rows: rows, columns: columns))
         ))
+    }
+
+    private func paste() {
+        Task {
+            do {
+                try await editor.paste()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 
     private func startExport(_ format: ExportFormat) {

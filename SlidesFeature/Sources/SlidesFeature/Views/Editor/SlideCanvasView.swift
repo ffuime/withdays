@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The slide being edited, fitted to the space with margins. A tap selects an element and a tap on the selected
 /// text box (or table cell) starts typing; a drag that starts on an element moves it (snapping to the slide, the
@@ -54,6 +55,18 @@ struct SlideCanvasView: View {
             .gesture(PinchPanGesture { phase, factor, location in
                 pinched(phase, factor: factor, location: location, area: geo.size, slideSize: CGSize(width: 1920 * fit, height: 1080 * fit), size: size)
             })
+            // Images dragged in from other apps land where they're dropped.
+            .onDrop(of: [.image, .fileURL], isTargeted: nil) { providers, location in
+                let origin = CGPoint(
+                    x: geo.size.width / 2 + pan.width - size.width / 2,
+                    y: geo.size.height / 2 + pan.height - size.height / 2
+                )
+                let point = CGPoint(
+                    x: min(max((location.x - origin.x) / scale, 0), 1920),
+                    y: min(max((location.y - origin.y) / scale, 0), 1080)
+                )
+                return dropImages(providers, at: point)
+            }
             .clipped()
             .overlay(alignment: .topTrailing) {
                 if zoom > 1.01 {
@@ -405,6 +418,28 @@ struct SlideCanvasView: View {
                 finishTyping()
                 editor.show(target)
             }
+    }
+
+    /// Loads each dropped image (SVG drawn first) and puts it on the slide, a little apart from the one before.
+    private func dropImages(_ providers: [NSItemProvider], at point: CGPoint) -> Bool {
+        let images = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.image.identifier) }
+        guard !images.isEmpty else { return false }
+        for (index, provider) in images.enumerated() {
+            let type = provider.registeredTypeIdentifiers.first { UTType($0)?.conforms(to: .image) == true } ?? UTType.image.identifier
+            provider.loadDataRepresentation(forTypeIdentifier: type) { data, _ in
+                guard let data else { return }
+                Task { @MainActor in
+                    do {
+                        let usable = try await ImageLoading.usableData(data)
+                        let offset = CGFloat(index) * 40
+                        try editor.insertImage(usable, at: CGPoint(x: point.x + offset, y: point.y + offset))
+                    } catch {
+                        // An image that can't be read is skipped.
+                    }
+                }
+            }
+        }
+        return true
     }
 
     private func deselect() {

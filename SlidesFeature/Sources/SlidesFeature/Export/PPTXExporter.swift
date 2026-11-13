@@ -672,7 +672,8 @@ struct SlideWriter {
         var behaviors = ""
         if entrance { behaviors += visibility("visible", at: 0) }
         switch animation.effect {
-        case .appear:
+        case .appear, .move:
+            // PowerPoint has no move between slides as an element effect: it appears.
             presetID = 1
         case .fade:
             presetID = 10

@@ -359,9 +359,11 @@ struct TableFormatSheet: View {
     }
 }
 
-/// 背景: the slide's fill.
+/// 背景: the slide's fill, and a button to give every slide the same.
 struct BackgroundSheet: View {
     @Bindable var editor: DeckEditor
+
+    @State private var applied = 0
 
     var body: some View {
         NavigationStack {
@@ -375,7 +377,15 @@ struct BackgroundSheet: View {
                         storeImage: editor.storeImage
                     )
                 }
+                Section {
+                    Button("すべてのスライドに適用", systemImage: "square.stack.3d.down.forward") {
+                        editor.applyBackgroundToAll()
+                        applied += 1
+                    }
+                    .disabled(editor.slides.count < 2)
+                }
             }
+            .sensoryFeedback(.success, trigger: applied)
             .navigationTitle("背景")
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -466,7 +476,7 @@ struct AngleControl: View {
                 }
                 GridRow { arrow(135); arrow(90); arrow(45) }
             }
-            ValueSlider(title: "角度", value: $angle, range: 0...359, step: 1, format: { "\(Int($0.rounded()))°" })
+            ValueSlider(title: "角度", value: $angle, range: 0...359, step: 1, format: { "\(Int($0.rounded()))°" }, marks: [0, 45, 90, 135, 180, 225, 270, 315])
         }
     }
 

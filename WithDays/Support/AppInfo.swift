@@ -23,6 +23,11 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.8.0", date: "2026.11.14", notes: [
+            "Slides：コピー・貼り付け（他のアプリの画像や文字も）、画像のドラッグ＆ドロップ",
+            "Slides：アニメーション「移動」（前のスライドの同じ要素から動く）",
+            "Slides：このスライドだけを画像 / PDFで書き出し、背景をすべてのスライドに適用",
+        ]),
         Release(version: "1.7.4", date: "2026.11.14", notes: [
             "Slides：角で縦横比を保って拡大縮小、画像を伸ばせるように",
             "Slides：文字入力をスライドと同じ見た目で",

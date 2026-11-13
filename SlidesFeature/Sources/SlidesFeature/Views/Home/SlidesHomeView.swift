@@ -164,8 +164,11 @@ struct SlidesRoot: View {
                         open: { open(item.deck) },
                         rename: { titleRequest = TitleRequest(kind: .rename(item.deck)) },
                         duplicate: { DeckActions.duplicate(item.deck, context: context) },
-                        exportPPTX: { export = ExportRequest(deck: item.deck, format: .pptx) },
-                        exportPDF: { export = ExportRequest(deck: item.deck, format: .pdf) },
+                        toggleGuides: {
+                            item.deck.showsGuides.toggle()
+                            try? context.save()
+                        },
+                        export: { export = ExportRequest(deck: item.deck, format: $0) },
                         toggleFavorite: { DeckActions.toggleFavorite(item.deck, context: context) },
                         showDetails: { details = item.deck },
                         delete: { deleting = item.deck }
@@ -244,12 +247,19 @@ struct SlidesRoot: View {
                 .frame(height: 44)
                 .glassEffect(.regular.interactive(), in: .capsule)
                 if searchFocused {
-                    Button("キャンセル") {
+                    Button {
                         query = ""
                         searchQuery = ""
                         searchFocused = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 44, height: 44)
+                            .glassEffect(.regular.interactive(), in: .circle)
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("キャンセル")
                     .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
@@ -296,7 +306,7 @@ struct SlidesRoot: View {
         .buttonStyle(.glassProminent)
         .buttonBorderShape(.circle)
         .tint(SlidesTheme.brand)
-        .foregroundStyle(SlidesTheme.onBrand)
+        .foregroundStyle(.white)
         .padding(20)
         .accessibilityLabel("新規作成")
     }
@@ -335,8 +345,8 @@ struct DeckCard: View {
     var open: () -> Void
     var rename: () -> Void
     var duplicate: () -> Void
-    var exportPPTX: () -> Void
-    var exportPDF: () -> Void
+    var toggleGuides: () -> Void
+    var export: (ExportFormat) -> Void
     var toggleFavorite: () -> Void
     var showDetails: () -> Void
     var delete: () -> Void
@@ -398,15 +408,11 @@ struct DeckCard: View {
         }
     }
 
-    @ViewBuilder
+    /// The same menu as the editor's ⋯.
     private var menuItems: some View {
-        Button("名前を変更", systemImage: "pencil", action: rename)
-        Button("複製", systemImage: "plus.square.on.square", action: duplicate)
-        Button("PowerPoint(.pptx) で書き出し", systemImage: "doc.richtext", action: exportPPTX)
-        Button("PDF(.pdf) で書き出し", systemImage: "doc", action: exportPDF)
-        Button(deck.isFavorite ? "お気に入りから削除" : "お気に入りに追加", systemImage: deck.isFavorite ? "star.slash" : "star", action: toggleFavorite)
-        Button("詳細", systemImage: "info.circle", action: showDetails)
-        Divider()
-        Button("削除", systemImage: "trash", role: .destructive, action: delete)
+        DeckMenuItems(deck: deck, actions: DeckMenuActions(
+            rename: rename, duplicate: duplicate, toggleGuides: toggleGuides, showDetails: showDetails,
+            export: export, exportCurrent: nil, toggleFavorite: toggleFavorite, delete: delete
+        ))
     }
 }

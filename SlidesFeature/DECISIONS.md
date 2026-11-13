@@ -101,3 +101,15 @@ One line per decision: the decision, then why.
 - Images have a third mode, 枠に合わせて伸ばす (stretch), and new images use it, so an edge handle stretches the picture.
 - Typing happens at the size the slide is shown (fonts × the view's scale), not in a slide-sized view scaled down: wrapping and alignment match the slide.
 - With nothing selected, the bar has 挿入 too.
+
+## Copy, paste and more (1.8.0)
+
+- Copying an element puts it on the system pasteboard as Slides data, plus its text (text boxes, tables) or a picture of it for other apps. Pasting takes Slides elements first (at the same place, nudged when taken), then images (SVG drawn first), then text as a new text box.
+- Images dragged in from other apps land where they're dropped.
+- その他 with an element selected: コピー, 複製, stacking order, 削除. With nothing selected the bar is 挿入 / トランジション / その他 (貼り付け, 背景).
+- The background sheet has すべてのスライドに適用 (one undo step).
+- The home card's ⋯ and the editor's ⋯ are the same menu: 名前を変更, 複製, ガイド, 詳細, 書き出し, お気に入り, 削除. 書き出し has すべてのスライド (PDF / PowerPoint) and, in the editor, このスライドのみ (PNG 1920×1080 / one-page PDF).
+- Sliders hold the thumb for 2.5 % of their range at round values (the ends, the middle, 0; angles every 45°) with a light haptic.
+- During a transition both slides are drawn as pictures, so angled pushes and covers stay smooth; the new slide's own animations start once it has arrived.
+- 移動 (an entrance animation): an element starts where the same element (same text, image, shape kind; for tables the same cells) was on the slide just left—position, size, angle, opacity—and moves into place. With no such element it appears, like 表示. PowerPoint gets it as Appear.
+- The home search's cancel is an × glass circle as tall as the field; the home ＋ is white.

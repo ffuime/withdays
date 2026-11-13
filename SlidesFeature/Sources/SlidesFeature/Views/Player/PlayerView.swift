@@ -60,6 +60,32 @@ struct ElementLook: Equatable {
         angle = animation.angle
         zoomOut = animation.zoomOut
     }
+
+    /// 移動: where the same element was on the slide before, relative to where it is now.
+    var moveFrom: MoveFrom?
+}
+
+/// The difference between an element and the same element on the slide before, in slide points.
+struct MoveFrom: Equatable {
+    var dx: Double = 0
+    var dy: Double = 0
+    var scaleX: Double = 1
+    var scaleY: Double = 1
+    var rotation: Double = 0
+    var opacity: Double = 1
+
+    static let none = MoveFrom()
+
+    init() {}
+
+    init(from old: SlideElement, to new: SlideElement) {
+        dx = Double(old.frame.center.x - new.frame.center.x)
+        dy = Double(old.frame.center.y - new.frame.center.y)
+        scaleX = old.frame.width / max(new.frame.width, 1)
+        scaleY = old.frame.height / max(new.frame.height, 1)
+        rotation = old.rotation - new.rotation
+        opacity = new.opacity > 0 ? old.opacity / new.opacity : 1
+    }
 }
 
 /// 再生: full screen in landscape, one slide at a time on black.
@@ -84,6 +110,11 @@ struct PlayerView: View {
     @State private var transitionKind = TransitionKind.none
     @State private var activeTransition = SlideTransition()
     @State private var progress: CGFloat = 1
+    /// During a transition both slides are pictures, so even angled pushes move smoothly.
+    @State private var outgoingImage: UIImage?
+    @State private var incomingImage: UIImage?
+    @State private var stageSize = CGSize(width: 1920, height: 1080)
+    @Environment(\.displayScale) private var displayScale
     @State private var shown = false
     @State private var leaving = false
     @State private var showsControls = false
@@ -133,8 +164,9 @@ struct PlayerView: View {
         GeometryReader { geo in
             let scale = min(geo.size.width / 1920, geo.size.height / 1080)
             ZStack {
-                if let outgoing, slides.indices.contains(outgoing) {
-                    PlayedSlide(slide: slides[outgoing], deck: deck, scale: scale, looks: outgoingLooks)
+                if outgoing != nil, let outgoingImage {
+                    Image(uiImage: outgoingImage)
+                        .resizable()
                         .frame(width: 1920 * scale, height: 1080 * scale)
                         .modifier(SlideTransitionEffect(
                             kind: effectiveKind, transition: activeTransition, progress: progress, incoming: false,
@@ -142,7 +174,14 @@ struct PlayerView: View {
                         ))
                 }
                 if let slide {
-                    PlayedSlide(slide: slide, deck: deck, scale: scale, looks: looks)
+                    ZStack {
+                        PlayedSlide(slide: slide, deck: deck, scale: scale, looks: looks)
+                            .opacity(incomingImage == nil ? 1 : 0)
+                        if let incomingImage {
+                            Image(uiImage: incomingImage)
+                                .resizable()
+                        }
+                    }
                         .frame(width: 1920 * scale, height: 1080 * scale)
                         .modifier(SlideTransitionEffect(
                             kind: outgoing == nil ? .none : effectiveKind, transition: activeTransition, progress: progress, incoming: true,
@@ -167,6 +206,8 @@ struct PlayerView: View {
             .frame(width: geo.size.width, height: geo.size.height)
             .clipped()
             .contentShape(Rectangle())
+            .onAppear { stageSize = geo.size }
+            .onChange(of: geo.size) { _, size in stageSize = size }
             .onTapGesture(coordinateSpace: .local) { location in
                 tapped(at: location.x / max(geo.size.width, 1))
             }
@@ -311,34 +352,44 @@ struct PlayerView: View {
             bump += 1
             return
         }
+        let previous = index
         let transition = delta > 0 ? slides[target].transition : slides[index].transition
         forward = delta > 0
         if transition.kind == .none {
             outgoing = nil
             progress = 1
             index = target
-            enter(animated: animated)
+            enter(animated: animated, from: previous)
             return
         }
-        // Both slides are drawn until the new one has arrived.
+        // Both slides go in as pictures (as they look now / as the new one starts), so the move is light;
+        // the new slide's own animations start once it has arrived.
+        let scale = min(stageSize.width / 1920, stageSize.height / 1080)
+        let leavingImage = snapshot(slides[previous], looks: looks, scale: scale)
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             outgoingLooks = looks
-            outgoing = index
+            outgoingImage = leavingImage
+            outgoing = previous
             transitionKind = transition.kind
             activeTransition = transition
             progress = 0
             index = target
+            enter(animated: animated, from: previous, runAuto: false)
+            incomingImage = snapshot(slides[target], looks: looks, scale: scale)
         }
-        enter(animated: animated)
         let started = generation
         DispatchQueue.main.async {
             withAnimation(.easeInOut(duration: transition.duration)) {
                 progress = 1
             } completion: {
                 // A newer change has its own outgoing slide.
-                if generation == started { outgoing = nil }
+                guard generation == started else { return }
+                outgoing = nil
+                outgoingImage = nil
+                incomingImage = nil
+                if animated, let slide { run(AnimationPlan(slide).auto) }
             }
         }
     }
@@ -347,17 +398,50 @@ struct PlayerView: View {
         reduceMotion && transitionKind != .none ? .fade : transitionKind
     }
 
+    /// The slide as it looks at a moment: hidden elements left out, 移動 elements where they're coming from.
+    private func snapshot(_ slide: SlideContent, looks: [UUID: ElementLook], scale: CGFloat) -> UIImage {
+        var shown = slide
+        shown.elements = slide.elements.compactMap { element in
+            guard let look = looks[element.id] else { return element }
+            guard look.visible else { return nil }
+            guard let move = look.moveFrom else { return element }
+            var moved = element
+            moved.frame = SlideRect(
+                x: element.frame.center.x + move.dx - element.frame.width * move.scaleX / 2,
+                y: element.frame.center.y + move.dy - element.frame.height * move.scaleY / 2,
+                width: element.frame.width * move.scaleX, height: element.frame.height * move.scaleY
+            )
+            moved.rotation = element.rotation + move.rotation
+            moved.opacity = element.opacity * move.opacity
+            return moved
+        }
+        return SlideRenderer.image(of: shown, deck: deck, width: 1920 * scale, scale: displayScale, preview: true)
+    }
+
     /// Sets up the slide's elements: with animations, as they start (then runs the automatic step);
-    /// without, as they end.
-    private func enter(animated: Bool, runAuto: Bool = true) {
+    /// without, as they end. `previous` is the slide just left, for 移動.
+    private func enter(animated: Bool, from previous: Int? = nil, runAuto: Bool = true) {
         generation += 1
         step = 0
         guard let slide else { return }
         let plan = AnimationPlan(slide)
+        // The same elements on the slide before, each matched once.
+        var before = previous.flatMap { slides.indices.contains($0) ? slides[$0].elements : nil } ?? []
         var start: [UUID: ElementLook] = [:]
         var end: [UUID: ElementLook] = [:]
         for animation in slide.animations {
-            let look = ElementLook(animation, visible: animation.category == .exit)
+            var look = ElementLook(animation, visible: animation.category == .exit)
+            if animation.effect == .move, animation.category == .entrance,
+               let element = slide.elements.first(where: { $0.id == animation.elementID }) {
+                if let match = before.firstIndex(where: { $0.matchKey == element.matchKey }) {
+                    look.visible = true
+                    look.moveFrom = MoveFrom(from: before[match], to: element)
+                    before.remove(at: match)
+                } else {
+                    // Nothing to move from: it appears, like 表示.
+                    look.effect = .appear
+                }
+            }
             if start[animation.elementID] == nil { start[animation.elementID] = look }
             end[animation.elementID] = ElementLook(animation, visible: animation.category == .entrance)
         }
@@ -375,9 +459,11 @@ struct PlayerView: View {
         for item in timed {
             let animation = item.animation
             let look = ElementLook(animation, visible: animation.category == .entrance)
+            // 移動 with nothing to move from appears at once, like 表示.
+            let instant = animation.effect == .appear || (animation.effect == .move && looks[animation.elementID]?.moveFrom == nil)
             DispatchQueue.main.asyncAfter(deadline: .now() + item.start) {
                 guard current == generation else { return }
-                let curve: Animation? = animation.effect == .appear ? nil : .easeInOut(duration: animation.duration)
+                let curve: Animation? = instant ? nil : .easeInOut(duration: animation.duration)
                 withAnimation(curve) { looks[animation.elementID] = look }
             }
         }
@@ -453,12 +539,15 @@ struct PlayedSlide: View {
                 let frame = element.frame.cg
                 let padding = SlideRenderer.padding(for: element)
                 let look = looks[element.id]
+                let move = look?.moveFrom ?? .none
                 ElementRenderView(element: element, deck: deck, scale: scale)
                     .frame(width: (frame.width + padding * 2) * scale, height: (frame.height + padding * 2) * scale)
-                    .rotationEffect(.degrees(element.rotation))
+                    .rotationEffect(.degrees(element.rotation + move.rotation))
+                    .scaleEffect(x: move.scaleX, y: move.scaleY)
                     .scaleEffect(hiddenScale(look))
+                    .offset(x: move.dx * scale, y: move.dy * scale)
                     .offset(hiddenOffset(look, frame: frame))
-                    .opacity(element.opacity * hiddenOpacity(look))
+                    .opacity(element.opacity * move.opacity * hiddenOpacity(look))
                     .position(x: frame.midX * scale, y: frame.midY * scale)
             }
         }

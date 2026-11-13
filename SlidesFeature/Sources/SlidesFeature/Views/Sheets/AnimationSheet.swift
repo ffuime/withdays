@@ -56,7 +56,13 @@ struct AnimationSheet: View {
     @ViewBuilder
     private func editorRows(_ animation: ElementAnimation) -> some View {
         Picker("効果", selection: binding(animation, \.effect)) {
-            ForEach(AnimationEffect.allCases, id: \.self) { Text($0.label).tag($0) }
+            // 移動 is a way in: from where the same element was on the slide before.
+            ForEach(AnimationEffect.allCases.filter { animation.category == .entrance || $0 != .move }, id: \.self) { Text($0.label).tag($0) }
+        }
+        if animation.effect == .move {
+            Text("前のスライドにある同じ要素（同じ文字・画像・図形）の位置・大きさ・角度から動きます。無ければ「表示」と同じです。")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
         }
         if animation.effect == .slideIn {
             AngleControl(angle: binding(animation, \.angle))

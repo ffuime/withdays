@@ -9,10 +9,11 @@ enum EditorSheet: String, Identifiable {
 }
 
 /// A glass bar above the slides for the selected element; with nothing selected, the slide's 背景 and トランジション.
-/// 複製, the stacking order and 削除 are under その他.
+/// コピー, 複製, the stacking order and 削除 are under その他; with nothing selected, その他 has 貼り付け and 背景.
 struct ContextToolbar: View {
     @Bindable var editor: DeckEditor
     var open: (EditorSheet) -> Void
+    var paste: () -> Void
 
     var body: some View {
         HStack(spacing: 2) {
@@ -21,8 +22,8 @@ struct ContextToolbar: View {
                 more(element)
             } else {
                 item("挿入", "plus") { open(.insert) }
-                item("背景", "paintbrush") { open(.background) }
                 item("トランジション", "rectangle.portrait.on.rectangle.portrait.angled") { open(.transition) }
+                slideMore
             }
         }
         .padding(.horizontal, 6)
@@ -87,6 +88,7 @@ struct ContextToolbar: View {
 
     private func more(_ element: SlideElement) -> some View {
         Menu {
+            Button("コピー", systemImage: "doc.on.doc") { editor.copyElement(element.id) }
             Button("複製", systemImage: "plus.square.on.square") { editor.duplicateElement(element.id) }
             Divider()
             Button("最前面へ", systemImage: "square.3.layers.3d.top.filled") { editor.reorder(element.id, .front) }
@@ -95,6 +97,22 @@ struct ContextToolbar: View {
             Button("最背面へ", systemImage: "square.3.layers.3d.bottom.filled") { editor.reorder(element.id, .back) }
             Divider()
             Button("削除", systemImage: "trash", role: .destructive) { editor.deleteElement(element.id) }
+        } label: {
+            itemLabel("その他", "ellipsis")
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .tint(.primary)
+        .menuOrder(.fixed)
+        .accessibilityLabel("その他")
+    }
+
+    /// With nothing selected: 貼り付け and 背景.
+    private var slideMore: some View {
+        Menu {
+            Button("貼り付け", systemImage: "doc.on.clipboard", action: paste)
+                .disabled(!ElementClipboard.canPaste)
+            Button("背景", systemImage: "paintbrush") { open(.background) }
         } label: {
             itemLabel("その他", "ellipsis")
         }

@@ -46,7 +46,7 @@ struct DeckDetailsSheet: View {
 }
 
 enum ExportFormat {
-    case pdf, pptx
+    case pdf, pptx, png
 }
 
 /// A deck to export, as a snapshot taken on the main thread.
@@ -62,6 +62,14 @@ struct ExportRequest: Identifiable {
         title = deck.title
         deckID = deck.id
         slides = deck.slides
+        self.format = format
+    }
+
+    /// One slide alone (このスライドのみ), named after the deck and its number.
+    init(title: String, deckID: UUID, slide: SlideContent, number: Int, format: ExportFormat) {
+        self.title = "\(title)（スライド\(number)）"
+        self.deckID = deckID
+        slides = [slide]
         self.format = format
     }
 }
@@ -107,6 +115,7 @@ struct DeckExportModifier: ViewModifier {
                 switch job.format {
                 case .pdf: result = .success(try PDFExporter.export(title: job.title, slides: job.slides, deck: job.deckID))
                 case .pptx: result = .success(try PPTXExporter.export(title: job.title, slides: job.slides, deck: job.deckID))
+                case .png: result = .success(try PNGExporter.export(title: job.title, slide: job.slides.first ?? SlideContent(), deck: job.deckID))
                 }
             } catch {
                 result = .failure(error)

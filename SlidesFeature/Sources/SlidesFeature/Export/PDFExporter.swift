@@ -20,3 +20,14 @@ enum PDFExporter {
         return url
     }
 }
+
+/// One slide as a 1920×1080 picture, its images at full resolution.
+enum PNGExporter {
+    static func export(title: String, slide: SlideContent, deck: UUID) throws -> URL {
+        let url = try SlidesFiles.exportFolder().appending(path: SlidesFiles.fileName(title, ext: "png"))
+        let image = SlideRenderer.image(of: slide, deck: deck, width: 1920, scale: 1, preview: false)
+        guard let data = image.pngData() else { throw SlidesFiles.Failure(message: "画像を書き出せませんでした。") }
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+}
