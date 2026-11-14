@@ -164,10 +164,6 @@ struct SlidesRoot: View {
                         open: { open(item.deck) },
                         rename: { titleRequest = TitleRequest(kind: .rename(item.deck)) },
                         duplicate: { DeckActions.duplicate(item.deck, context: context) },
-                        toggleGuides: {
-                            item.deck.showsGuides.toggle()
-                            try? context.save()
-                        },
                         export: { export = ExportRequest(deck: item.deck, format: $0) },
                         toggleFavorite: { DeckActions.toggleFavorite(item.deck, context: context) },
                         showDetails: { details = item.deck },
@@ -345,7 +341,6 @@ struct DeckCard: View {
     var open: () -> Void
     var rename: () -> Void
     var duplicate: () -> Void
-    var toggleGuides: () -> Void
     var export: (ExportFormat) -> Void
     var toggleFavorite: () -> Void
     var showDetails: () -> Void
@@ -408,10 +403,10 @@ struct DeckCard: View {
         }
     }
 
-    /// The same menu as the editor's ⋯.
+    /// The editor's ⋯ menu, with 複製 instead of ガイド.
     private var menuItems: some View {
         DeckMenuItems(deck: deck, actions: DeckMenuActions(
-            rename: rename, duplicate: duplicate, toggleGuides: toggleGuides, showDetails: showDetails,
+            rename: rename, duplicate: duplicate, toggleGuides: nil, showDetails: showDetails,
             export: export, exportCurrent: nil, toggleFavorite: toggleFavorite, delete: delete
         ))
     }

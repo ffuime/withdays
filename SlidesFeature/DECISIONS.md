@@ -113,3 +113,13 @@ One line per decision: the decision, then why.
 - During a transition both slides are drawn as pictures, so angled pushes and covers stay smooth; the new slide's own animations start once it has arrived.
 - 移動 (an entrance animation): an element starts where the same element (same text, image, shape kind; for tables the same cells) was on the slide just left—position, size, angle, opacity—and moves into place. With no such element it appears, like 表示. PowerPoint gets it as Appear.
 - The home search's cancel is an × glass circle as tall as the field; the home ＋ is white.
+
+## Selecting and moving (1.9.0)
+
+- Only the selected element moves. A drag anywhere inside its frame moves it, even where other elements lie on top (moving comes first); a tap there selects the topmost element under the finger. A drag that starts on an unselected element swipes slides (or moves the zoomed view), like empty space.
+- Pinching always zooms the view; it no longer resizes the selected element (the handles do that).
+- A long press anywhere (0.5 s) starts 複数選択, with the element under the finger and the one selected already chosen. Taps add or remove; a box drawn from anywhere adds every element wholly inside it (wholly, so a large background shape isn't caught every time); a drag on a chosen element moves them all, their outer box snapping like one element. A tap on empty space or 完了 ends it.
+- The 複数選択 bar: 整列 (left / center / right, top / middle / bottom, to the box around them all; one element aligns to the slide), 書式 (opacity, text color and size, shape fill, outline / line color), アニメーション, その他 (複製, 最前面 / 最背面, 削除), 完了.
+- A group animation gives every chosen element the same 登場 or 退場, replacing its earlier one of that kind: the first in stacking order starts as set (タップ時…), the rest 前の動作と同時, so they play together.
+- The ⋯ menu: 複製 only on the home card, ガイド only in the editor.
+- このスライドのみ → 画像 is saved straight to Photos (add-only permission), with a short 「写真に保存しました」.

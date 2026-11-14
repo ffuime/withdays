@@ -4,12 +4,14 @@ import SwiftUI
 enum EditorSheet: String, Identifiable {
     case insert, textFormat, textColor, shapeFill, shapeStroke, shapeEffects, lineFormat, imageCrop
     case tableSize, tableFormat, animation, background, transition, details
+    case groupFormat, groupAnimation
 
     var id: String { rawValue }
 }
 
 /// A glass bar above the slides for the selected element; with nothing selected, the slide's 背景 and トランジション.
 /// コピー, 複製, the stacking order and 削除 are under その他; with nothing selected, その他 has 貼り付け and 背景.
+/// In 複数選択: 整列, 書式, アニメーション, その他 (複製, 最前面/最背面, 削除) and 完了.
 struct ContextToolbar: View {
     @Bindable var editor: DeckEditor
     var open: (EditorSheet) -> Void
@@ -17,7 +19,9 @@ struct ContextToolbar: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            if let element = editor.selectedElement {
+            if editor.multiSelecting {
+                groupItems
+            } else if let element = editor.selectedElement {
                 items(for: element)
                 more(element)
             } else {
@@ -30,6 +34,51 @@ struct ContextToolbar: View {
         .frame(height: 56)
         .glassEffect(.regular, in: .capsule)
         .animation(.snappy(duration: 0.2), value: editor.selection)
+        .animation(.snappy(duration: 0.2), value: editor.multiSelecting)
+    }
+
+    /// 複数選択: changes for every chosen element.
+    @ViewBuilder
+    private var groupItems: some View {
+        let ids = editor.multiSelection
+        let none = ids.isEmpty
+        Menu {
+            ForEach(DeckEditor.GroupAlignment.allCases, id: \.self) { alignment in
+                Button(alignment.label, systemImage: alignment.icon) { editor.align(ids, alignment) }
+            }
+        } label: {
+            itemLabel("整列", "align.horizontal.left")
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .tint(.primary)
+        .menuOrder(.fixed)
+        .disabled(none)
+        .opacity(none ? 0.35 : 1)
+        item("書式", "paintpalette") { open(.groupFormat) }
+            .disabled(none)
+            .opacity(none ? 0.35 : 1)
+        item("アニメーション", "sparkles") { open(.groupAnimation) }
+            .disabled(none)
+            .opacity(none ? 0.35 : 1)
+        Menu {
+            Button("複製", systemImage: "plus.square.on.square") { editor.duplicateElements(ids) }
+            Divider()
+            Button("最前面へ", systemImage: "square.3.layers.3d.top.filled") { editor.reorderElements(ids, toFront: true) }
+            Button("最背面へ", systemImage: "square.3.layers.3d.bottom.filled") { editor.reorderElements(ids, toFront: false) }
+            Divider()
+            Button("削除", systemImage: "trash", role: .destructive) { editor.deleteElements(ids) }
+        } label: {
+            itemLabel("その他", "ellipsis")
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .tint(.primary)
+        .menuOrder(.fixed)
+        .disabled(none)
+        .opacity(none ? 0.35 : 1)
+        .accessibilityLabel("その他")
+        item("完了", "checkmark") { editor.endMultiSelect() }
     }
 
     @ViewBuilder

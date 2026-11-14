@@ -52,7 +52,6 @@ struct EditorView: View {
     @State private var importingImage = false
     @State private var selectAllOnEdit = false
     @State private var deletingDeck = false
-    @State private var duplicated = 0
     @State private var errorMessage: String?
 
     var body: some View {
@@ -60,6 +59,20 @@ struct EditorView: View {
             topBar
             SlideCanvasView(editor: editor, textController: textController, showsGuides: editor.deck.showsGuides, selectAllOnEdit: $selectAllOnEdit)
                 .background(Color(uiColor: .systemGroupedBackground))
+                .overlay(alignment: .topLeading) {
+                    if editor.multiSelecting {
+                        Text("複数選択・\(editor.multiSelection.count)個")
+                            .font(.system(size: 13, weight: .bold))
+                            .monospacedDigit()
+                            .padding(.horizontal, 12)
+                            .frame(height: 32)
+                            .glassEffect(.regular, in: .capsule)
+                            .padding(10)
+                            .allowsHitTesting(false)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.snappy(duration: 0.2), value: editor.multiSelecting)
             if editor.editing != nil {
                 TextAccessoryBar(controller: textController) {
                     sheet = .textFormat
@@ -125,7 +138,6 @@ struct EditorView: View {
             }
         }
         .deckExport($export)
-        .sensoryFeedback(.success, trigger: duplicated)
         .alert("「\(editor.deck.title)」を削除", isPresented: $deletingDeck) {
             Button("キャンセル", role: .cancel) {}
             Button("削除", role: .destructive) {
@@ -151,6 +163,8 @@ struct EditorView: View {
             if new == nil, old != nil { textController.finish() }
         }
         .sensoryFeedback(.selection, trigger: editor.selection)
+        .sensoryFeedback(.selection, trigger: editor.multiSelection)
+        .sensoryFeedback(.impact(weight: .medium), trigger: editor.multiSelecting) { _, new in new }
     }
 
     // MARK: Top bar
@@ -231,11 +245,6 @@ struct EditorView: View {
         Menu {
             DeckMenuItems(deck: editor.deck, actions: DeckMenuActions(
                 rename: { renaming = true },
-                duplicate: {
-                    editor.saveNow()
-                    DeckActions.duplicate(editor.deck, context: context)
-                    duplicated += 1
-                },
                 toggleGuides: { editor.toggleGuides() },
                 showDetails: {
                     editor.saveNow()
@@ -336,6 +345,12 @@ struct EditorView: View {
                 .formatSheet()
         case .transition:
             TransitionSheet(editor: editor)
+                .presentationDetents([.medium, .large])
+        case .groupFormat:
+            GroupFormatSheet(editor: editor)
+                .formatSheet()
+        case .groupAnimation:
+            GroupAnimationSheet(editor: editor)
                 .presentationDetents([.medium, .large])
         case .details:
             DeckDetailsSheet(deck: editor.deck)

@@ -1,10 +1,13 @@
 import SwiftUI
 
-/// What the deck's ⋯ menu does. The home card and the editor show the same menu.
+/// What the deck's ⋯ menu does. The home card and the editor show the same menu, except 複製 (home only)
+/// and ガイド (editor only).
 struct DeckMenuActions {
     var rename: () -> Void
-    var duplicate: () -> Void
-    var toggleGuides: () -> Void
+    /// Only on the home screen.
+    var duplicate: (() -> Void)?
+    /// Only in the editor.
+    var toggleGuides: (() -> Void)?
     var showDetails: () -> Void
     var export: (ExportFormat) -> Void
     /// Only in the editor, where there's a slide on screen.
@@ -20,8 +23,12 @@ struct DeckMenuItems: View {
 
     var body: some View {
         Button("名前を変更", systemImage: "pencil", action: actions.rename)
-        Button("複製", systemImage: "plus.square.on.square", action: actions.duplicate)
-        Button(deck.showsGuides ? "ガイドを非表示" : "ガイドを表示", systemImage: "squareshape.split.2x2.dotted", action: actions.toggleGuides)
+        if let duplicate = actions.duplicate {
+            Button("複製", systemImage: "plus.square.on.square", action: duplicate)
+        }
+        if let toggleGuides = actions.toggleGuides {
+            Button(deck.showsGuides ? "ガイドを非表示" : "ガイドを表示", systemImage: "squareshape.split.2x2.dotted", action: toggleGuides)
+        }
         Button("詳細", systemImage: "info.circle", action: actions.showDetails)
         Menu("書き出し", systemImage: "square.and.arrow.up") {
             Section("すべてのスライド") {
@@ -30,7 +37,7 @@ struct DeckMenuItems: View {
             }
             if let exportCurrent = actions.exportCurrent {
                 Section("このスライドのみ") {
-                    Button("画像 (.png)", systemImage: "photo") { exportCurrent(.png) }
+                    Button("画像を写真に保存", systemImage: "photo") { exportCurrent(.png) }
                     Button("PDF (.pdf)", systemImage: "doc") { exportCurrent(.pdf) }
                 }
             }

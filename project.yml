@@ -7,7 +7,7 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "1.8.0"
+    MARKETING_VERSION: "1.9.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
 
@@ -43,6 +43,7 @@ targets:
         NSRemindersUsageDescription: ToDoとしてAppleのリマインダーを表示・追加・編集するために使います。
         NSLocationWhenInUseUsageDescription: Goで最寄り駅から電車の時刻を調べるために使います。
         NSCameraUsageDescription: Notesで書類をスキャンするために使います。
+        NSPhotoLibraryAddUsageDescription: Slidesで書き出したスライドの画像を写真に保存するために使います。
         # Notes are kept in Documents and shown in the Files app.
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true

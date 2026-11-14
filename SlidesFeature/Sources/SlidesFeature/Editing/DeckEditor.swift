@@ -38,15 +38,24 @@ final class DeckEditor {
             if oldValue != currentIndex {
                 selection = nil
                 editing = nil
+                multiSelecting = false
             }
         }
     }
 
     var selection: UUID? {
-        didSet { if selection == nil || selection != editing?.elementID { editing = nil } }
+        didSet {
+            if selection == nil || selection != editing?.elementID { editing = nil }
+            if selection != nil { multiSelecting = false }
+        }
     }
 
     var editing: EditTarget?
+    /// 複数選択: several elements chosen at once, changed together.
+    var multiSelecting = false {
+        didSet { if !multiSelecting { multiSelection = [] } }
+    }
+    var multiSelection: Set<UUID> = []
     /// The lines a dragged element is lined up with, while it's dragged.
     var snapLines: [SnapLine] = []
     /// Which way the last change of slide went, for the slide's motion.
@@ -145,6 +154,7 @@ final class DeckEditor {
     private func restore(_ state: Snapshot) {
         editing = nil
         selection = nil
+        multiSelecting = false
         slides = state.slides
         currentIndex = min(state.index, slides.count - 1)
         scheduleSave()
@@ -437,6 +447,171 @@ final class DeckEditor {
 
     func moveAnimations(from source: IndexSet, to destination: Int) {
         changeCurrentSlide { $0.animations.move(fromOffsets: source, toOffset: destination) }
+    }
+
+    // MARK: 複数選択
+
+    /// Starts choosing several elements, with the selected one and `id` already chosen.
+    func beginMultiSelect(with id: UUID?) {
+        var chosen: Set<UUID> = []
+        if let selection { chosen.insert(selection) }
+        if let id { chosen.insert(id) }
+        editing = nil
+        selection = nil
+        multiSelection = chosen
+        multiSelecting = true
+    }
+
+    func endMultiSelect() {
+        multiSelecting = false
+    }
+
+    /// The chosen elements, back to front.
+    var chosenElements: [SlideElement] {
+        current.elements.filter { multiSelection.contains($0.id) }
+    }
+
+    func changeElements(_ ids: Set<UUID>, coalesce key: String? = nil, _ body: (inout SlideElement) -> Void) {
+        changeCurrentSlide(coalesce: key) { slide in
+            for index in slide.elements.indices where ids.contains(slide.elements[index].id) {
+                body(&slide.elements[index])
+            }
+        }
+    }
+
+    /// The text of every chosen text box and table (all cells).
+    func formatTexts(_ ids: Set<UUID>, key: String, _ body: (inout RichText) -> Void) {
+        changeElements(ids, coalesce: "group-\(key)") { element in
+            switch element.content {
+            case .text(var box):
+                body(&box.text)
+                element.content = .text(box)
+            case .table(var table):
+                for row in table.cells.indices {
+                    for column in table.cells[row].indices { body(&table.cells[row][column].text) }
+                }
+                element.content = .table(table)
+            default:
+                break
+            }
+        }
+    }
+
+    func deleteElements(_ ids: Set<UUID>) {
+        changeCurrentSlide { slide in
+            slide.elements.removeAll { ids.contains($0.id) }
+            slide.animations.removeAll { ids.contains($0.elementID) }
+        }
+        multiSelecting = false
+    }
+
+    /// Copies go in front, a little apart, and become the chosen ones.
+    func duplicateElements(_ ids: Set<UUID>) {
+        var copies: Set<UUID> = []
+        changeCurrentSlide { slide in
+            let originals = slide.elements.filter { ids.contains($0.id) }
+            var newIDs: [UUID: UUID] = [:]
+            for element in originals {
+                var copy = element
+                copy.id = UUID()
+                copy.move(by: 40, 40)
+                newIDs[element.id] = copy.id
+                copies.insert(copy.id)
+                slide.elements.append(copy)
+            }
+            let animations = slide.animations.compactMap { animation -> ElementAnimation? in
+                guard let id = newIDs[animation.elementID] else { return nil }
+                var moved = animation
+                moved.id = UUID()
+                moved.elementID = id
+                return moved
+            }
+            slide.animations.append(contentsOf: animations)
+        }
+        multiSelection = copies
+    }
+
+    /// 最前面 / 最背面 for the chosen elements, keeping their order among themselves.
+    func reorderElements(_ ids: Set<UUID>, toFront: Bool) {
+        changeCurrentSlide { slide in
+            let chosen = slide.elements.filter { ids.contains($0.id) }
+            let others = slide.elements.filter { !ids.contains($0.id) }
+            slide.elements = toFront ? others + chosen : chosen + others
+        }
+    }
+
+    enum GroupAlignment: CaseIterable {
+        case left, centerX, right, top, centerY, bottom
+
+        var label: String {
+            switch self {
+            case .left: "左揃え"
+            case .centerX: "左右中央"
+            case .right: "右揃え"
+            case .top: "上揃え"
+            case .centerY: "上下中央"
+            case .bottom: "下揃え"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .left: "align.horizontal.left"
+            case .centerX: "align.horizontal.center"
+            case .right: "align.horizontal.right"
+            case .top: "align.vertical.top"
+            case .centerY: "align.vertical.center"
+            case .bottom: "align.vertical.bottom"
+            }
+        }
+    }
+
+    /// Lines the chosen elements up with the box around them all (one element: with the slide).
+    func align(_ ids: Set<UUID>, _ alignment: GroupAlignment) {
+        let chosen = current.elements.filter { ids.contains($0.id) }
+        guard !chosen.isEmpty else { return }
+        let area = chosen.count == 1
+            ? CGRect(x: 0, y: 0, width: 1920, height: 1080)
+            : chosen.map(Snapper.bounds(of:)).reduce(CGRect.null) { $0.union($1) }
+        changeElements(ids) { element in
+            let bounds = Snapper.bounds(of: element)
+            switch alignment {
+            case .left: element.move(by: Double(area.minX - bounds.minX), 0)
+            case .centerX: element.move(by: Double(area.midX - bounds.midX), 0)
+            case .right: element.move(by: Double(area.maxX - bounds.maxX), 0)
+            case .top: element.move(by: 0, Double(area.minY - bounds.minY))
+            case .centerY: element.move(by: 0, Double(area.midY - bounds.midY))
+            case .bottom: element.move(by: 0, Double(area.maxY - bounds.maxY))
+            }
+        }
+    }
+
+    /// Gives the chosen elements the same 登場 or 退場, played at the same time: the first starts as `template`
+    /// says, the rest with it. Their earlier animation of that kind is replaced.
+    func applyGroupAnimation(_ template: ElementAnimation, to ids: Set<UUID>) {
+        changeCurrentSlide { slide in
+            let order = slide.elements.map(\.id).filter { ids.contains($0) }
+            guard !order.isEmpty else { return }
+            slide.animations.removeAll { ids.contains($0.elementID) && $0.category == template.category }
+            let block = order.enumerated().map { index, id -> ElementAnimation in
+                var animation = template
+                animation.id = UUID()
+                animation.elementID = id
+                if index > 0 { animation.start = .withPrevious }
+                return animation
+            }
+            // 登場 comes before any 退場 of the same elements.
+            if template.category == .entrance,
+               let exit = slide.animations.firstIndex(where: { ids.contains($0.elementID) && $0.category == .exit }) {
+                slide.animations.insert(contentsOf: block, at: exit)
+            } else {
+                slide.animations.append(contentsOf: block)
+            }
+        }
+    }
+
+    func removeAnimations(of ids: Set<UUID>) {
+        changeCurrentSlide { $0.animations.removeAll { ids.contains($0.elementID) } }
     }
 
     // MARK: Deck settings (not part of undo)

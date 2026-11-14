@@ -16,13 +16,18 @@ struct Snapper {
     let threshold: Double
 
     init(slide: SlideContent, excluding id: UUID, guides: Bool, threshold: Double) {
+        self.init(slide: slide, excluding: [id], guides: guides, threshold: threshold)
+    }
+
+    /// Several elements moved together don't snap to each other.
+    init(slide: SlideContent, excluding ids: Set<UUID>, guides: Bool, threshold: Double) {
         var xs: [Double] = [0, 960, 1920]
         var ys: [Double] = [0, 540, 1080]
         if guides {
             xs += [480, 1440]
             ys += [270, 810]
         }
-        for element in slide.elements where element.id != id {
+        for element in slide.elements where !ids.contains(element.id) {
             let bounds = Self.bounds(of: element)
             xs += [Double(bounds.minX), Double(bounds.midX), Double(bounds.maxX)]
             ys += [Double(bounds.minY), Double(bounds.midY), Double(bounds.maxY)]
@@ -58,7 +63,13 @@ struct Snapper {
 
     /// Moves the element so its edges or middle meet the nearest targets; returns the lines it met.
     func snapMove(_ element: inout SlideElement) -> [SnapLine] {
-        let bounds = Self.bounds(of: element)
+        let snapped = snapBounds(Self.bounds(of: element))
+        if snapped.dx != 0 || snapped.dy != 0 { element.move(by: snapped.dx, snapped.dy) }
+        return snapped.lines
+    }
+
+    /// The shift that puts a box's edges or middle on the nearest targets, and the lines it meets.
+    func snapBounds(_ bounds: CGRect) -> (dx: Double, dy: Double, lines: [SnapLine]) {
         var lines: [SnapLine] = []
         var dx = 0.0, dy = 0.0
         if let x = snap([Double(bounds.minX), Double(bounds.midX), Double(bounds.maxX)], vertical: true) {
@@ -69,8 +80,7 @@ struct Snapper {
             dy = y.shift
             lines.append(SnapLine(vertical: false, position: y.line))
         }
-        if dx != 0 || dy != 0 { element.move(by: dx, dy) }
-        return lines
+        return (dx, dy, lines)
     }
 
     /// One point (a line's end).

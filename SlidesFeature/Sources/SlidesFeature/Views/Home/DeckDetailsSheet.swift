@@ -1,3 +1,4 @@
+import Photos
 import SwiftUI
 
 /// 詳細: a large thumbnail and the deck's facts.
@@ -75,12 +76,14 @@ struct ExportRequest: Identifiable {
 }
 
 /// Exports in the background with a small progress panel, then shows the share sheet.
+/// An image goes straight into the photo library instead.
 struct DeckExportModifier: ViewModifier {
     @Binding var request: ExportRequest?
 
     @State private var running = false
     @State private var file: SharedFile?
     @State private var errorMessage: String?
+    @State private var savedToPhotos = false
 
     func body(content: Content) -> some View {
         content
@@ -89,8 +92,18 @@ struct DeckExportModifier: ViewModifier {
                     ProgressView("書き出し中…")
                         .padding(24)
                         .glassEffect(.regular, in: .rect(cornerRadius: 20))
+                } else if savedToPhotos {
+                    Label("写真に保存しました", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 14)
+                        .glassEffect(.regular, in: .capsule)
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                        .allowsHitTesting(false)
                 }
             }
+            .animation(.snappy(duration: 0.25), value: savedToPhotos)
+            .sensoryFeedback(.success, trigger: savedToPhotos) { _, new in new }
             .onChange(of: request?.id) { _, id in
                 guard id != nil, let job = request else { return }
                 request = nil
@@ -121,11 +134,38 @@ struct DeckExportModifier: ViewModifier {
                 result = .failure(error)
             }
             await MainActor.run {
-                running = false
                 switch result {
-                case .success(let url): file = SharedFile(url: url)
-                case .failure(let error): errorMessage = error.localizedDescription
+                case .success(let url) where job.format == .png:
+                    saveToPhotos(url)
+                case .success(let url):
+                    running = false
+                    file = SharedFile(url: url)
+                case .failure(let error):
+                    running = false
+                    errorMessage = error.localizedDescription
                 }
+            }
+        }
+    }
+
+    /// Adds the picture to the photo library (asking for permission to add, the first time).
+    private func saveToPhotos(_ url: URL) {
+        Task {
+            do {
+                let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+                guard status == .authorized || status == .limited else {
+                    throw SlidesFiles.Failure(message: "写真への保存が許可されていません。設定アプリの「WithDays」→「写真」で許可してください。")
+                }
+                try await PHPhotoLibrary.shared().performChanges {
+                    PHAssetCreationRequest.forAsset().addResource(with: .photo, fileURL: url, options: nil)
+                }
+                running = false
+                savedToPhotos = true
+                try? await Task.sleep(for: .seconds(1.6))
+                savedToPhotos = false
+            } catch {
+                running = false
+                errorMessage = error.localizedDescription
             }
         }
     }

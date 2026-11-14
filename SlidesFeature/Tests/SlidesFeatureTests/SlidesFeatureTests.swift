@@ -222,3 +222,30 @@ final class PPTXTests: XCTestCase {
         XCTAssertEqual(box.size, CGSize(width: 1920, height: 1080))
     }
 }
+
+final class SnappingTests: XCTestCase {
+    private func box(_ x: Double, _ y: Double) -> SlideElement {
+        SlideElement(frame: SlideRect(x: x, y: y, width: 100, height: 100), content: .shape(ShapeElement(kind: .rect)))
+    }
+
+    func testElementsMovedTogetherDoNotSnapToEachOther() {
+        let a = box(300, 300)
+        let b = box(500, 300)
+        var slide = SlideContent()
+        slide.elements = [a, b]
+        let snapper = Snapper(slide: slide, excluding: [a.id, b.id], guides: false, threshold: 8)
+        // The pair's box (300...600) moved 3 pt: nothing of its own pulls it, so it stays where it was put.
+        let moved = snapper.snapBounds(CGRect(x: 303, y: 303, width: 300, height: 100))
+        XCTAssertEqual(moved.dx, 0)
+        XCTAssertEqual(moved.dy, 0)
+        XCTAssertTrue(moved.lines.isEmpty)
+    }
+
+    func testABoxSnapsToTheSlideMiddle() {
+        let snapper = Snapper(slide: SlideContent(), excluding: [], guides: false, threshold: 8)
+        // Middle at 965 → 960.
+        let moved = snapper.snapBounds(CGRect(x: 915, y: 100, width: 100, height: 100))
+        XCTAssertEqual(moved.dx, -5, accuracy: 0.001)
+        XCTAssertEqual(moved.lines, [SnapLine(vertical: true, position: 960)])
+    }
+}

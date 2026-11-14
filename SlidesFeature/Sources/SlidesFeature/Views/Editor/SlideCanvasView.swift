@@ -1,10 +1,15 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The slide being edited, fitted to the space with margins. A tap selects an element and a tap on the selected
-/// text box (or table cell) starts typing; a drag that starts on an element moves it (snapping to the slide, the
-/// guides and other elements). A sideways swipe on empty slide or outside it changes slide: right to left for the
-/// next one. Pinching with nothing selected zooms the view like a photo; zoomed in, a drag on empty space moves it.
+/// The slide being edited, fitted to the space with margins.
+///
+/// Only the selected element moves: a drag anywhere on it moves it, even where other elements lie on top (moving
+/// comes first). A tap selects the topmost element under the finger, and a tap on the selected text box (or table
+/// cell) starts typing. A drag that starts elsewhere swipes to another slide (right to left for the next one), or
+/// moves the view when zoomed. Pinching always zooms the view, like a photo.
+///
+/// A long press anywhere starts 複数選択: taps add or remove elements, a box drawn on the slide adds the elements
+/// inside it, and a drag on a chosen element moves them all.
 struct SlideCanvasView: View {
     @Bindable var editor: DeckEditor
     let textController: TextEditingController
@@ -13,7 +18,11 @@ struct SlideCanvasView: View {
     @Binding var selectAllOnEdit: Bool
 
     @State private var dragOrigin: SlideElement?
-    @State private var pinchOrigin: SlideElement?
+    /// The chosen elements as they were when a group drag started.
+    @State private var groupOrigin: [SlideElement]?
+    /// The box being drawn in 複数選択, in slide points, and what was chosen before it.
+    @State private var marquee: CGRect?
+    @State private var marqueeBase: Set<UUID> = []
     /// The view's zoom (1 = the whole slide fits) and how far it's moved.
     @State private var zoom: CGFloat = 1
     @State private var pan: CGSize = .zero
@@ -24,22 +33,24 @@ struct SlideCanvasView: View {
     /// How far the fingers' middle has moved during the pinch.
     @State private var livePan: CGSize = .zero
     @State private var pinchStart: CGPoint?
-    /// Pinching an element (resizing it) rather than the view.
-    @State private var pinchingElement = false
     /// Two fingers are (or were just) on the screen: taps and drags on elements wait.
     @State private var pinching = false
+    /// Lifting the finger after a long press can end in a tap; it's ignored.
+    @State private var longPressedAt = Date.distantPast
 
     var body: some View {
         GeometryReader { geo in
             let fit = min((geo.size.width - 32) / 1920, (geo.size.height - 32) / 1080)
             let scale = fit * zoom
             let size = CGSize(width: 1920 * scale, height: 1080 * scale)
+            let layout = CanvasLayout(scale: scale, size: size, area: geo.size, pan: pan)
             ZStack {
                 Color.clear
                     .contentShape(Rectangle())
-                    .onTapGesture { deselect() }
-                    .gesture(emptyDrag(size: size, area: geo.size))
-                slide(scale: scale, size: size, area: geo.size)
+                    .onTapGesture { tapEmpty() }
+                    .gesture(drag(layout, from: nil))
+                    .simultaneousGesture(longPress(nil))
+                slide(layout)
                     .frame(width: size.width, height: size.height)
                     .scaleEffect(liveZoom, anchor: liveAnchor)
                     .offset(CGSize(width: pan.width + livePan.width, height: pan.height + livePan.height))
@@ -51,21 +62,15 @@ struct SlideCanvasView: View {
                     ))
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            .coordinateSpace(.named("canvas"))
             .contentShape(Rectangle())
             .gesture(PinchPanGesture { phase, factor, location in
-                pinched(phase, factor: factor, location: location, area: geo.size, slideSize: CGSize(width: 1920 * fit, height: 1080 * fit), size: size)
+                pinched(phase, factor: factor, location: location, layout: layout, slideSize: CGSize(width: 1920 * fit, height: 1080 * fit))
             })
             // Images dragged in from other apps land where they're dropped.
             .onDrop(of: [.image, .fileURL], isTargeted: nil) { providers, location in
-                let origin = CGPoint(
-                    x: geo.size.width / 2 + pan.width - size.width / 2,
-                    y: geo.size.height / 2 + pan.height - size.height / 2
-                )
-                let point = CGPoint(
-                    x: min(max((location.x - origin.x) / scale, 0), 1920),
-                    y: min(max((location.y - origin.y) / scale, 0), 1080)
-                )
-                return dropImages(providers, at: point)
+                let point = layout.slidePoint(location)
+                return dropImages(providers, at: CGPoint(x: min(max(point.x, 0), 1920), y: min(max(point.y, 0), 1080)))
             }
             .clipped()
             .overlay(alignment: .topTrailing) {
@@ -96,17 +101,20 @@ struct SlideCanvasView: View {
 
     // MARK: Slide
 
-    private func slide(scale: CGFloat, size: CGSize, area: CGSize) -> some View {
+    private func slide(_ layout: CanvasLayout) -> some View {
         let slide = editor.current
+        let scale = layout.scale
+        let size = layout.size
         return ZStack(alignment: .topLeading) {
             ZStack(alignment: .topLeading) {
                 SlideBackgroundView(background: slide.background, deck: editor.deckID)
                     .frame(width: size.width, height: size.height)
                     .contentShape(Rectangle())
-                    .onTapGesture { deselect() }
-                    .gesture(emptyDrag(size: size, area: area))
+                    .onTapGesture { tapEmpty() }
+                    .gesture(drag(layout, from: nil))
+                    .simultaneousGesture(longPress(nil))
                 ForEach(slide.elements) { element in
-                    elementView(element, scale: scale)
+                    elementView(element, layout: layout)
                 }
             }
             .frame(width: size.width, height: size.height, alignment: .topLeading)
@@ -118,7 +126,20 @@ struct SlideCanvasView: View {
                     .frame(width: size.width, height: size.height)
             }
             snapLines(scale: scale, size: size)
-            if let element = editor.selectedElement {
+            if editor.multiSelecting {
+                ForEach(slide.elements.filter { editor.multiSelection.contains($0.id) }) { element in
+                    chosenOutline(element, scale: scale)
+                }
+                if let marquee {
+                    Rectangle()
+                        .fill(SlidesTheme.brand.opacity(0.12))
+                        .overlay(Rectangle().strokeBorder(SlidesTheme.brand, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])))
+                        .frame(width: marquee.width * scale, height: marquee.height * scale)
+                        .position(x: marquee.midX * scale, y: marquee.midY * scale)
+                        .allowsHitTesting(false)
+                }
+            } else if let element = editor.selectedElement {
+                moveArea(element, layout: layout)
                 SelectionOverlay(editor: editor, element: element, scale: scale, editing: editor.editing != nil, guides: showsGuides)
             }
             if let editing = editor.editing, let element = editor.selectedElement, let text = editor.editingText() {
@@ -148,7 +169,9 @@ struct SlideCanvasView: View {
         .allowsHitTesting(false)
     }
 
-    private func elementView(_ element: SlideElement, scale: CGFloat) -> some View {
+    /// An element: a tap selects it; a drag on it swipes or draws, like empty space (only the selected one moves).
+    private func elementView(_ element: SlideElement, layout: CanvasLayout) -> some View {
+        let scale = layout.scale
         let frame = element.frame.cg
         let padding = SlideRenderer.padding(for: element)
         return ElementRenderView(element: displayed(element), deck: editor.deckID, scale: scale, placeholders: true)
@@ -160,13 +183,64 @@ struct SlideCanvasView: View {
             .opacity(element.opacity)
             .position(x: frame.midX * scale, y: frame.midY * scale)
             .onTapGesture(coordinateSpace: .named("slide")) { location in
-                guard !pinching else { return }
-                tap(element, at: CGPoint(x: location.x / scale, y: location.y / scale))
+                guard tapAllowed() else { return }
+                if editor.multiSelecting {
+                    toggleChosen(element.id)
+                } else {
+                    tap(element, at: CGPoint(x: location.x / scale, y: location.y / scale))
+                }
             }
-            .gesture(move(element, scale: scale))
+            .gesture(drag(layout, from: element.id))
+            .simultaneousGesture(longPress(element.id))
             .accessibilityElement()
             .accessibilityLabel(element.kindLabel)
-            .accessibilityAddTraits(editor.selection == element.id ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAddTraits(isChosen(element.id) ? [.isButton, .isSelected] : .isButton)
+    }
+
+    private func isChosen(_ id: UUID) -> Bool {
+        editor.multiSelecting ? editor.multiSelection.contains(id) : editor.selection == id
+    }
+
+    /// The selected element's own touch area, above the others: dragging it moves the element; a tap picks the
+    /// topmost element there (or, on the selected one, starts typing).
+    private func moveArea(_ element: SlideElement, layout: CanvasLayout) -> some View {
+        let scale = layout.scale
+        let frame = element.frame.cg
+        // Thin elements (lines, slim boxes) still get a finger-sized area.
+        let minimum = 44 / scale
+        return Color.clear
+            .contentShape(Rectangle())
+            .frame(width: max(frame.width, minimum) * scale, height: max(frame.height, minimum) * scale)
+            .allowsHitTesting(!pinching)
+            .rotationEffect(.degrees(element.rotation))
+            .position(x: frame.midX * scale, y: frame.midY * scale)
+            .onTapGesture(coordinateSpace: .named("slide")) { location in
+                guard tapAllowed() else { return }
+                let point = CGPoint(x: location.x / scale, y: location.y / scale)
+                let top = topElement(at: point, scale: scale)
+                if let top, top.id != element.id {
+                    finishTyping()
+                    editor.selection = top.id
+                } else if top == nil, case .line = element.content {
+                    deselect()
+                } else {
+                    tap(element, at: point)
+                }
+            }
+            .gesture(move(element, scale: scale))
+            .simultaneousGesture(longPress(element.id))
+    }
+
+    /// A chosen element in 複数選択: its frame, without handles.
+    private func chosenOutline(_ element: SlideElement, scale: CGFloat) -> some View {
+        let frame = element.frame.cg
+        return Rectangle()
+            .strokeBorder(SlidesTheme.brand, lineWidth: 2)
+            .background(Rectangle().fill(SlidesTheme.brand.opacity(0.08)))
+            .frame(width: max(frame.width * scale, 6), height: max(frame.height * scale, 6))
+            .rotationEffect(.degrees(element.rotation))
+            .position(x: frame.midX * scale, y: frame.midY * scale)
+            .allowsHitTesting(false)
     }
 
     /// What's being typed in isn't drawn underneath the text view.
@@ -227,7 +301,20 @@ struct SlideCanvasView: View {
         }
     }
 
-    // MARK: Gestures
+    // MARK: Taps
+
+    private func tapAllowed() -> Bool {
+        !pinching && Date().timeIntervalSince(longPressedAt) > 1.2
+    }
+
+    private func tapEmpty() {
+        guard tapAllowed() else { return }
+        if editor.multiSelecting {
+            editor.endMultiSelect()
+        } else {
+            deselect()
+        }
+    }
 
     /// `point` is in slide points.
     private func tap(_ element: SlideElement, at point: CGPoint) {
@@ -261,13 +348,106 @@ struct SlideCanvasView: View {
         }
     }
 
+    /// The topmost element under a point (slide points), lines by their nearness.
+    private func topElement(at point: CGPoint, scale: CGFloat) -> SlideElement? {
+        let slack = 6 / scale
+        for element in editor.current.elements.reversed() {
+            if case .line(let line) = element.content {
+                if Self.distance(from: point, to: line) <= max(line.stroke.width / 2, 0) + 16 / scale { return element }
+                continue
+            }
+            let frame = element.frame.cg
+            let angle = -element.rotation * .pi / 180
+            let dx = Double(point.x - frame.midX)
+            let dy = Double(point.y - frame.midY)
+            let localX = dx * cos(angle) - dy * sin(angle)
+            let localY = dx * sin(angle) + dy * cos(angle)
+            if abs(localX) <= Double(frame.width / 2 + slack), abs(localY) <= Double(frame.height / 2 + slack) {
+                return element
+            }
+        }
+        return nil
+    }
+
+    private static func distance(from point: CGPoint, to line: LineElement) -> Double {
+        let ax = line.start.x, ay = line.start.y
+        let bx = line.end.x, by = line.end.y
+        let px = Double(point.x), py = Double(point.y)
+        let lengthSquared = (bx - ax) * (bx - ax) + (by - ay) * (by - ay)
+        guard lengthSquared > 0 else { return hypot(px - ax, py - ay) }
+        let t = min(max(((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / lengthSquared, 0), 1)
+        return hypot(px - (ax + t * (bx - ax)), py - (ay + t * (by - ay)))
+    }
+
+    // MARK: 複数選択
+
+    /// Holding still for half a second starts 複数選択, with the element under the finger (and the one selected).
+    private func longPress(_ id: UUID?) -> some Gesture {
+        LongPressGesture(minimumDuration: 0.5)
+            .onEnded { _ in
+                guard !editor.multiSelecting, !pinching, dragOrigin == nil, panStart == nil else { return }
+                longPressedAt = Date()
+                finishTyping()
+                editor.beginMultiSelect(with: id)
+            }
+    }
+
+    private func toggleChosen(_ id: UUID) {
+        if editor.multiSelection.contains(id) {
+            editor.multiSelection.remove(id)
+        } else {
+            editor.multiSelection.insert(id)
+        }
+    }
+
+    /// The box adds every element wholly inside it to what was chosen before.
+    private func drawMarquee(_ value: DragGesture.Value, layout: CanvasLayout) {
+        if marquee == nil { marqueeBase = editor.multiSelection }
+        let start = layout.slidePoint(value.startLocation)
+        let end = layout.slidePoint(value.location)
+        let box = CGRect(x: min(start.x, end.x), y: min(start.y, end.y), width: abs(end.x - start.x), height: abs(end.y - start.y))
+        marquee = box
+        let inside = editor.current.elements.filter { box.contains(Snapper.bounds(of: $0)) }.map(\.id)
+        let chosen = marqueeBase.union(inside)
+        if chosen != editor.multiSelection { editor.multiSelection = chosen }
+    }
+
+    /// Moves every chosen element together; their outer box snaps like one element does.
+    private func moveGroup(_ value: DragGesture.Value, scale: CGFloat) {
+        if groupOrigin == nil {
+            groupOrigin = editor.current.elements.filter { editor.multiSelection.contains($0.id) }
+            editor.beginInteraction()
+        }
+        guard let origin = groupOrigin, !origin.isEmpty else { return }
+        var dx = Double(value.translation.width / scale)
+        var dy = Double(value.translation.height / scale)
+        let bounds = origin.map(Snapper.bounds(of:)).reduce(CGRect.null) { $0.union($1) }.offsetBy(dx: dx, dy: dy)
+        let snapper = Snapper(slide: editor.current, excluding: Set(origin.map(\.id)), guides: showsGuides, threshold: Double(8 / scale))
+        let snapped = snapper.snapBounds(bounds)
+        dx += snapped.dx
+        dy += snapped.dy
+        if snapped.lines != editor.snapLines { editor.snapLines = snapped.lines }
+        let moved = Dictionary(uniqueKeysWithValues: origin.map { element -> (UUID, SlideElement) in
+            var copy = element
+            copy.move(by: dx, dy)
+            return (element.id, copy)
+        })
+        editor.changeCurrentSlide { slide in
+            for index in slide.elements.indices {
+                if let element = moved[slide.elements[index].id] { slide.elements[index] = element }
+            }
+        }
+    }
+
+    // MARK: Drags
+
+    /// The selected element follows the finger, snapping to the slide, the guides and other elements.
     private func move(_ element: SlideElement, scale: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 4, coordinateSpace: .named("slide"))
             .onChanged { value in
                 guard !pinching else { return }
                 if dragOrigin?.id != element.id {
                     finishTyping()
-                    editor.selection = element.id
                     editor.beginInteraction()
                     dragOrigin = element
                 }
@@ -285,79 +465,121 @@ struct SlideCanvasView: View {
             }
     }
 
-    /// With an element selected, pinching resizes it around its middle. Otherwise it zooms the view around the
-    /// fingers and moves it with them, like a photo: a scale while pinching, redrawn sharp when they lift.
-    private func pinched(_ phase: PinchPanGesture.Phase, factor: CGFloat, location: CGPoint, area: CGSize, slideSize: CGSize, size: CGSize) {
+    /// A drag that doesn't start on the selected element. In 複数選択 it moves the chosen elements (when it starts on
+    /// one) or draws a box. Otherwise it moves the zoomed view around, or (not zoomed) swipes to another slide.
+    private func drag(_ layout: CanvasLayout, from id: UUID?) -> some Gesture {
+        DragGesture(minimumDistance: editor.multiSelecting ? 4 : 12, coordinateSpace: .named("canvas"))
+            .onChanged { value in
+                guard !pinching else { return }
+                if editor.multiSelecting {
+                    if groupOrigin != nil || (marquee == nil && id.map { editor.multiSelection.contains($0) } == true) {
+                        moveGroup(value, scale: layout.scale)
+                    } else {
+                        drawMarquee(value, layout: layout)
+                    }
+                    return
+                }
+                guard zoom > 1.01 else { return }
+                if panStart == nil { panStart = pan }
+                let start = panStart ?? .zero
+                let slideSize = CGSize(width: layout.size.width / zoom, height: layout.size.height / zoom)
+                pan = clampedPan(
+                    CGSize(width: start.width + value.translation.width, height: start.height + value.translation.height),
+                    area: layout.area, slideSize: slideSize
+                )
+            }
+            .onEnded { value in
+                if groupOrigin != nil {
+                    groupOrigin = nil
+                    editor.snapLines = []
+                    editor.endInteraction()
+                    return
+                }
+                if marquee != nil {
+                    marquee = nil
+                    marqueeBase = []
+                    return
+                }
+                if panStart != nil {
+                    panStart = nil
+                    return
+                }
+                let dx = value.translation.width
+                guard !editor.multiSelecting, !pinching, abs(dx) > 60, abs(dx) > abs(value.translation.height) * 1.5 else { return }
+                // Right to left for the next slide, left to right for the previous one.
+                let target = editor.currentIndex + (dx < 0 ? 1 : -1)
+                guard editor.slides.indices.contains(target) else { return }
+                finishTyping()
+                editor.show(target)
+            }
+    }
+
+    // MARK: Pinch
+
+    /// Zooms the view around the fingers and moves it with them, like a photo: a scale while pinching, redrawn
+    /// sharp when they lift. Elements are never resized by pinching.
+    private func pinched(_ phase: PinchPanGesture.Phase, factor: CGFloat, location: CGPoint, layout: CanvasLayout, slideSize: CGSize) {
+        let size = layout.size
         switch phase {
         case .began:
             pinching = true
-            cancelDrag()
+            cancelDrags()
             pinchStart = location
-            pinchingElement = editor.editing == nil && editor.selectedElement != nil
-            if pinchingElement, let selected = editor.selectedElement {
-                editor.beginInteraction()
-                pinchOrigin = selected
-            } else {
-                // Where the fingers are, as a point of the slide view (before any of this pinch).
-                let origin = CGPoint(
-                    x: area.width / 2 + pan.width - size.width / 2,
-                    y: area.height / 2 + pan.height - size.height / 2
-                )
-                liveAnchor = UnitPoint(
-                    x: (location.x - origin.x) / max(size.width, 1),
-                    y: (location.y - origin.y) / max(size.height, 1)
-                )
-            }
+            // Where the fingers are, as a point of the slide view (before any of this pinch).
+            let origin = layout.origin
+            liveAnchor = UnitPoint(
+                x: (location.x - origin.x) / max(size.width, 1),
+                y: (location.y - origin.y) / max(size.height, 1)
+            )
         case .changed:
-            if pinchingElement {
-                guard let origin = pinchOrigin else { return }
-                let scale = max(0.1, min(Double(factor), 10))
-                editor.changeElement(origin.id) { $0 = Self.scaled(origin, by: scale) }
-                return
-            }
             liveZoom = min(max(factor, 1 / zoom), 5 / zoom)
             if let start = pinchStart {
                 livePan = CGSize(width: location.x - start.x, height: location.y - start.y)
             }
         case .ended:
-            if pinchingElement {
-                pinchOrigin = nil
-                editor.endInteraction()
-            } else {
-                // The point that was under the fingers stays under them.
-                let factor = liveZoom
-                let shift = CGSize(
-                    width: (0.5 - liveAnchor.x) * size.width * (factor - 1) + livePan.width,
-                    height: (0.5 - liveAnchor.y) * size.height * (factor - 1) + livePan.height
-                )
-                var transaction = Transaction(animation: nil)
-                transaction.disablesAnimations = true
-                withTransaction(transaction) {
-                    zoom = min(max(zoom * factor, 1), 5)
-                    liveZoom = 1
-                    liveAnchor = .center
-                    livePan = .zero
-                    pan = clampedPan(CGSize(width: pan.width + shift.width, height: pan.height + shift.height), area: area, slideSize: slideSize)
-                }
-                if zoom < 1.05 {
-                    withAnimation(.snappy) {
-                        zoom = 1
-                        pan = .zero
-                    }
+            // The point that was under the fingers stays under them.
+            let factor = liveZoom
+            let shift = CGSize(
+                width: (0.5 - liveAnchor.x) * size.width * (factor - 1) + livePan.width,
+                height: (0.5 - liveAnchor.y) * size.height * (factor - 1) + livePan.height
+            )
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                zoom = min(max(zoom * factor, 1), 5)
+                liveZoom = 1
+                liveAnchor = .center
+                livePan = .zero
+                pan = clampedPan(CGSize(width: pan.width + shift.width, height: pan.height + shift.height), area: layout.area, slideSize: slideSize)
+            }
+            if zoom < 1.05 {
+                withAnimation(.snappy) {
+                    zoom = 1
+                    pan = .zero
                 }
             }
             pinchStart = nil
-            pinchingElement = false
             // Lifting two fingers often ends in a stray tap.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { pinching = false }
         }
     }
 
-    /// A drag that turned into a pinch puts the element back.
-    private func cancelDrag() {
-        guard let origin = dragOrigin else { return }
-        dragOrigin = nil
-        editor.changeElement(origin.id) { $0 = origin }
+    /// A drag that turned into a pinch puts things back.
+    private func cancelDrags() {
+        if let origin = dragOrigin {
+            dragOrigin = nil
+            editor.changeElement(origin.id) { $0 = origin }
+        }
+        if let origin = groupOrigin {
+            groupOrigin = nil
+            let byID = Dictionary(uniqueKeysWithValues: origin.map { ($0.id, $0) })
+            editor.changeCurrentSlide { slide in
+                for index in slide.elements.indices {
+                    if let element = byID[slide.elements[index].id] { slide.elements[index] = element }
+                }
+            }
+        }
+        marquee = nil
         editor.snapLines = []
         editor.endInteraction()
     }
@@ -369,55 +591,6 @@ struct SlideCanvasView: View {
         let limitX = max(0, (width - area.width) / 2 + 40)
         let limitY = max(0, (height - area.height) / 2 + 40)
         return CGSize(width: min(max(pan.width, -limitX), limitX), height: min(max(pan.height, -limitY), limitY))
-    }
-
-    static func scaled(_ element: SlideElement, by factor: Double) -> SlideElement {
-        var result = element
-        let center = element.frame.center
-        if case .line(var line) = element.content {
-            for point in [\LineElement.start, \LineElement.end] {
-                let value = line[keyPath: point]
-                line[keyPath: point] = SlidePoint(
-                    x: Double(center.x) + (value.x - Double(center.x)) * factor,
-                    y: Double(center.y) + (value.y - Double(center.y)) * factor
-                )
-            }
-            result.content = .line(line)
-            result.syncLineFrame()
-            return result
-        }
-        let width = max(element.frame.width * factor, 16)
-        let height = max(element.frame.height * factor, 16)
-        result.frame = SlideRect(x: Double(center.x) - width / 2, y: Double(center.y) - height / 2, width: width, height: height)
-        return result
-    }
-
-    /// On empty space: moves the zoomed view around, or (not zoomed) swipes to another slide.
-    private func emptyDrag(size: CGSize, area: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 12)
-            .onChanged { value in
-                guard zoom > 1.01, !pinching else { return }
-                if panStart == nil { panStart = pan }
-                let start = panStart ?? .zero
-                let slideSize = CGSize(width: size.width / zoom, height: size.height / zoom)
-                pan = clampedPan(
-                    CGSize(width: start.width + value.translation.width, height: start.height + value.translation.height),
-                    area: area, slideSize: slideSize
-                )
-            }
-            .onEnded { value in
-                if panStart != nil {
-                    panStart = nil
-                    return
-                }
-                let dx = value.translation.width
-                guard !pinching, abs(dx) > 60, abs(dx) > abs(value.translation.height) * 1.5 else { return }
-                // Right to left for the next slide, left to right for the previous one.
-                let target = editor.currentIndex + (dx < 0 ? 1 : -1)
-                guard editor.slides.indices.contains(target) else { return }
-                finishTyping()
-                editor.show(target)
-            }
     }
 
     /// Loads each dropped image (SVG drawn first) and puts it on the slide, a little apart from the one before.
@@ -451,6 +624,22 @@ struct SlideCanvasView: View {
         guard editor.editing != nil else { return }
         textController.finish()
         editor.editing = nil
+    }
+}
+
+/// Where the slide sits in the canvas, to turn canvas points into slide points.
+private struct CanvasLayout {
+    let scale: CGFloat
+    let size: CGSize
+    let area: CGSize
+    let pan: CGSize
+
+    var origin: CGPoint {
+        CGPoint(x: area.width / 2 + pan.width - size.width / 2, y: area.height / 2 + pan.height - size.height / 2)
+    }
+
+    func slidePoint(_ point: CGPoint) -> CGPoint {
+        CGPoint(x: (point.x - origin.x) / scale, y: (point.y - origin.y) / scale)
     }
 }
 

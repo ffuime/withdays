@@ -76,7 +76,6 @@ struct ColorRow: View {
     }
 }
 
-/// A slider with its value written beside it.
 /// A slider with its value written beside it. Round values (0, the middle and the ends, or `marks`) hold the thumb
 /// for a little way and tap as it lands on them.
 struct ValueSlider: View {
