@@ -23,6 +23,11 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "2.0.0", date: "2026.11.15", notes: [
+            "ホーム画面：iPhoneのようなホーム画面から各アプリを開く（6×4・Dock・ページ）",
+            "ホーム画面：長押しで並べ替え、重ねてフォルダ、壁紙を写真から",
+            "下端から上にスワイプでホーム画面へ",
+        ]),
         Release(version: "1.9.0", date: "2026.11.14", notes: [
             "Slides：長押しで複数選択（範囲で囲んで選択）、まとめて移動・整列・書式・削除",
             "Slides：複数の要素に同じアニメーションを同時に",

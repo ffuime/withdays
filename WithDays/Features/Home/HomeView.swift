@@ -14,6 +14,8 @@ struct HomeView: View {
     @Environment(CalendarStore.self) private var store
     @Environment(TemplateStore.self) private var templates
     @Environment(ToastCenter.self) private var toasts
+    /// The home screen this runs under (absent in previews).
+    @Environment(Springboard.self) private var board: Springboard?
     /// Plain state (saved on change) so switching can animate; @AppStorage updates don't carry the animation.
     @State private var mode = UserDefaults.standard.string(forKey: SettingsKey.homeMode) ?? HomeMode.calendar.rawValue
 
@@ -187,6 +189,23 @@ struct HomeView: View {
             .spanDialog($spanRequest)
             .errorAlert($errorMessage)
             .onOpenURL(perform: open)
+            .onAppear {
+                board?.activeMode = HomeMode(rawValue: mode) ?? .calendar
+                if let request = board?.launchRequest { launch(request) }
+            }
+            .onChange(of: board?.launchRequest) { _, request in
+                if let request { launch(request) }
+            }
+            .onChange(of: mode) { _, new in board?.activeMode = HomeMode(rawValue: new) ?? .calendar }
+    }
+
+    /// Opened from its icon on the home screen: straight to that screen, without the in-app slide.
+    private func launch(_ request: LaunchRequest) {
+        path.removeAll()
+        closeTray()
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { mode = request.mode.rawValue }
     }
 
     // MARK: Calendar
@@ -557,6 +576,7 @@ struct HomeView: View {
 
     /// Widget links: withdays://day/<date> focuses that day, withdays://todo opens ToDo.
     private func open(_ url: URL) {
+        board?.revealApp()
         path.removeAll()
         editor = nil
         detail = nil

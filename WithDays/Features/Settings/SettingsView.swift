@@ -1,10 +1,13 @@
 import EventKit
+import PhotosUI
 import SwiftUI
 import WidgetKit
 
 struct SettingsView: View {
     @Environment(CalendarStore.self) private var store
     @Environment(TodoStore.self) private var todos
+    @Environment(Springboard.self) private var board: Springboard?
+    @State private var wallpaperItem: PhotosPickerItem?
     @AppStorage(SettingsKey.theme, store: AppGroup.defaults) private var theme = AppTheme.system.rawValue
     @AppStorage(SettingsKey.weekStart, store: AppGroup.defaults) private var weekStart = 1
     @AppStorage(SettingsKey.dimPastEvents) private var dimPast = false
@@ -22,6 +25,15 @@ struct SettingsView: View {
                     Text("月曜日").tag(2)
                 }
                 Toggle("過去の予定を薄く表示", isOn: $dimPast)
+            }
+
+            if let board {
+                Section("ホーム画面") {
+                    PhotosPicker("壁紙を選択", selection: $wallpaperItem, matching: .images)
+                    if board.wallpaper != nil {
+                        Button("既定の壁紙に戻す", role: .destructive) { board.resetWallpaper() }
+                    }
+                }
             }
 
             Section("カレンダー") {
@@ -89,6 +101,13 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("設定")
+        .onChange(of: wallpaperItem) { _, item in
+            guard let item else { return }
+            wallpaperItem = nil
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self) { board?.setWallpaper(data) }
+            }
+        }
         .navigationBarTitleDisplayMode(.inline)
         // Widgets read these from the App Group.
         .onChange(of: theme) { WidgetCenter.shared.reloadAllTimelines() }

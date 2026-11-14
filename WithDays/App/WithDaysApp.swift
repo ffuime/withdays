@@ -50,7 +50,7 @@ struct RootView: View {
         Group {
             switch store.access {
             case .granted:
-                HomeView()
+                LauncherView()
             case .undetermined:
                 Color(.systemBackground)
                     .ignoresSafeArea()
