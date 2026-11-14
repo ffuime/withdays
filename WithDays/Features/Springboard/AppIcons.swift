@@ -49,9 +49,10 @@ struct AppIconArt: View {
                     .font(.system(size: size * 0.15, weight: .semibold))
                     .foregroundStyle(Color(red: 0.95, green: 0.23, blue: 0.2))
                 Text(now.formatted(.dateTime.day()))
-                    .font(.system(size: size * 0.5, weight: .regular))
+                    .font(.system(size: size * 0.46, weight: .regular))
                     .foregroundStyle(Color.black)
-                    .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize()
             }
             .padding(.top, size * 0.02)
         case .todo, .go, .mo:

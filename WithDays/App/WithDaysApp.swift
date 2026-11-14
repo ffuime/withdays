@@ -45,12 +45,13 @@ struct WithDaysApp: App {
 struct RootView: View {
     @Environment(CalendarStore.self) private var store
     @Environment(\.scenePhase) private var scenePhase
+    @State private var board = Springboard()
 
     var body: some View {
         Group {
             switch store.access {
             case .granted:
-                LauncherView()
+                LauncherView(board: board)
             case .undetermined:
                 Color(.systemBackground)
                     .ignoresSafeArea()
@@ -59,6 +60,10 @@ struct RootView: View {
                 AccessDeniedView()
             }
         }
+        // While an app is open, a swipe up from the bottom edge goes to our home screen; the system's needs a second
+        // swipe. Set here at the root, where the system reads it.
+        .defersSystemGestures(on: board.openApp != nil ? .bottom : [])
+        .persistentSystemOverlays(board.openApp != nil ? .hidden : .automatic)
         .onChange(of: scenePhase) { _, phase in
             // Access may have been granted in the Settings app while we were away.
             if phase == .active { store.refreshStatus() }

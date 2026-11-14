@@ -3,7 +3,8 @@ import SwiftUI
 /// What the app opens on: the home screen, with the apps above it. An app grows out of its icon; a swipe up from
 /// the bottom edge shrinks it back into its icon. The apps (HomeView) stay alive underneath, like suspended apps.
 struct LauncherView: View {
-    @State private var board = Springboard()
+    /// Made by RootView, which also holds back the system's bottom-edge swipe while an app is open.
+    let board: Springboard
     /// Going home: the app is shrinking into its icon and doesn't take touches.
     @State private var closing = false
     /// The app's layout frame (its safe area), in screen points.
@@ -11,6 +12,11 @@ struct LauncherView: View {
 
     var body: some View {
         ZStack {
+            // The app's layout frame, measured here where no zoom applies (inside the app it would measure itself
+            // scaled and shifted, and feed that back).
+            Color.clear
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { appLayout = $0 }
+                .allowsHitTesting(false)
             SpringboardView(board: board, launch: launch)
                 .visualEffect { [openness] content, _ in
                     // The home screen sinks back a little behind an open app (without moving its measured frames).
@@ -51,16 +57,12 @@ struct LauncherView: View {
         }
         .background(Color(uiColor: .systemBackground))
         .overlay(alignment: .bottom) { homeBar }
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { appLayout = $0 }
         .modifier(AppZoom(
             rect: board.appRect ?? board.screen, screen: board.screen, layout: appLayout, app: board.activeApp
         ))
         .opacity(open && board.appRect != nil ? 1 : 0)
         .allowsHitTesting(open && !closing)
         .accessibilityHidden(!open)
-        // Swiping up from the bottom edge is ours while an app is open; the system's needs a second swipe.
-        .defersSystemGestures(on: open ? .bottom : [])
-        .persistentSystemOverlays(open ? .hidden : .automatic)
     }
 
     /// The bar along the bottom edge: drag it up to go home.
