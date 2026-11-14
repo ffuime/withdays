@@ -172,11 +172,12 @@ struct AppZoom: ViewModifier, Animatable {
             width: target.midX - (layoutCenter.x + (full.midX - layoutCenter.x) * scale),
             height: target.midY - (layoutCenter.y + (full.midY - layoutCenter.y) * scale)
         ) : .zero
+        let iconAlpha: Double = ready ? Double(min(max(1 - progress * 2.4, 0), 1)) : 0
         content
             .overlay {
                 AppIconArt(app: app, size: full.width)
                     .position(local)
-                    .opacity(ready ? min(max(1 - progress * 2.4, 0), 1) : 0)
+                    .opacity(iconAlpha)
                     .allowsHitTesting(false)
             }
             .mask {
