@@ -23,6 +23,9 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.9.1", date: "2026.11.17", notes: [
+            "Go：再生中の曲を下に表示（タップで再生 / 一時停止、シャッフル、左右スワイプで曲送り）",
+        ]),
         Release(version: "1.9.0", date: "2026.11.14", notes: [
             "Slides：長押しで複数選択（範囲で囲んで選択）、まとめて移動・整列・書式・削除",
             "Slides：複数の要素に同じアニメーションを同時に",

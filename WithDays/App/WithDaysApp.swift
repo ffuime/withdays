@@ -1,3 +1,4 @@
+import MediaPlayer
 import SlidesFeature
 import SwiftUI
 import UIKit
@@ -58,6 +59,11 @@ struct RootView: View {
             case .denied:
                 AccessDeniedView()
             }
+        }
+        // First launch: after the calendar question, ask for the music library (Go shows what's playing).
+        .task(id: store.access == .undetermined) {
+            guard store.access != .undetermined, MPMediaLibrary.authorizationStatus() == .notDetermined else { return }
+            MPMediaLibrary.requestAuthorization { _ in }
         }
         .onChange(of: scenePhase) { _, phase in
             // Access may have been granted in the Settings app while we were away.

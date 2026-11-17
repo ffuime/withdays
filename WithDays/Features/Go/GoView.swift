@@ -2,6 +2,8 @@ import SwiftUI
 
 /// Go: the next target time of the selected preset and how long is left, centred on the screen.
 /// Hold anywhere for the presets (whose top-right button goes back to the calendar); swipe up or down for brightness.
+/// With something playing in the Music app, a music row is laid over the bottom (never moving the countdown), and a
+/// swipe left or right anywhere skips to the next or previous song.
 struct GoView: View {
     var onCalendar: () -> Void
 
@@ -10,6 +12,12 @@ struct GoView: View {
     /// The brightness when the swipe began, and what it is now (shown while swiping).
     @State private var brightnessStart: CGFloat?
     @State private var brightness: CGFloat = 0
+    @State private var music = GoMusic()
+    /// The screen's width, for the music row (two thirds of it).
+    @State private var width: CGFloat = 0
+    /// The music row's frame, and where the touch in progress began, so holding the row doesn't open the presets.
+    @State private var musicFrame: CGRect = .zero
+    @State private var pressStart: CGPoint?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.25)) { context in
@@ -18,6 +26,17 @@ struct GoView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
         .contentShape(Rectangle())
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        // Laid over the bottom, apart from the countdown: showing, hiding or changing it moves nothing else.
+        .overlay(alignment: .bottom) {
+            if music.visible {
+                GoMusicBar(music: music, width: width * 2 / 3)
+                    .padding(.bottom, 16)
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { musicFrame = $0 }
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: music.visible)
         .overlay(alignment: .top) {
             if brightnessStart != nil {
                 Label("\(Int((brightness * 100).rounded()))%", systemImage: "sun.max.fill")
@@ -46,20 +65,44 @@ struct GoView: View {
                     screen.brightness = level
                     brightness = level
                 }
-                .onEnded { _ in brightnessStart = nil }
+                .onEnded { value in
+                    let wasBrightness = brightnessStart != nil
+                    brightnessStart = nil
+                    // A sideways swipe (not one that turned into brightness) skips songs: left for the next one.
+                    let dx = value.translation.width
+                    guard !wasBrightness, music.visible, abs(dx) > 60, abs(dx) > abs(value.translation.height) * 1.5 else { return }
+                    if dx < 0 { music.next() } else { music.previous() }
+                }
         )
         .simultaneousGesture(
-            LongPressGesture(minimumDuration: 0.5).onEnded { _ in showPresets = true }
+            LongPressGesture(minimumDuration: 0.5).onEnded { _ in
+                // Holding the music row shuffles instead (the row handles it).
+                if music.visible, let start = pressStart, musicFrame.contains(start) { return }
+                showPresets = true
+            }
         )
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space))
+                .onChanged { value in if pressStart == nil { pressStart = value.startLocation } }
+                .onEnded { _ in pressStart = nil }
+        )
+        .coordinateSpace(.named(Self.space))
         .sheet(isPresented: $showPresets) {
             GoPresetSheet(onCalendar: onCalendar)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
         .sensoryFeedback(.impact(weight: .light), trigger: showPresets) { _, new in new }
+        .sensoryFeedback(.impact(weight: .light), trigger: music.haptic)
         // The countdown stays on screen: no auto-lock while Go is open.
-        .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
-        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+        .onAppear {
+            UIApplication.shared.isIdleTimerDisabled = true
+            music.start()
+        }
+        .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
+            music.stop()
+        }
         .task {
             // Temporary presets expire after a day, even while this screen stays open.
             while !Task.isCancelled {
@@ -105,8 +148,10 @@ struct GoView: View {
         UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.screen }.first
     }
 
+    private static let space = "go"
+
     /// #27a and #aaa from the web app.
-    private static let goBlue = Color(uiColor: UIColor(hex: 0x2277AA))
+    static let goBlue = Color(uiColor: UIColor(hex: 0x2277AA))
     private static let targetGrey = Color(uiColor: UIColor(hex: 0xAAAAAA))
 
     private func remaining(_ value: Int, unit: String) -> some View {
