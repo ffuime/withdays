@@ -23,6 +23,12 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.10.0", date: "2026.11.18", notes: [
+            "Maps：Google マップで場所やジャンル（レストラン・コンビニなど）を照準地から近い順に検索",
+            "Maps：営業中かどうか、閉店・営業開始の時刻、照準地からの距離を表示",
+            "Maps：徒歩・車・電車・バス・自転車の経路を地図に表示（手順つき）",
+            "Maps：よく使う項目（検索結果や地図の長押しで追加）と検索履歴",
+        ]),
         Release(version: "1.9.1", date: "2026.11.17", notes: [
             "Go：再生中の曲を下に表示（タップで再生 / 一時停止、シャッフル、左右スワイプで曲送り）",
         ]),

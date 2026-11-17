@@ -10,6 +10,7 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.dimPastEvents) private var dimPast = false
     @AppStorage(SettingsKey.goTransitMargin) private var transitMargin = 2
     @AppStorage(SettingsKey.moMonthStart) private var moMonthStart = 1
+    @AppStorage(SettingsKey.mapsAPIKey) private var mapsAPIKey = ""
 
     var body: some View {
         List {
@@ -68,6 +69,16 @@ struct SettingsView: View {
                 Text("Go")
             } footer: {
                 Text("＋ボタン長押しで電車から作るとき、この時間より後に出発する経路を候補にします。")
+            }
+
+            Section {
+                SecureField("Google の API キー", text: $mapsAPIKey)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            } header: {
+                Text("Maps")
+            } footer: {
+                Text("Google Cloud で Maps SDK for iOS・Places API (New)・Routes API を有効にしたキーを入れてください。キーを変えたときは、地図はアプリを開き直すと新しいキーになります。")
             }
 
             Section {

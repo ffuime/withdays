@@ -50,6 +50,12 @@ enum SettingsKey {
     static let goTransitMargin = "goTransitMargin"
     static let moMonthStart = "moMonthStart"
     static let notesTools = "notesTools"
+    static let mapsAPIKey = "mapsAPIKey"
+    static let mapsSaved = "mapsSaved"
+    static let mapsHistory = "mapsHistory"
+    static let mapsLastLatitude = "mapsLastLatitude"
+    static let mapsLastLongitude = "mapsLastLongitude"
+    static let mapsLastZoom = "mapsLastZoom"
 }
 
 enum AppTheme: String, CaseIterable, Identifiable {
