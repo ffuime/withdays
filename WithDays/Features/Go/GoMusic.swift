@@ -126,7 +126,7 @@ struct GoMusicBar: View {
                 MarqueeText(text: music.title, font: .system(size: 15, weight: .semibold), color: .primary)
                 MarqueeText(text: music.artist, font: .system(size: 13, weight: .regular), color: .secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             Button(action: music.toggleShuffle) {
                 Image(systemName: "shuffle")
                     .font(.system(size: 17, weight: .semibold))
@@ -138,8 +138,17 @@ struct GoMusicBar: View {
             .accessibilityLabel("シャッフル")
             .accessibilityValue(music.shuffleOn ? "オン" : "オフ")
         }
+        // Always this wide, however long the title: what doesn't fit fades and scrolls.
         .frame(width: width)
         .contentShape(Rectangle())
+        // The row's own gestures only: a sideways swipe skips, holding shuffles the queue.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 12).onEnded { value in
+                let dx = value.translation.width
+                guard abs(dx) > 40, abs(dx) > abs(value.translation.height) * 1.5 else { return }
+                if dx < 0 { music.next() } else { music.previous() }
+            }
+        )
         .onLongPressGesture(minimumDuration: 0.5) { music.shuffleQueue() }
         .accessibilityElement(children: .contain)
         .accessibilityAction(named: "シャッフル再生") { music.shuffleQueue() }
@@ -213,10 +222,12 @@ struct MarqueeText: View {
 
     var body: some View {
         let overflows = textWidth > boxWidth + 0.5 && boxWidth > 0
-        // The line's height and the box's width, whatever the text.
-        label
+        // The line's height and the box's width: the width offered, never the text's (a long title doesn't widen it).
+        Text(text)
+            .font(font)
+            .lineLimit(1)
             .hidden()
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { boxWidth = $0 }
             .overlay(alignment: .leading) {
                 if overflows {
