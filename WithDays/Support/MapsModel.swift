@@ -26,27 +26,28 @@ struct GeoPoint: Codable, Hashable {
     }
 }
 
-/// When a place opens and closes next, from Places API's current opening hours.
+/// When a place opens and closes next, worked out from OpenStreetMap's opening_hours.
 struct PlaceHours: Hashable {
-    var openNow: Bool?
+    var openNow: Bool
     var nextOpen: Date?
+    /// Nil while open around the clock.
     var nextClose: Date?
 }
 
-/// A place found with Google Places, or a saved point shown like one.
+/// A place found with Apple's map search, or a saved point shown like one.
 struct MapPlace: Identifiable, Hashable {
-    /// Google's place ID, or "saved-<uuid>" / "point-<uuid>" for a point that isn't a Google place.
+    /// Apple's place identifier, or "saved-<uuid>" / "point-<uuid>" for a point that isn't a place on the map.
     let id: String
     var name: String
     var address: String?
     var location: GeoPoint
     var category: String?
     var hours: PlaceHours?
-    /// OPERATIONAL, CLOSED_TEMPORARILY or CLOSED_PERMANENTLY.
-    var businessStatus: String?
+    /// OpenStreetMap was asked about this place's hours (whether or not it knew them).
+    var hoursChecked = false
 
-    /// The Google place ID, when this is a Google place.
-    var googleID: String? {
+    /// Apple's place identifier, when this is a place on the map.
+    var appleID: String? {
         id.hasPrefix("saved-") || id.hasPrefix("point-") ? nil : id
     }
 }
@@ -61,21 +62,15 @@ extension MapPlace {
         let detail: String?
     }
 
-    /// Nil for a point that isn't a Google place.
+    /// Nil for a point that isn't a place on the map.
     var openStatus: OpenStatus? {
-        guard googleID != nil else { return nil }
-        switch businessStatus {
-        case "CLOSED_PERMANENTLY":
-            return OpenStatus(label: "閉業", color: .secondary, detail: nil)
-        case "CLOSED_TEMPORARILY":
-            return OpenStatus(label: "臨時休業", color: .red, detail: nil)
-        default:
-            break
+        guard appleID != nil else { return nil }
+        guard let hours else {
+            return hoursChecked
+                ? OpenStatus(label: "営業時間の情報なし", color: .secondary, detail: nil)
+                : OpenStatus(label: "営業時間を確認中…", color: .secondary, detail: nil)
         }
-        guard let hours, let openNow = hours.openNow else {
-            return OpenStatus(label: "営業時間の情報なし", color: .secondary, detail: nil)
-        }
-        if openNow {
+        if hours.openNow {
             guard let close = hours.nextClose else {
                 return OpenStatus(label: "営業中", color: .green, detail: "24時間営業")
             }
@@ -126,16 +121,6 @@ enum TravelMode: String, CaseIterable, Identifiable, Codable {
 
     var id: String { rawValue }
 
-    /// Routes API's travelMode.
-    var apiValue: String {
-        switch self {
-        case .walk: "WALK"
-        case .drive: "DRIVE"
-        case .transit: "TRANSIT"
-        case .bicycle: "BICYCLE"
-        }
-    }
-
     var label: String {
         switch self {
         case .walk: "徒歩"
@@ -176,31 +161,16 @@ enum RouteEndpoint: Hashable {
 struct RouteResult: Hashable {
     var durationSeconds: Int
     var distanceMeters: Int
-    var encodedPolyline: String?
+    /// The line to draw; empty for 電車・バス, which Apple only answers with a time.
+    var path: [GeoPoint]
     var steps: [RouteStep]
+    var arrival: Date?
 }
 
 struct RouteStep: Identifiable, Hashable {
     let id: Int
-    /// WALK, DRIVE, TRANSIT, BICYCLE.
-    var travelMode: String
-    var instruction: String?
+    var instruction: String
     var distanceMeters: Int?
-    var durationSeconds: Int?
-    var transit: TransitStep?
-}
-
-struct TransitStep: Hashable {
-    var lineName: String
-    var vehicle: String?
-    var headsign: String?
-    var departureStop: String?
-    var arrivalStop: String?
-    var departureTime: Date?
-    var arrivalTime: Date?
-    var stopCount: Int?
-    /// "#RRGGBB" from the line, if Google knows it.
-    var color: String?
 }
 
 // MARK: Formatting
@@ -245,19 +215,5 @@ enum MapsFormat {
         if minutes < 60 { return "\(minutes)分" }
         let rest = minutes % 60
         return rest == 0 ? "\(minutes / 60)時間" : "\(minutes / 60)時間\(rest)分"
-    }
-}
-
-extension Color {
-    /// "#RRGGBB" → Color.
-    init?(hex: String?) {
-        guard var text = hex?.trimmingCharacters(in: .whitespaces), !text.isEmpty else { return nil }
-        if text.hasPrefix("#") { text.removeFirst() }
-        guard text.count == 6, let value = UInt32(text, radix: 16) else { return nil }
-        self.init(
-            red: Double((value >> 16) & 0xFF) / 255,
-            green: Double((value >> 8) & 0xFF) / 255,
-            blue: Double(value & 0xFF) / 255
-        )
     }
 }

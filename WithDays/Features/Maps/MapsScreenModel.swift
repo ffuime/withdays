@@ -9,7 +9,7 @@ enum PanelDetent {
     case large
 }
 
-/// A route being shown: its ends, the travel mode and Google's answer.
+/// A route being shown: its ends, the travel mode and Apple's answer.
 struct RouteState {
     var origin: RouteEndpoint
     var destination: RouteEndpoint
@@ -27,7 +27,9 @@ struct RouteState {
 final class MapsScreenModel {
     /// The camera's target when it last stopped: the 「照準地」.
     var aim: GeoPoint
-    var zoom: Float
+    /// The map view's own center and scale, to put the camera back where it was.
+    var cameraCenter: GeoPoint
+    var meters: Double
     var userLocation: GeoPoint?
     /// The current location is off the middle of the map, so 「現在地に戻す」 shows.
     var awayFromUser = false
@@ -48,21 +50,28 @@ final class MapsScreenModel {
 
     private var hasCenteredOnUser = false
     private var searchTask: Task<Void, Never>?
+    private var hoursTask: Task<Void, Never>?
     private var routeTask: Task<Void, Never>?
 
     init() {
         let defaults = UserDefaults.standard
-        if defaults.object(forKey: SettingsKey.mapsLastLatitude) != nil {
+        if defaults.object(forKey: SettingsKey.mapsLastLatitude) != nil,
+           defaults.object(forKey: SettingsKey.mapsCameraLatitude) != nil {
             aim = GeoPoint(
                 latitude: defaults.double(forKey: SettingsKey.mapsLastLatitude),
                 longitude: defaults.double(forKey: SettingsKey.mapsLastLongitude)
             )
-            let zoom = defaults.float(forKey: SettingsKey.mapsLastZoom)
-            self.zoom = zoom > 0 ? zoom : 15
+            cameraCenter = GeoPoint(
+                latitude: defaults.double(forKey: SettingsKey.mapsCameraLatitude),
+                longitude: defaults.double(forKey: SettingsKey.mapsCameraLongitude)
+            )
+            let meters = defaults.double(forKey: SettingsKey.mapsLastSpan)
+            self.meters = meters > 0 ? meters : 2000
         } else {
             // Tokyo Station until the current location comes in.
             aim = GeoPoint(latitude: 35.6812, longitude: 139.7671)
-            zoom = 15
+            cameraCenter = aim
+            meters = 2000
         }
     }
 
@@ -70,13 +79,16 @@ final class MapsScreenModel {
 
     // MARK: Camera
 
-    func cameraStopped(at target: GeoPoint, zoom: Float) {
-        aim = target
-        self.zoom = zoom
+    func cameraStopped(_ stop: MapCameraStop) {
+        aim = stop.aim
+        cameraCenter = stop.center
+        meters = stop.meters
         let defaults = UserDefaults.standard
-        defaults.set(target.latitude, forKey: SettingsKey.mapsLastLatitude)
-        defaults.set(target.longitude, forKey: SettingsKey.mapsLastLongitude)
-        defaults.set(zoom, forKey: SettingsKey.mapsLastZoom)
+        defaults.set(stop.aim.latitude, forKey: SettingsKey.mapsLastLatitude)
+        defaults.set(stop.aim.longitude, forKey: SettingsKey.mapsLastLongitude)
+        defaults.set(stop.center.latitude, forKey: SettingsKey.mapsCameraLatitude)
+        defaults.set(stop.center.longitude, forKey: SettingsKey.mapsCameraLongitude)
+        defaults.set(stop.meters, forKey: SettingsKey.mapsLastSpan)
     }
 
     func userMoved(to point: GeoPoint) {
@@ -84,7 +96,7 @@ final class MapsScreenModel {
         // The first fix moves the map there once; after that the camera is the user's.
         if !hasCenteredOnUser {
             hasCenteredOnUser = true
-            command = MapCameraCommand(kind: .center(point, zoom: max(zoom, 15)))
+            command = MapCameraCommand(kind: .center(point, meters: min(meters, 2000)))
         }
     }
 
@@ -93,7 +105,7 @@ final class MapsScreenModel {
             errorMessage = "現在地を取得できていません。iPhoneの設定で位置情報の利用を許可してください"
             return
         }
-        command = MapCameraCommand(kind: .center(userLocation, zoom: nil))
+        command = MapCameraCommand(kind: .center(userLocation, meters: nil))
     }
 
     // MARK: Search
@@ -111,12 +123,14 @@ final class MapsScreenModel {
         searching = true
         let near = aim
         searchTask?.cancel()
+        hoursTask?.cancel()
         searchTask = Task {
             do {
-                let found = try await GoogleMapsAPI.search(query, near: near, key: MapsStore.apiKey)
+                let found = try await AppleMapsService.search(query, near: near)
                 guard !Task.isCancelled else { return }
                 results = found
                 if found.isEmpty { resultsError = "「\(query)」は見つかりませんでした" }
+                loadHours()
             } catch {
                 guard !Task.isCancelled else { return }
                 resultsError = error.localizedDescription
@@ -125,7 +139,7 @@ final class MapsScreenModel {
         }
     }
 
-    /// Shows one place (from history or 「よく使う項目」) as the only result, with fresh opening hours when it's a Google place.
+    /// Shows one place (from history or 「よく使う項目」) as the only result, with its opening hours when it's a place on the map.
     func show(_ place: MapPlace, store: MapsStore) {
         closeRoute()
         resultsTitle = place.name
@@ -134,25 +148,36 @@ final class MapsScreenModel {
         resultsError = nil
         resultsDetent = .collapsed
         searching = false
-        command = MapCameraCommand(kind: .center(place.location, zoom: max(zoom, 16)))
+        command = MapCameraCommand(kind: .center(place.location, meters: min(meters, 1200)))
         store.recordPlace(place)
-        guard let googleID = place.googleID else { return }
         searchTask?.cancel()
-        searchTask = Task {
-            guard let fresh = try? await GoogleMapsAPI.place(id: googleID, key: MapsStore.apiKey),
-                  !Task.isCancelled, results.first?.id == place.id else { return }
-            results = [fresh]
+        loadHours()
+    }
+
+    /// Fills in the results' opening hours from OpenStreetMap, after they show.
+    private func loadHours() {
+        hoursTask?.cancel()
+        let places = results
+        guard places.contains(where: { $0.appleID != nil }) else { return }
+        hoursTask = Task {
+            let hours = await OpenStreetMapHours.hours(for: places)
+            guard !Task.isCancelled else { return }
+            for index in results.indices where results[index].appleID != nil {
+                results[index].hours = hours[results[index].id]
+                results[index].hoursChecked = true
+            }
         }
     }
 
     func select(_ place: MapPlace, store: MapsStore) {
         selectedID = place.id
         store.recordPlace(place)
-        command = MapCameraCommand(kind: .center(place.location, zoom: nil))
+        command = MapCameraCommand(kind: .center(place.location, meters: nil))
     }
 
     func closeResults() {
         searchTask?.cancel()
+        hoursTask?.cancel()
         resultsTitle = nil
         results = []
         selectedID = nil
@@ -192,7 +217,7 @@ final class MapsScreenModel {
                 guard !Task.isCancelled else { return }
                 route?.originPoint = origin
                 route?.destinationPoint = destination
-                let result = try await GoogleMapsAPI.route(from: origin, to: destination, mode: current.mode, key: MapsStore.apiKey)
+                let result = try await AppleMapsService.route(from: origin, to: destination, mode: current.mode)
                 guard !Task.isCancelled else { return }
                 route?.result = result
                 route?.loading = false

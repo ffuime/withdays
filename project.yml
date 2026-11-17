@@ -14,9 +14,6 @@ settings:
 packages:
   SlidesFeature:
     path: SlidesFeature
-  GoogleMaps:
-    url: https://github.com/googlemaps/ios-maps-sdk
-    from: "11.3.0"
 
 targets:
   WithDays:
@@ -58,15 +55,11 @@ targets:
     dependencies:
       - target: WithDaysWidget
       - package: SlidesFeature
-      - package: GoogleMaps
-        product: GoogleMaps
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ffuime.withdays
         PRODUCT_NAME: WithDays
         CODE_SIGN_ENTITLEMENTS: Entitlements/WithDays.entitlements
-        # The Google Maps SDK's Objective-C categories need this to be linked.
-        OTHER_LDFLAGS: $(inherited) -ObjC
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor

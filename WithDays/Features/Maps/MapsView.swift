@@ -1,68 +1,14 @@
 import CoreLocation
 import SwiftUI
 
-/// Maps: Google's map with a search bar on top, the route button bottom right (with 「現在地に戻す」 splitting
+/// Maps: Apple's map with a search bar on top, the route button bottom right (with 「現在地に戻す」 splitting
 /// out of it when the map's middle leaves the current location), and results or a route in a glass panel below.
 struct MapsView: View {
     var onCalendar: () -> Void
 
-    @AppStorage(SettingsKey.mapsAPIKey) private var apiKey = ""
-    @State private var setup: GoogleMapsSetup.State?
-
     var body: some View {
-        Group {
-            switch setup {
-            case nil:
-                Color(.systemBackground)
-            case .missing:
-                MapsKeyView(onCalendar: onCalendar)
-            case .ready, .needsRelaunch:
-                MapsMainView(onCalendar: onCalendar)
-            }
-        }
-        .toolbar(.hidden, for: .navigationBar)
-        .onAppear { setup = GoogleMapsSetup.prepare() }
-        .onChange(of: apiKey) { setup = GoogleMapsSetup.prepare() }
-    }
-}
-
-// MARK: - Key entry
-
-/// Shown until a Google API key is entered.
-private struct MapsKeyView: View {
-    var onCalendar: () -> Void
-    @State private var key = ""
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                MapsCircleButton(symbol: "calendar", action: onCalendar)
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            ContentUnavailableView {
-                Label("Google の API キーが必要です", systemImage: "map")
-            } description: {
-                Text("Maps は Google Maps Platform（Maps SDK for iOS・Places API (New)・Routes API）を使います。Google Cloud で作った API キーを入力してください。あとから設定でも変えられます。")
-            } actions: {
-                VStack(spacing: 12) {
-                    SecureField("API キー", text: $key)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .padding(.horizontal, 14)
-                        .frame(height: 44)
-                        .glassEffect(.regular, in: .capsule)
-                    Button("保存") {
-                        UserDefaults.standard.set(key.trimmingCharacters(in: .whitespacesAndNewlines), forKey: SettingsKey.mapsAPIKey)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .disabled(key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                .padding(.horizontal, 24)
-            }
-        }
-        .background(Color(.systemBackground))
+        MapsMainView(onCalendar: onCalendar)
+            .toolbar(.hidden, for: .navigationBar)
     }
 }
 
@@ -149,19 +95,19 @@ private struct MapsMainView: View {
     // MARK: Map
 
     private func mapLayer(top: CGFloat) -> some View {
-        GoogleMapView(
+        AppleMapView(
             places: model.route == nil ? model.results : [],
             selectedID: model.selectedID,
             route: routeOverlay,
             userLocation: model.userLocation,
             padding: UIEdgeInsets(top: top, left: 0, bottom: mapBottom, right: 0),
             command: model.command,
-            initialCamera: model.aim,
-            initialZoom: model.zoom,
+            initialCenter: model.cameraCenter,
+            initialMeters: model.meters,
             onCameraChange: { _, away in
                 if away != model.awayFromUser { model.awayFromUser = away }
             },
-            onCameraIdle: { target, zoom in model.cameraStopped(at: target, zoom: zoom) },
+            onCameraIdle: { stop in model.cameraStopped(stop) },
             onLongPress: { point in
                 pointName = ""
                 pendingPoint = point
@@ -177,7 +123,7 @@ private struct MapsMainView: View {
     private var routeOverlay: MapRouteOverlay? {
         guard let route = model.route, let origin = route.originPoint, let destination = route.destinationPoint,
               let result = route.result else { return nil }
-        return MapRouteOverlay(encodedPolyline: result.encodedPolyline, origin: origin, destination: destination)
+        return MapRouteOverlay(path: result.path, origin: origin, destination: destination)
     }
 
     /// A small cross on the 「照準地」: the middle of the map left between the search bar and the panel.
@@ -491,7 +437,7 @@ private struct MapsResultsList: View {
         .contextMenu {
             if !store.isSaved(place) {
                 Button {
-                    store.save(SavedPlace(name: place.name, location: place.location, placeID: place.googleID, address: place.address))
+                    store.save(SavedPlace(name: place.name, location: place.location, placeID: place.appleID, address: place.address))
                 } label: {
                     Label("よく使う項目に追加", systemImage: "star")
                 }
@@ -531,7 +477,7 @@ private struct MapsRouteHeader: View {
                         Text(MapsFormat.distance(Double(result.distanceMeters)))
                             .foregroundStyle(.secondary)
                         Spacer(minLength: 0)
-                        Text("\(MapsFormat.clockTime(Date().addingTimeInterval(TimeInterval(result.durationSeconds)))) 着")
+                        Text("\(MapsFormat.clockTime(result.arrival ?? Date().addingTimeInterval(TimeInterval(result.durationSeconds)))) 着")
                             .foregroundStyle(.secondary)
                     }
                     .font(.system(size: 14))
@@ -572,11 +518,28 @@ private struct MapsRouteContent: View {
                         stepRow(step)
                         Divider().padding(.leading, 56)
                     }
-                    if model.route?.mode == .transit, model.route?.error != nil {
-                        Text("日本では Google の公共交通の経路が返らない区間があります。徒歩や車を試してください。")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .padding(20)
+                    if let route = model.route, route.mode == .transit || route.error != nil {
+                        VStack(alignment: .leading, spacing: 10) {
+                            if route.mode == .transit {
+                                Text("電車・バスは所要時間だけを表示しています。乗り換えや路線は Apple マップで確かめられます。")
+                            }
+                            if let origin = route.originPoint, let destination = route.destinationPoint {
+                                Button {
+                                    AppleMapsService.openInMaps(
+                                        from: origin, originName: route.origin.name,
+                                        to: destination, destinationName: route.destination.name,
+                                        mode: route.mode
+                                    )
+                                } label: {
+                                    Label("Apple マップで開く", systemImage: "map")
+                                        .font(.system(size: 14, weight: .semibold))
+                                }
+                                .buttonStyle(.glass)
+                            }
+                        }
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .padding(20)
                     }
                 }
                 .padding(.bottom, 12)
@@ -585,74 +548,26 @@ private struct MapsRouteContent: View {
         }
     }
 
-    @ViewBuilder
     private func stepRow(_ step: RouteStep) -> some View {
-        if let transit = step.transit {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "tram.fill")
-                    .font(.system(size: 16))
-                    .foregroundStyle(.white)
-                    .frame(width: 30, height: 30)
-                    .background(Color(hex: transit.color) ?? Color.brand, in: .circle)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(transit.lineName)
-                        .font(.system(size: 15, weight: .semibold))
-                    if let headsign = transit.headsign {
-                        Text("\(headsign)行き").font(.system(size: 12)).foregroundStyle(.secondary)
-                    }
-                    stopLine(transit.departureStop, time: transit.departureTime, suffix: "発")
-                    stopLine(transit.arrivalStop, time: transit.arrivalTime, suffix: "着")
-                    if let count = transit.stopCount {
-                        Text("\(count)駅").font(.system(size: 12)).foregroundStyle(.secondary)
-                    }
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: model.route?.mode.symbol ?? "figure.walk")
+                .font(.system(size: 15))
+                .foregroundStyle(Color.brand)
+                .frame(width: 30, height: 30)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(step.instruction)
+                    .font(.system(size: 14))
+                if let meters = step.distanceMeters, meters > 0 {
+                    Text(MapsFormat.distance(Double(meters)))
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
-                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-        } else {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: symbol(for: step.travelMode))
-                    .font(.system(size: 15))
-                    .foregroundStyle(Color.brand)
-                    .frame(width: 30, height: 30)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(step.instruction ?? "進む")
-                        .font(.system(size: 14))
-                    let amount = [
-                        step.distanceMeters.map { MapsFormat.distance(Double($0)) },
-                        step.durationSeconds.map { MapsFormat.duration($0) },
-                    ].compactMap { $0 }.joined(separator: "・")
-                    if !amount.isEmpty {
-                        Text(amount).font(.system(size: 12)).foregroundStyle(.secondary).monospacedDigit()
-                    }
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
+            Spacer(minLength: 0)
         }
-    }
-
-    @ViewBuilder
-    private func stopLine(_ name: String?, time: Date?, suffix: String) -> some View {
-        if name != nil || time != nil {
-            HStack(spacing: 6) {
-                if let time {
-                    Text(MapsFormat.clockTime(time)).monospacedDigit().fontWeight(.semibold)
-                }
-                Text("\(name ?? "")\(suffix)")
-            }
-            .font(.system(size: 13))
-        }
-    }
-
-    private func symbol(for travelMode: String) -> String {
-        switch travelMode {
-        case "DRIVE": "car.fill"
-        case "BICYCLE": "bicycle"
-        default: "figure.walk"
-        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
     }
 }
 

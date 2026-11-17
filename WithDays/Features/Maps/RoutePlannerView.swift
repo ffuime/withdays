@@ -213,7 +213,7 @@ struct RoutePlannerView: View {
         searchError = nil
         Task {
             do {
-                results = try await GoogleMapsAPI.search(text, near: aim, key: MapsStore.apiKey)
+                results = try await AppleMapsService.search(text, near: aim)
                 if results.isEmpty { searchError = "「\(text)」は見つかりませんでした" }
             } catch {
                 searchError = error.localizedDescription
