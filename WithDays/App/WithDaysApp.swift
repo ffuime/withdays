@@ -25,6 +25,7 @@ struct WithDaysApp: App {
     @State private var go = GoStore()
     @State private var mo = MoStore()
     @State private var notes = NotesStore()
+    @State private var maps = MapsStore()
     @AppStorage(SettingsKey.theme, store: AppGroup.defaults) private var theme = AppTheme.system.rawValue
 
     var body: some Scene {
@@ -37,6 +38,7 @@ struct WithDaysApp: App {
                 .environment(go)
                 .environment(mo)
                 .environment(notes)
+                .environment(maps)
                 .tint(.brand)
                 .preferredColorScheme((AppTheme(rawValue: theme) ?? .system).colorScheme)
         }

@@ -7,7 +7,7 @@ enum HomeRoute: Hashable {
 }
 
 enum HomeMode: String {
-    case calendar, todo, go, mo, notes, slides
+    case calendar, todo, go, mo, notes, slides, maps
 }
 
 struct HomeView: View {
@@ -58,10 +58,11 @@ struct HomeView: View {
     private var isGo: Bool { mode == HomeMode.go.rawValue }
     private var isMo: Bool { mode == HomeMode.mo.rawValue }
     private var isNotes: Bool { mode == HomeMode.notes.rawValue }
+    private var isMaps: Bool { mode == HomeMode.maps.rawValue }
     /// Slides brings its own navigation, so it's laid over the calendar's rather than inside it.
     private var isSlides: Bool { mode == HomeMode.slides.rawValue }
     /// Go, Mo and Notes bring their own bars; the calendar's toolbar and buttons stay out of them.
-    private var isOwnScreen: Bool { isGo || isMo || isNotes || isSlides }
+    private var isOwnScreen: Bool { isGo || isMo || isNotes || isSlides || isMaps }
 
     private var displayedMonth: Date {
         let id = page ?? 0
@@ -73,6 +74,11 @@ struct HomeView: View {
         ZStack {
             if isSlides {
                 Color(uiColor: .systemBackground)
+            } else if isMaps {
+                MapsView {
+                    withAnimation(.snappy) { mode = HomeMode.calendar.rawValue }
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             } else if isNotes {
                 NotesView {
                     withAnimation(.snappy) { mode = HomeMode.calendar.rawValue }
@@ -435,7 +441,7 @@ struct HomeView: View {
     @ViewBuilder
     private var toastLayer: some View {
         // Mo shows the toast above its own tab bar.
-        if let toast = toasts.current, !isMo, !isNotes, !isSlides {
+        if let toast = toasts.current, !isMo, !isNotes, !isSlides, !isMaps {
             UndoToastView(toast: toast) { toasts.performUndo() }
                 .padding(.horizontal, isTodo ? 20 : 20 + 56 + 10)
                 .padding(.bottom, isTodo ? 20 + 56 + 12 : 20)
@@ -569,6 +575,10 @@ struct HomeView: View {
         }
         if url.host == "go" {
             mode = HomeMode.go.rawValue
+            return
+        }
+        if url.host == "maps" {
+            mode = HomeMode.maps.rawValue
             return
         }
         guard let day = DeepLink.day(from: url) else { return }
