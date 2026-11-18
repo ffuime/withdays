@@ -69,8 +69,9 @@ final class MapsScreenModel {
             self.meters = meters > 0 ? meters : 2000
         } else {
             // Tokyo Station until the current location comes in.
-            aim = GeoPoint(latitude: 35.6812, longitude: 139.7671)
-            cameraCenter = aim
+            let tokyo = GeoPoint(latitude: 35.6812, longitude: 139.7671)
+            aim = tokyo
+            cameraCenter = tokyo
             meters = 2000
         }
     }
