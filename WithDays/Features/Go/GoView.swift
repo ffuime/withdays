@@ -15,9 +15,6 @@ struct GoView: View {
     @State private var music = GoMusic()
     /// The screen's width, for the music row (two thirds of it).
     @State private var width: CGFloat = 0
-    /// The music row's frame, and where the touch in progress began, so holding the row doesn't open the presets.
-    @State private var musicFrame: CGRect = .zero
-    @State private var pressStart: CGPoint?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.25)) { context in
@@ -27,16 +24,6 @@ struct GoView: View {
         .background(Color(.systemBackground))
         .contentShape(Rectangle())
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-        // Laid over the bottom, apart from the countdown: showing, hiding or changing it moves nothing else.
-        .overlay(alignment: .bottom) {
-            if music.visible {
-                GoMusicBar(music: music, width: width * 2 / 3)
-                    .padding(.bottom, 16)
-                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { musicFrame = $0 }
-                    .transition(.opacity)
-            }
-        }
-        .animation(.easeInOut(duration: 0.25), value: music.visible)
         .overlay(alignment: .top) {
             if brightnessStart != nil {
                 Label("\(Int((brightness * 100).rounded()))%", systemImage: "sun.max.fill")
@@ -75,18 +62,18 @@ struct GoView: View {
                 }
         )
         .simultaneousGesture(
-            LongPressGesture(minimumDuration: 0.5).onEnded { _ in
-                // Holding the music row shuffles instead (the row handles it).
-                if music.visible, let start = pressStart, musicFrame.contains(start) { return }
-                showPresets = true
+            LongPressGesture(minimumDuration: 0.5).onEnded { _ in showPresets = true }
+        )
+        // Laid over the bottom, apart from the countdown: showing, hiding or changing it moves nothing else. Added
+        // after the screen's gestures, so a touch on the row goes to the row alone (holding it never opens the presets).
+        .overlay(alignment: .bottom) {
+            if music.visible {
+                GoMusicBar(music: music, width: width * 2 / 3)
+                    .padding(.bottom, 56)
+                    .transition(.opacity)
             }
-        )
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space))
-                .onChanged { value in if pressStart == nil { pressStart = value.startLocation } }
-                .onEnded { _ in pressStart = nil }
-        )
-        .coordinateSpace(.named(Self.space))
+        }
+        .animation(.easeInOut(duration: 0.25), value: music.visible)
         .sheet(isPresented: $showPresets) {
             GoPresetSheet(onCalendar: onCalendar)
                 .presentationDetents([.large])
@@ -147,8 +134,6 @@ struct GoView: View {
     private static var screen: UIScreen? {
         UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.screen }.first
     }
-
-    private static let space = "go"
 
     /// #27a and #aaa from the web app.
     static let goBlue = Color(uiColor: UIColor(hex: 0x2277AA))
