@@ -22,22 +22,24 @@ struct RoutePlannerView: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("経路")
-                    .font(.system(size: 20, weight: .bold))
-                Spacer()
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 16, weight: .semibold))
-                        .frame(width: 40, height: 40)
+        NavigationStack {
+            content
+                .navigationTitle("経路")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(action: onClose) {
+                            Image(systemName: "xmark")
+                        }
+                        .accessibilityLabel("閉じる")
+                    }
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
+        }
+        .onAppear { focused = true }
+    }
 
+    private var content: some View {
+        VStack(spacing: 0) {
             endpoints
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -71,7 +73,6 @@ struct RoutePlannerView: View {
             .disabled(origin == nil || destination == nil || origin == destination)
             .padding(16)
         }
-        .onAppear { focused = true }
     }
 
     // MARK: Parts

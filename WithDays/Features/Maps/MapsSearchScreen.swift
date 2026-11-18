@@ -1,48 +1,17 @@
 import SwiftUI
 
-/// The search bar opened to the full screen: the field, 「よく使う項目」 side by side, then the history
-/// (swipe left to delete).
+/// Under the search field while it's active: 「よく使う項目」 side by side, then the history (swipe left to delete).
 struct MapsSearchScreen: View {
-    @Binding var text: String
-    var onSearch: (String) -> Void
     var onPickSaved: (SavedPlace) -> Void
     var onPickHistory: (MapsHistoryEntry) -> Void
-    var onCancel: () -> Void
 
     @Environment(MapsStore.self) private var store
-    @FocusState private var focused: Bool
     @State private var renaming: SavedPlace?
     @State private var newName = ""
     @State private var confirmClear = false
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                    TextField("場所やジャンルを検索", text: $text)
-                        .focused($focused)
-                        .submitLabel(.search)
-                        .onSubmit { onSearch(text) }
-                    if !text.isEmpty {
-                        Button { text = "" } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 14)
-                .frame(height: 46)
-                .glassEffect(.regular, in: .capsule)
-
-                Button("キャンセル", action: onCancel)
-                    .foregroundStyle(.primary)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-
             List {
                 Section {
                     if store.saved.isEmpty {
@@ -89,7 +58,6 @@ struct MapsSearchScreen: View {
             .scrollContentBackground(.hidden)
             .scrollDismissesKeyboard(.immediately)
         }
-        .onAppear { focused = true }
         .alert("名前を変更", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("名前", text: $newName)
             Button("保存") {
@@ -104,20 +72,20 @@ struct MapsSearchScreen: View {
 
     private var savedRow: some View {
         ScrollView(.horizontal) {
-            HStack(spacing: 10) {
+            HStack(alignment: .top, spacing: 22) {
                 ForEach(store.saved) { place in
                     Button { onPickSaved(place) } label: {
-                        VStack(spacing: 6) {
+                        VStack(spacing: 8) {
                             Image(systemName: place.placeID == nil ? "mappin" : "star.fill")
                                 .font(.system(size: 18, weight: .semibold))
                                 .foregroundStyle(.white)
-                                .frame(width: 44, height: 44)
+                                .frame(width: 50, height: 50)
                                 .background(Color.brand, in: .circle)
                             Text(place.name)
                                 .font(.system(size: 12))
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
-                                .frame(maxWidth: 72)
+                                .frame(maxWidth: 76)
                         }
                     }
                     .buttonStyle(.plain)
@@ -134,8 +102,8 @@ struct MapsSearchScreen: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
         }
         .scrollIndicators(.hidden)
     }

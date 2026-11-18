@@ -1,12 +1,11 @@
 import Foundation
+import MapKit
 import Observation
+import SwiftUI
 
-/// How far the bottom panel is pulled up.
-enum PanelDetent {
-    /// Only the header: the search word, or the route's summary.
-    case collapsed
-    case half
-    case large
+extension PresentationDetent {
+    /// Only the sheet's title: the search word, or where the route goes.
+    static let mapsSmall = PresentationDetent.height(84)
 }
 
 /// A route being shown: its ends, the travel mode and Apple's answer.
@@ -41,10 +40,10 @@ final class MapsScreenModel {
     var searching = false
     var resultsError: String?
     var selectedID: String?
-    var resultsDetent: PanelDetent = .half
+    var resultsDetent: PresentationDetent = .medium
 
     var route: RouteState?
-    var routeDetent: PanelDetent = .half
+    var routeDetent: PresentationDetent = .medium
 
     var errorMessage: String?
 
@@ -120,7 +119,7 @@ final class MapsScreenModel {
         results = []
         selectedID = nil
         resultsError = nil
-        resultsDetent = .half
+        resultsDetent = .medium
         searching = true
         let near = aim
         searchTask?.cancel()
@@ -147,7 +146,7 @@ final class MapsScreenModel {
         results = [place]
         selectedID = place.id
         resultsError = nil
-        resultsDetent = .collapsed
+        resultsDetent = .mapsSmall
         searching = false
         command = MapCameraCommand(kind: .center(place.location, meters: min(meters, 1200)))
         store.recordPlace(place)
@@ -190,7 +189,7 @@ final class MapsScreenModel {
 
     func startRoute(from origin: RouteEndpoint, to destination: RouteEndpoint, mode: TravelMode? = nil) {
         route = RouteState(origin: origin, destination: destination, mode: mode ?? route?.mode ?? .walk)
-        routeDetent = .half
+        routeDetent = .medium
         loadRoute()
     }
 

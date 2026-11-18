@@ -9,6 +9,9 @@ enum AppleMapsService {
         var errorDescription: String? { message }
     }
 
+    /// The search's own map items, for Apple's place card.
+    private static var items: [String: MKMapItem] = [:]
+
     // MARK: Search
 
     /// Places and genres (「ラーメン屋」「コンビニ」…) around `near`, nearest first.
@@ -25,7 +28,13 @@ enum AppleMapsService {
         } catch {
             throw Failure(message: "検索できませんでした。通信状態を確かめてください")
         }
-        return response.mapItems.map(place(from:))
+        var places: [MapPlace] = []
+        for item in response.mapItems {
+            let found = Self.place(from: item)
+            items[found.id] = item
+            places.append(found)
+        }
+        return places
             .sorted { $0.location.distance(to: near) < $1.location.distance(to: near) }
     }
 
@@ -61,6 +70,39 @@ enum AppleMapsService {
             .campground: "キャンプ場", .carRental: "レンタカー", .marina: "マリーナ", .nationalPark: "国立公園",
         ]
         return names[category]
+    }
+
+    // MARK: Place card
+
+    /// The map item for Apple's place card: the search's own, Apple's by its identifier, or a bare point.
+    static func mapItem(for place: MapPlace) async -> MKMapItem {
+        if let item = items[place.id] { return item }
+        if let appleID = place.appleID, let identifier = MKMapItem.Identifier(rawValue: appleID),
+           let item = await fetch(MKMapItemRequest(mapItemIdentifier: identifier)) {
+            items[place.id] = item
+            return item
+        }
+        let item = MKMapItem(placemark: MKPlacemark(coordinate: place.location.coordinate))
+        item.name = place.name
+        return item
+    }
+
+    /// The map item behind a place tapped on the map.
+    static func mapItem(for feature: MKMapFeatureAnnotation) async -> MKMapItem? {
+        await fetch(MKMapItemRequest(mapFeatureAnnotation: feature))
+    }
+
+    private static func fetch(_ request: MKMapItemRequest) async -> MKMapItem? {
+        await withCheckedContinuation { continuation in
+            request.getMapItem { item, _ in continuation.resume(returning: item) }
+        }
+    }
+
+    /// A tapped place as a result row, so it can be saved or routed to.
+    static func place(for item: MKMapItem) -> MapPlace {
+        let found = Self.place(from: item)
+        items[found.id] = item
+        return found
     }
 
     // MARK: Routes

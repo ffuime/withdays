@@ -45,6 +45,8 @@ struct AppleMapView: UIViewRepresentable {
     var onCameraIdle: (MapCameraStop) -> Void
     var onLongPress: (GeoPoint) -> Void
     var onMarkerTap: (String) -> Void
+    /// A shop, station or other place on Apple's map itself was tapped.
+    var onFeatureTap: (MKMapFeatureAnnotation) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
@@ -54,6 +56,7 @@ struct AppleMapView: UIViewRepresentable {
         map.showsUserLocation = true
         map.showsCompass = false
         map.pointOfInterestFilter = .includingAll
+        map.selectableMapFeatures = [.pointsOfInterest]
         map.setRegion(
             MKCoordinateRegion(center: initialCenter.coordinate, latitudinalMeters: initialMeters, longitudinalMeters: initialMeters),
             animated: false
@@ -116,6 +119,7 @@ struct AppleMapView: UIViewRepresentable {
         var lastCommandID: UUID?
         var reportedUser: GeoPoint?
         var reportedPadding: UIEdgeInsets?
+        private var wasAway = false
         private var pins: [String: PinAnnotation] = [:]
         private var drawnRoute: MapRouteOverlay?
         private var routeShapes: [MKAnnotation] = []
@@ -241,8 +245,10 @@ struct AppleMapView: UIViewRepresentable {
             var away = false
             if let user = parent.userLocation {
                 let dot = map.convert(user.coordinate, toPointTo: map)
-                away = hypot(dot.x - mid.x, dot.y - mid.y) > 40
+                // A little slack either way, so 「現在地に戻す」 doesn't flicker at the edge.
+                away = hypot(dot.x - mid.x, dot.y - mid.y) > (wasAway ? 28 : 44)
             }
+            wasAway = away
             parent.onCameraChange(aim, away)
         }
 
@@ -275,6 +281,7 @@ struct AppleMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            // Apple's own places keep their own look.
             guard let pin = annotation as? PinAnnotation else { return nil }
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: "pin") as? MKMarkerAnnotationView
                 ?? MKMarkerAnnotationView(annotation: pin, reuseIdentifier: "pin")
@@ -285,6 +292,11 @@ struct AppleMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
+            if let feature = view.annotation as? MKMapFeatureAnnotation {
+                mapView.deselectAnnotation(feature, animated: true)
+                parent.onFeatureTap(feature)
+                return
+            }
             guard let pin = view.annotation as? PinAnnotation else { return }
             // The panel shows the place; the map keeps no selection of its own.
             mapView.deselectAnnotation(pin, animated: false)
