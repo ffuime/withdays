@@ -23,6 +23,9 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.11.0", date: "2026.11.22", notes: [
+            "tooc：トークアプリの枠組み（トーク・友だち・じぶん、プロフィール、MyQR）。送信はまだできません",
+        ]),
         Release(version: "1.9.1", date: "2026.11.17", notes: [
             "Go：再生中の曲を下に表示（タップで再生 / 一時停止、シャッフル、左右スワイプで曲送り）",
         ]),
