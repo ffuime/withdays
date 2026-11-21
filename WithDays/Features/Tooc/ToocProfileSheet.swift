@@ -146,8 +146,9 @@ struct ToocProfileSheet: View {
             GeometryReader { proxy in
                 let width = proxy.size.width
                 let full = CGRect(x: 0, y: (proxy.size.height - width) / 2, width: width, height: width)
-                let distance = hypot(zoomDrag.width, zoomDrag.height)
-                let shrink = max(0.7, 1 - distance / 900)
+                let distance: CGFloat = hypot(zoomDrag.width, zoomDrag.height)
+                let shrink: CGFloat = max(0.7, 1 - distance / 900)
+                let fade: Double = zoomOpen ? max(0, 1 - Double(distance) / 400) : 0
                 // The round icon's place, from the sheet's space into this layer's (which reaches under the bars).
                 let origin = proxy.frame(in: .named(Self.space)).origin
                 let small = avatarFrame.offsetBy(dx: -origin.x, dy: -origin.y)
@@ -157,7 +158,7 @@ struct ToocProfileSheet: View {
                         ToocIconBackdrop(user: user, blur: 60)
                         Color.black.opacity(0.55)
                     }
-                    .opacity(zoomOpen ? max(0, 1 - distance / 400) : 0)
+                    .opacity(fade)
                     .ignoresSafeArea()
                     ToocIconImage(user: user)
                         .frame(width: frame.width, height: frame.height)

@@ -154,7 +154,7 @@ struct ToocTalkRow: View {
                     ProgressView()
                         .controlSize(.mini)
                 }
-                Text(previewText(last))
+                previewText(last)
                     .font(.system(size: Self.previewSize))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
