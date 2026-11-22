@@ -23,6 +23,9 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.14.1", date: "2026.11.22", notes: [
+            "tooc：通知（タップでそのトークを開く）",
+        ]),
         Release(version: "1.14.0", date: "2026.11.22", notes: [
             "tooc：写真は入力欄に添付して送信（複数・文字なしも可）、長いメッセージは「すべてを表示」",
             "tooc：グループプロフィール（アイコン・背景・名前・メンバー）、表示名はその場で編集",

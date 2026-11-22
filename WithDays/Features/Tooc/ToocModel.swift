@@ -808,11 +808,17 @@ final class ToocStore {
                 break
             }
             guard Double.random(in: 0...1) < (room.isGroup ? 0.6 : 0.85), let sender = others.randomElement() else { return }
-            try? await Task.sleep(for: .seconds(Double.random(in: 0.8...2)))
+            let wait = Double.random(in: 0.8...2)
+            let typingFor = Double.random(in: 1.5...3.5)
+            let reply = self.makeReply(from: sender)
+            // Booked with the system now, so it still arrives if tooc goes to the background meanwhile.
+            let arrival = Date.now.addingTimeInterval(wait + typingFor)
+            self.bookNotification(for: reply, in: room, at: arrival)
+            try? await Task.sleep(for: .seconds(wait))
             self.typing[roomID] = sender
-            try? await Task.sleep(for: .seconds(Double.random(in: 1.5...3.5)))
+            try? await Task.sleep(for: .seconds(typingFor))
             self.typing[roomID] = nil
-            self.receive(from: sender, in: roomID)
+            self.receive(reply, in: roomID, due: arrival)
         }
     }
 
@@ -847,28 +853,54 @@ final class ToocStore {
         "ちょうど同じこと考えてた", "まじか！", "了解です🙆", "また連絡するね", "ほんとに？", "楽しみ！",
     ]
 
-    private func receive(from sender: String, in roomID: String) {
-        guard let room = room(roomID) else { return }
+    private func makeReply(from sender: String) -> ToocMessage {
         let kind: ToocMessage.Kind = Double.random(in: 0...1) < 0.12
             ? .remotePhoto(ToocFiles.randomPhotoURL())
             : .text(Self.replies.randomElement()!)
-        let message = ToocMessage(senderID: sender, kind: kind, date: .now)
-        let viewing = openRoomID == roomID
+        return ToocMessage(senderID: sender, kind: kind, date: .now)
+    }
+
+    private func notificationTitle(_ sender: String, _ room: ToocRoom) -> String {
+        let who = displayName(sender)
+        return room.isGroup ? "\(name(of: room))・\(who)" : who
+    }
+
+    private func bookNotification(for message: ToocMessage, in room: ToocRoom, at date: Date) {
+        guard settings.notifications, !room.muted else { return }
+        ToocNotifications.schedule(
+            id: "tooc-\(message.id.uuidString)",
+            title: notificationTitle(message.senderID, room),
+            body: settings.showContent ? message.preview : "新しいメッセージがあります",
+            roomID: room.id,
+            at: date
+        )
+    }
+
+    /// A reply arrives. If tooc is in front, its own banner shows and the system's is taken back; if tooc was away
+    /// when it was due, the system's already showed, so no banner.
+    private func receive(_ reply: ToocMessage, in roomID: String, due: Date) {
+        guard let room = room(roomID) else { return }
+        let notificationID = "tooc-\(reply.id.uuidString)"
+        let wasAway = Date.now.timeIntervalSince(due) > 1.5
+        if !wasAway { ToocNotifications.cancel(notificationID) }
+        var message = reply
+        message.date = wasAway ? due : .now
+        let sender = message.senderID
+        let viewing = openRoomID == roomID && !wasAway
         update(roomID) {
             $0.messages.append(message)
             $0.hidden = false
             if !viewing { $0.unread += 1 }
         }
         guard !viewing, !room.muted else { return }
-        let who = displayName(sender)
-        let title = room.isGroup ? "\(name(of: room))・\(who)" : who
-        notify(ToocNotice(title: title, body: message.preview, userID: sender, roomID: roomID))
+        notify(ToocNotice(title: notificationTitle(sender, room), body: message.preview, userID: sender, roomID: roomID),
+               banner: !wasAway)
     }
 
-    func notify(_ notice: ToocNotice) {
+    func notify(_ notice: ToocNotice, banner showBanner: Bool = true) {
         notices.insert(notice, at: 0)
         if notices.count > 100 { notices.removeLast(notices.count - 100) }
-        if settings.notifications { banner = notice }
+        if settings.notifications && showBanner { banner = notice }
     }
 
     func markNoticesSeen() {

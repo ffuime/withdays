@@ -2,11 +2,14 @@ import MediaPlayer
 import SlidesFeature
 import SwiftUI
 import UIKit
+import UserNotifications
 
 /// Only for the screen's orientation: portrait, except while Slides plays.
 final class WithDaysAppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         SlidesFonts.registerImportedFonts()
+        // tooc's notifications open their talk when tapped.
+        UNUserNotificationCenter.current().delegate = ToocNotificationDelegate.shared
         return true
     }
 

@@ -133,6 +133,9 @@ struct ToocNotificationSettingsView: View {
         Form {
             Section {
                 Toggle("通知", isOn: $store.settings.notifications)
+                    .onChange(of: store.settings.notifications) { _, on in
+                        if on { ToocNotifications.requestAuthorization() }
+                    }
                 Toggle("メッセージの内容を表示", isOn: $store.settings.showContent)
                     .disabled(!store.settings.notifications)
             }

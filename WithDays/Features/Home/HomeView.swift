@@ -583,6 +583,14 @@ struct HomeView: View {
             mode = HomeMode.go.rawValue
             return
         }
+        if url.host == "tooc" {
+            // From a tooc notification: open tooc, then the talk.
+            mode = HomeMode.tooc.rawValue
+            if let room = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "room" })?.value {
+                ToocNotifications.open(room)
+            }
+            return
+        }
         guard let day = DeepLink.day(from: url) else { return }
         mode = HomeMode.calendar.rawValue
         jump(to: day)

@@ -38,6 +38,10 @@ struct ToocRoomView: View {
     @State private var confirmLeave = false
     @State private var confirmHide = false
     @State private var reactingTo: ToocMessage?
+    /// The sticky date: which day is at the top, where each day's own label is, and the bars' height above.
+    @State private var topDay: Date?
+    @State private var dayTops: [Date: CGFloat] = [:]
+    @State private var topInset: CGFloat = 0
 
     private var room: ToocRoom? { store.room(roomID) }
 
@@ -195,9 +199,15 @@ struct ToocRoomView: View {
         let typer = store.typing[roomID].flatMap { store.user($0) }
         return ScrollViewReader { reader in
             ScrollView {
-                LazyVStack(spacing: 2, pinnedViews: [.sectionHeaders]) {
+                LazyVStack(spacing: 2) {
                     ForEach(days(list)) { day in
-                        Section {
+                        // Each day's own label, in the flow; it hides while the sticky copy stands in for it.
+                        dayLabel(day.date)
+                            .opacity(topDay == day.date && (dayTops[day.date] ?? 0) < topInset + 1 ? 0 : 1)
+                            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .scrollView).minY } action: {
+                                dayTops[day.date] = $0
+                            }
+                        Group {
                             ForEach(day.items) { item in
                                 ToocMessageRow(
                                     message: item.message,
@@ -213,8 +223,6 @@ struct ToocRoomView: View {
                                 .padding(.top, item.first && item.message.id != day.items.first?.message.id ? 10 : 0)
                                 .id(item.message.id)
                             }
-                        } header: {
-                            dayLabel(day.date)
                         }
                     }
                     if let typer {
@@ -230,8 +238,16 @@ struct ToocRoomView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 12)
                 .animation(.snappy, value: typer?.id)
+                .scrollTargetLayout()
             }
             .defaultScrollAnchor(.bottom)
+            .onScrollGeometryChange(for: CGFloat.self) { $0.contentInsets.top } action: { _, inset in topInset = inset }
+            .onScrollTargetVisibilityChange(idType: UUID.self, threshold: 0.01) { ids in
+                // The day of the earliest message on screen.
+                let visible = Set(ids)
+                topDay = list.first { visible.contains($0.id) }.map { Calendar.current.startOfDay(for: $0.date) }
+            }
+            .overlay(alignment: .top) { stickyDay(list) }
             .scrollDismissesKeyboard(.interactively)
             .overlay {
                 if list.isEmpty && waiting.isEmpty {
@@ -261,7 +277,21 @@ struct ToocRoomView: View {
         }
     }
 
-    /// The day, in a small glass capsule; the current day's stays at the top while scrolling.
+    private static let dayLabelHeight: CGFloat = 40
+
+    /// The top day's label, held at the top while its messages scroll under it, and pushed up by the next day's label.
+    @ViewBuilder
+    private func stickyDay(_ list: [ToocMessage]) -> some View {
+        if let day = topDay, (dayTops[day] ?? -.infinity) < topInset + 1 {
+            let next = dayTops.filter { $0.key > day && $0.value > topInset }.map(\.value).min()
+            let push = next.map { min(0, $0 - topInset - Self.dayLabelHeight) } ?? 0
+            dayLabel(day)
+                .offset(y: push)
+                .allowsHitTesting(false)
+        }
+    }
+
+    /// The day: plain text, no background.
     private func dayLabel(_ date: Date) -> some View {
         Text(ToocTime.day(date))
             .font(.caption.weight(.semibold))
@@ -270,6 +300,7 @@ struct ToocRoomView: View {
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
+            .frame(height: Self.dayLabelHeight)
     }
 
     private func actions(for message: ToocMessage) -> ToocMessageActions {
@@ -702,6 +733,8 @@ struct ToocMessageRow: View {
     @State private var dragX: CGFloat = 0
     @State private var armed = false
     @State private var showFull = false
+    @State private var shownHeight: CGFloat = 0
+    @State private var fullHeight: CGFloat = 0
 
     private static let replyDistance: CGFloat = 64
     private static let maxPull: CGFloat = 96
@@ -881,6 +914,7 @@ struct ToocMessageRow: View {
             Button("その他の絵文字", systemImage: "ellipsis", action: actions.moreReactions)
         }
         .controlGroupStyle(.palette)
+        .menuActionDismissBehavior(.enabled)
         Button("返信", systemImage: "arrowshape.turn.up.left", action: actions.reply)
         if case .text(let text) = message.kind {
             Button("コピー", systemImage: "doc.on.doc") { UIPasteboard.general.string = text }
@@ -900,26 +934,30 @@ struct ToocMessageRow: View {
         }
     }
 
-    /// Long text stops at about 14 lines, with すべてを表示 for the rest in a sheet.
+    /// Long text stops at 14 lines, with すべてを表示 for the rest in a sheet. Short text is just itself.
     private func longText(_ text: String) -> some View {
         let color = mine ? Color.white : Color.primary
-        return ViewThatFits(in: .vertical) {
+        return VStack(alignment: .leading, spacing: 6) {
             Text(text)
                 .font(.system(size: textSize))
                 .foregroundStyle(color)
-                .fixedSize(horizontal: false, vertical: true)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(text)
-                    .font(.system(size: textSize))
-                    .foregroundStyle(color)
-                    .lineLimit(14)
+                .lineLimit(14)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { shownHeight = $0 }
+                // The whole text at the same width, unseen, to tell whether anything was cut.
+                .background(alignment: .topLeading) {
+                    Text(text)
+                        .font(.system(size: textSize))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .hidden()
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fullHeight = $0 }
+                }
+            if fullHeight > shownHeight + 1 {
                 Button("すべてを表示") { showFull = true }
                     .font(.system(size: textSize * 0.88, weight: .semibold))
                     .foregroundStyle(mine ? Color.white : theme.accent)
                     .buttonStyle(.plain)
             }
         }
-        .frame(maxHeight: textSize * 1.25 * 15)
         .sheet(isPresented: $showFull) {
             NavigationStack {
                 ScrollView {

@@ -153,6 +153,13 @@ struct ToocRootView: View {
             router.reset()
             if signedIn { welcome = true }
         }
+        .onAppear {
+            if store.settings.notifications { ToocNotifications.requestAuthorization() }
+            if let room = ToocNotifications.takePendingRoom(), store.signedIn { router.open(room: room) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ToocNotifications.openRoom)) { _ in
+            if let room = ToocNotifications.takePendingRoom(), store.signedIn { router.open(room: room) }
+        }
         .task {
             // Scheduled messages go out when their time comes.
             while !Task.isCancelled {
