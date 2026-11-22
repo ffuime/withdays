@@ -269,6 +269,22 @@ struct ToocSettings: Hashable, Codable {
     var theme: ToocTheme = .standard
     /// Return sends instead of starting a new line.
     var returnSends = false
+    /// The five reactions at the top of a message's long-press menu.
+    var favoriteReactions = ["👍", "❤️", "😂", "😮", "🙏"]
+
+    init() {}
+
+    /// Settings saved by an older version keep what they have; anything new takes its default.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = ToocSettings()
+        notifications = try container.decodeIfPresent(Bool.self, forKey: .notifications) ?? defaults.notifications
+        showContent = try container.decodeIfPresent(Bool.self, forKey: .showContent) ?? defaults.showContent
+        textSize = try container.decodeIfPresent(ToocTextSize.self, forKey: .textSize) ?? defaults.textSize
+        theme = try container.decodeIfPresent(ToocTheme.self, forKey: .theme) ?? defaults.theme
+        returnSends = try container.decodeIfPresent(Bool.self, forKey: .returnSends) ?? defaults.returnSends
+        favoriteReactions = try container.decodeIfPresent([String].self, forKey: .favoriteReactions) ?? defaults.favoriteReactions
+    }
 }
 
 enum ToocTextSize: String, CaseIterable, Identifiable, Codable {
@@ -845,6 +861,25 @@ final class ToocStore {
 
     // MARK: Samples
 
+    /// Icons and backgrounds for the sample people, from picsum.photos. Some keep the generated icon.
+    private func fetchSamplePhotos(for ids: [String]) {
+        Task { [weak self] in
+            for id in ids {
+                let side = Int.random(in: 300...600)
+                if Bool.random() || id == "haruka_m",
+                   let icon = await ToocFiles.remoteImage("https://picsum.photos/\(side)/\(side)"),
+                   let file = ToocFiles.save(icon, side: 600) {
+                    self?.updateUser(id) { $0.iconFile = file }
+                }
+                if Bool.random() || id == "taku",
+                   let background = await ToocFiles.remoteImage(ToocFiles.randomPhotoURL()),
+                   let file = ToocFiles.save(background, side: 1600) {
+                    self?.updateUser(id) { $0.backgroundFile = file }
+                }
+            }
+        }
+    }
+
     private func loadSamples() {
         let now = Date.now
         func ago(_ minutes: Double) -> Date { now.addingTimeInterval(-minutes * 60) }
@@ -863,6 +898,7 @@ final class ToocStore {
                      isFavorite: true),
         ]
         users = Dictionary(uniqueKeysWithValues: samples.map { ($0.id, $0) })
+        fetchSamplePhotos(for: samples.map(\.id))
         let me = self.me.id
         rooms = [
             ToocRoom(id: "mynote", memberIDs: [me], isMynote: true, messages: [

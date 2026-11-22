@@ -270,6 +270,8 @@ struct ToocEditProfileView: View {
     @State private var birthday = Calendar.current.date(from: DateComponents(year: 2005, month: 1, day: 1)) ?? .now
     @State private var iconItem: PhotosPickerItem?
     @State private var backgroundItem: PhotosPickerItem?
+    @State private var pickingIcon = false
+    @State private var pickingBackground = false
     @State private var crop: ToocCropRequest?
     /// Photos made here and not kept, removed on leaving.
     @State private var made: [String] = []
@@ -289,44 +291,13 @@ struct ToocEditProfileView: View {
         NavigationStack {
             Form {
                 Section {
-                    ZStack(alignment: .bottom) {
-                        // The background as the profile shows it, with the icon on top.
-                        ToocIconBackdrop(user: preview, blur: 0)
-                            .frame(height: 170)
-                            .overlay(Color.black.opacity(preview.backgroundFile == nil && !hasBackground ? 0.6 : 0.15))
-                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                        ToocAvatar(user: preview, size: 92)
-                            .overlay(Circle().strokeBorder(.white, lineWidth: 3))
-                            .offset(y: 30)
-                    }
-                    .padding(.bottom, 34)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
-                }
-                Section("アイコン") {
-                    PhotosPicker(selection: $iconItem, matching: .images) {
-                        Label("写真を選んで切り抜く", systemImage: "person.crop.circle")
-                    }
-                    if iconFile != nil {
-                        Button("写真を外す", systemImage: "xmark.circle", role: .destructive) {
-                            withAnimation(.snappy) { iconFile = nil }
-                        }
-                    } else {
-                        Slider(value: $hue, in: 0...1) { Text("色") }
-                            .tint(Color(hue: hue, saturation: 0.55, brightness: 0.85))
-                    }
-                }
-                Section("背景") {
-                    PhotosPicker(selection: $backgroundItem, matching: .images) {
-                        Label("写真を選んで切り抜く", systemImage: "photo")
-                    }
-                    if backgroundFile != nil {
-                        Button("背景の写真を外す", systemImage: "xmark.circle", role: .destructive) {
-                            withAnimation(.snappy) { backgroundFile = nil }
-                        }
-                    } else {
-                        Toggle("アイコンから背景をつくる", isOn: $hasBackground)
-                    }
+                    header
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                } footer: {
+                    Text("背景やアイコンをタップで写真を選んで切り抜き、長押しで外せます。")
+                        .frame(maxWidth: .infinity)
+                        .multilineTextAlignment(.center)
                 }
                 Section("名前") {
                     TextField("名前", text: $name)
@@ -364,6 +335,8 @@ struct ToocEditProfileView: View {
                         .accessibilityLabel("保存")
                 }
             }
+            .photosPicker(isPresented: $pickingIcon, selection: $iconItem, matching: .images)
+            .photosPicker(isPresented: $pickingBackground, selection: $backgroundItem, matching: .images)
             .onChange(of: iconItem) { _, item in load(item, icon: true) }
             .onChange(of: backgroundItem) { _, item in load(item, icon: false) }
             .sheet(item: $crop) { request in
@@ -392,6 +365,53 @@ struct ToocEditProfileView: View {
         .onDisappear {
             for file in made where file != store.me.iconFile && file != store.me.backgroundFile { ToocFiles.delete(file) }
         }
+    }
+
+    /// The background as the profile shows it, with the icon on it. Tap either to choose a photo; hold to take it off.
+    private var header: some View {
+        ZStack(alignment: .bottom) {
+            ToocIconBackdrop(user: preview, blur: 0)
+                .frame(height: 180)
+                .overlay(Color.black.opacity(preview.backgroundFile == nil && !hasBackground ? 0.6 : 0.12))
+                .overlay(alignment: .topTrailing) {
+                    Image(systemName: "photo.badge.plus")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(8)
+                        .background(.black.opacity(0.35), in: Circle())
+                        .padding(10)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .onTapGesture { pickingBackground = true }
+                .onLongPressGesture {
+                    withAnimation(.snappy) {
+                        if backgroundFile != nil { backgroundFile = nil } else { hasBackground.toggle() }
+                    }
+                }
+                .padding(.bottom, 40)
+            ToocAvatar(user: preview, size: 96)
+                .overlay(Circle().strokeBorder(.white, lineWidth: 3))
+                .overlay(alignment: .bottomTrailing) {
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(.black.opacity(0.55)))
+                        .overlay(Circle().strokeBorder(.white, lineWidth: 2))
+                }
+                .contentShape(Circle())
+                .onTapGesture { pickingIcon = true }
+                .onLongPressGesture {
+                    withAnimation(.snappy) {
+                        iconFile = nil
+                        hue = Double.random(in: 0...1)
+                    }
+                }
+        }
+        .sensoryFeedback(.impact(weight: .medium), trigger: iconFile)
+        .sensoryFeedback(.impact(weight: .medium), trigger: backgroundFile)
+        .accessibilityElement(children: .contain)
     }
 
     private func load(_ item: PhotosPickerItem?, icon: Bool) {

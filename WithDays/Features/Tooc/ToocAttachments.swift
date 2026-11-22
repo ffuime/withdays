@@ -506,23 +506,16 @@ struct ToocAmidaSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 10) {
-                labels(amida.entrants, colored: true)
-                GeometryReader { proxy in
-                    let size = proxy.size
-                    ZStack {
-                        ladder(size)
-                            .stroke(Color.secondary.opacity(0.5), lineWidth: 2)
-                        ForEach(amida.entrants.indices, id: \.self) { index in
-                            walk(index, size)
-                                .trim(from: 0, to: progress)
-                                .stroke(color(index), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
-                        }
+                GeometryReader { outer in
+                    // Up to 5 fit the width; more scroll sideways at a fixed width each.
+                    let wide = amida.entrants.count > Self.fitting
+                    let width = wide ? CGFloat(amida.entrants.count) * Self.columnWidth : outer.size.width
+                    ScrollView(.horizontal) {
+                        board(width: width, height: outer.size.height)
                     }
+                    .scrollDisabled(!wide)
+                    .scrollIndicators(wide ? .visible : .hidden)
                 }
-                labels(amida.entrants.indices.map { index in
-                    // Each prize shows once someone reaches it.
-                    progress >= 1 ? amida.prizes[index] : "？"
-                }, colored: false)
                 if progress >= 1 {
                     VStack(spacing: 6) {
                         ForEach(amida.entrants.indices, id: \.self) { index in
@@ -564,6 +557,33 @@ struct ToocAmidaSheet: View {
             }
             .onAppear { if amida.revealed { progress = 1 } }
         }
+    }
+
+    private static let fitting = 5
+    private static let columnWidth: CGFloat = 72
+
+    /// Names on top, the ladder, then the results.
+    private func board(width: CGFloat, height: CGFloat) -> some View {
+        VStack(spacing: 10) {
+            labels(amida.entrants, colored: true)
+            GeometryReader { proxy in
+                let size = proxy.size
+                ZStack {
+                    ladder(size)
+                        .stroke(Color.secondary.opacity(0.5), lineWidth: 2)
+                    ForEach(amida.entrants.indices, id: \.self) { index in
+                        walk(index, size)
+                            .trim(from: 0, to: progress)
+                            .stroke(color(index), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                    }
+                }
+            }
+            labels(amida.entrants.indices.map { index in
+                // Each prize shows once someone reaches it.
+                progress >= 1 ? amida.prizes[index] : "？"
+            }, colored: false)
+        }
+        .frame(width: width, height: height)
     }
 
     private func labels(_ texts: [String], colored: Bool) -> some View {

@@ -12,10 +12,7 @@ struct ToocMeView: View {
             VStack(spacing: 16) {
                 card
                 addFriend
-                HStack(spacing: 12) {
-                    mynoteBox
-                    scheduledBox
-                }
+                shortcuts
                 friendsBox
             }
             .padding(16)
@@ -100,56 +97,55 @@ struct ToocMeView: View {
         .buttonStyle(.plain)
     }
 
-    /// Mynote, with its latest line.
-    private var mynoteBox: some View {
-        Button {
-            if let room = store.mynote { router.open(room: room.id) }
-        } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    ToocAvatar(user: .mynote, size: 28)
-                    Text("Mynote")
-                        .font(.headline)
-                }
-                Text(store.mynote?.last.map { $0.preview } ?? "メモを書こう")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2, reservesSpace: true)
-                    .multilineTextAlignment(.leading)
+    /// Mynote and the messages waiting to be sent, as plain rows with a hairline between.
+    private var shortcuts: some View {
+        let waiting = store.scheduledMessages
+        return VStack(spacing: 0) {
+            shortcut(
+                icon: AnyView(ToocAvatar(user: .mynote, size: 40)),
+                title: "Mynote",
+                detail: store.mynote?.last.map { $0.preview } ?? "メモを書こう"
+            ) {
+                if let room = store.mynote { router.open(room: room.id) }
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(theme.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            Divider().padding(.leading, 56)
+            shortcut(
+                icon: AnyView(
+                    Image(systemName: "clock.fill")
+                        .font(.system(size: 17))
+                        .foregroundStyle(.white)
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(theme.accent))
+                ),
+                title: "送信予約",
+                detail: waiting.first.map { "\(waiting.count)件・次は\(ToocTime.scheduled($0.message.scheduledAt ?? .now))" }
+                    ?? "予約はありません"
+            ) {
+                router.path.append(.scheduled)
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 4)
     }
 
-    /// How many messages wait to be sent; tap for all of them.
-    private var scheduledBox: some View {
-        let waiting = store.scheduledMessages
-        return Button { router.path.append(.scheduled) } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: "clock.fill")
-                        .font(.system(size: 16))
-                        .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(Circle().fill(theme.accent))
-                    Text("送信予約")
-                        .font(.headline)
+    private func shortcut(icon: AnyView, title: String, detail: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                icon
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.body.weight(.semibold))
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                Text(waiting.first.map { "\(waiting.count)件・次は\(ToocTime.scheduled($0.message.scheduledAt ?? .now))" }
-                     ?? "予約はありません")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2, reservesSpace: true)
-                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(theme.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

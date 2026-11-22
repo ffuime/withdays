@@ -64,11 +64,11 @@ struct ToocProfileSheet: View {
     private var backdrop: some View {
         ZStack {
             if user.backgroundFile != nil || user.hasBackground {
-                ToocIconBackdrop(user: user, blur: clear ? 0 : 50)
+                ToocIconBackdrop(user: user, blur: clear ? 0 : 16)
             } else {
                 LinearGradient(colors: [Color(white: 0.22), Color(white: 0.08)], startPoint: .top, endPoint: .bottom)
             }
-            Color.black.opacity(clear ? 0 : 0.45)
+            Color.black.opacity(clear ? 0 : 0.35)
         }
         .animation(.easeInOut(duration: 0.35), value: clear)
     }
@@ -244,7 +244,7 @@ struct ToocProfileSheet: View {
                 ToocIconImage(user: user)
             } backdrop: {
                 ZStack {
-                    ToocIconBackdrop(user: user, blur: 60)
+                    ToocIconBackdrop(user: user, blur: 24)
                     Color.black.opacity(0.55)
                 }
             } accessory: {

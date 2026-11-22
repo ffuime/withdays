@@ -34,7 +34,6 @@ struct ToocTalkListView: View {
         .listStyle(.plain)
         .toocBackground(theme)
         .environment(\.editMode, .constant(router.selecting ? .active : .inactive))
-        .animation(.spring(response: 0.45, dampingFraction: 0.86), value: store.rooms(router.filter).map(\.id))
         .safeAreaInset(edge: .top, spacing: 0) {
             HStack {
                 Spacer()
@@ -55,8 +54,9 @@ struct ToocTalkListView: View {
         }
     }
 
+    /// One smooth glide to the new place (no bounce), so the row doesn't jump.
     private func pin(_ room: ToocRoom) {
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
+        withAnimation(.smooth(duration: 0.5)) {
             store.update(room.id) { $0.pinned.toggle() }
         }
     }
@@ -74,9 +74,9 @@ struct ToocTalkListView: View {
             .accessibilityLabel("既読にする")
         }
         Button {
-            // After the swipe closes, so the row then glides to its place.
+            // Once the swipe has fully closed, so the row then glides to its place in one move.
             Task {
-                try? await Task.sleep(for: .milliseconds(250))
+                try? await Task.sleep(for: .milliseconds(380))
                 pin(room)
             }
         } label: {

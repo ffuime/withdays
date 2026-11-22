@@ -81,14 +81,17 @@ extension View {
 
 // MARK: - Tab bar
 
-/// tooc's tab bar: a glass bar with a glass lens on the chosen tab. Only what's under the lens is filled and coloured,
-/// so dragging the lens across fills each icon just where it overlaps.
+/// tooc's floating tab bar (like LINE's): a frosted base bar with the tabs spread evenly, and the chosen tab lifted
+/// out of it as its own capsule of Liquid Glass — clear, with a thin white rim, a faint rainbow at the edge and a
+/// soft shadow. The capsule springs sideways to the tab you pick or follows your finger as you slide along the bar;
+/// only the part of each icon under the glass is filled and coloured.
 struct ToocTabBar: View {
     @Binding var selection: ToocTab
     var badge: Int
 
     @Environment(\.toocTheme) private var theme
-    /// The lens's centre while a finger moves it.
+    @Environment(\.colorScheme) private var colorScheme
+    /// The capsule's centre while a finger moves it.
     @State private var dragX: CGFloat?
 
     private struct Item: Hashable {
@@ -103,54 +106,104 @@ struct ToocTabBar: View {
         Item(tab: .me, title: "じぶん", symbol: "face.smiling"),
     ]
 
+    private static let barHeight: CGFloat = 58
+    /// How much taller the chosen capsule is than the bar, and how far it rises above the bar's middle.
+    private static let lift: CGFloat = 14
+    private static let rise: CGFloat = 4
+    private static let spring = Animation.spring(response: 0.42, dampingFraction: 0.86)
+
     var body: some View {
         GeometryReader { proxy in
             let width = proxy.size.width / CGFloat(Self.items.count)
             let index = Self.items.firstIndex { $0.tab == selection } ?? 0
             let center = dragX ?? (CGFloat(index) + 0.5) * width
-            let lens = CGRect(x: center - width / 2 + 4, y: 4, width: width - 8, height: proxy.size.height - 8)
+            let capsule = CGRect(
+                x: center - (width + 8) / 2,
+                y: (proxy.size.height - Self.barHeight - Self.lift) / 2 - Self.rise,
+                width: width + 8,
+                height: Self.barHeight + Self.lift
+            )
             ZStack {
+                // The base bar.
+                Capsule()
+                    .fill(.regularMaterial)
+                    .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+                    .frame(height: Self.barHeight)
+                    .shadow(color: .black.opacity(colorScheme == .dark ? 0.35 : 0.08), radius: 12, y: 4)
                 row(filled: false)
                     .foregroundStyle(.primary)
+                    .frame(height: Self.barHeight)
+                // The chosen capsule: glass first, then the filled icons seen through it.
+                glassCapsule
+                    .frame(width: capsule.width, height: capsule.height)
+                    .position(x: capsule.midX, y: capsule.midY)
+                    .allowsHitTesting(false)
                 row(filled: true)
                     .foregroundStyle(theme.accent)
+                    .frame(height: Self.barHeight)
                     .mask {
                         Capsule()
-                            .frame(width: lens.width, height: lens.height)
-                            .position(x: lens.midX, y: lens.midY)
+                            .frame(width: capsule.width, height: capsule.height)
+                            .position(x: capsule.midX, y: capsule.midY)
                     }
-                Capsule()
-                    .fill(.clear)
-                    .glassEffect(.clear.interactive(), in: .capsule)
-                    .frame(width: lens.width, height: lens.height)
-                    .position(x: lens.midX, y: lens.midY)
                     .allowsHitTesting(false)
             }
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
+                        // Follows the finger; until it moves, it stays where it is (a tap just springs over on release).
+                        guard dragX != nil || abs(value.translation.width) > 6 else { return }
                         let x = min(max(value.location.x, width / 2), proxy.size.width - width / 2)
                         if dragX == nil {
-                            withAnimation(.snappy(duration: 0.2)) { dragX = x }
+                            withAnimation(.snappy(duration: 0.18)) { dragX = x }
                         } else {
                             dragX = x
                         }
                     }
                     .onEnded { value in
                         let picked = min(max(Int(value.location.x / width), 0), Self.items.count - 1)
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                        withAnimation(Self.spring) {
                             dragX = nil
                             selection = Self.items[picked].tab
                         }
                     }
             )
         }
-        .frame(height: 60)
-        .glassEffect(.regular, in: .capsule)
-        .padding(.horizontal, 28)
-        .padding(.bottom, 4)
+        .frame(height: Self.barHeight + Self.lift + Self.rise * 2)
+        .frame(maxWidth: 460)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 2)
         .sensoryFeedback(.selection, trigger: selection)
+    }
+
+    /// Clear Liquid Glass with a thin white rim, a very faint rainbow where the light bends, and a soft shadow.
+    private var glassCapsule: some View {
+        Capsule()
+            .fill(.clear)
+            .glassEffect(.clear.interactive(), in: .capsule)
+            .overlay {
+                // The rim: white, brightest at the top.
+                Capsule()
+                    .strokeBorder(
+                        LinearGradient(colors: [.white.opacity(0.9), .white.opacity(0.15), .white.opacity(0.5)],
+                                       startPoint: .top, endPoint: .bottom),
+                        lineWidth: 1
+                    )
+            }
+            .overlay {
+                // A whisper of interference colour along the edge.
+                Capsule()
+                    .strokeBorder(
+                        AngularGradient(colors: [.pink, .orange, .yellow, .green, .cyan, .blue, .purple, .pink],
+                                        center: .center),
+                        lineWidth: 1.5
+                    )
+                    .opacity(colorScheme == .dark ? 0.22 : 0.16)
+                    .blur(radius: 0.8)
+                    .blendMode(.plusLighter)
+            }
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.4 : 0.14), radius: 10, y: 6)
     }
 
     private func row(filled: Bool) -> some View {
@@ -161,7 +214,7 @@ struct ToocTabBar: View {
                         .font(.system(size: 20, weight: .medium))
                         .frame(height: 24)
                         .overlay(alignment: .topTrailing) {
-                            if item.tab == .talk, badge > 0 {
+                            if item.tab == .talk, badge > 0, !filled {
                                 Text(badge > 99 ? "99+" : "\(badge)")
                                     .font(.system(size: 11, weight: .bold))
                                     .monospacedDigit()
@@ -175,9 +228,11 @@ struct ToocTabBar: View {
                     Text(item.title)
                         .font(.system(size: 10, weight: filled ? .bold : .medium))
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(item.tab == selection ? AccessibilityTraits([.isButton, .isSelected]) : AccessibilityTraits.isButton)
+                .accessibilityHidden(filled)
             }
         }
         .environment(\.symbolVariants, .none)
@@ -187,7 +242,8 @@ struct ToocTabBar: View {
 // MARK: - Zoom
 
 /// Something small (an icon, a photo in a bubble) grown from where it sits to fill the screen. Drag it or pinch in to
-/// take it back step by step, its corners rounding as it shrinks; a tap puts it back too.
+/// take it back step by step, its corners rounding as it shrinks; a tap puts it back too. When `zoomable`, pinching
+/// out (or a double tap) zooms into it, and a drag then moves around.
 struct ToocZoomLayer<Content: View, Backdrop: View, Accessory: View>: View {
     /// Where the small one is, in global coordinates.
     let source: CGRect
@@ -195,6 +251,7 @@ struct ToocZoomLayer<Content: View, Backdrop: View, Accessory: View>: View {
     let aspect: CGFloat
     /// The small one's corner radius.
     let sourceRadius: CGFloat
+    var zoomable = false
     @Binding var progress: CGFloat
     var onClosed: () -> Void
     @ViewBuilder var content: () -> Content
@@ -202,6 +259,11 @@ struct ToocZoomLayer<Content: View, Backdrop: View, Accessory: View>: View {
     @ViewBuilder var accessory: () -> Accessory
 
     @State private var drag: CGSize = .zero
+    @State private var scale: CGFloat = 1
+    @State private var lastScale: CGFloat = 1
+    @State private var pan: CGSize = .zero
+    @State private var lastPan: CGSize = .zero
+    @State private var zooming = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -217,35 +279,89 @@ struct ToocZoomLayer<Content: View, Backdrop: View, Accessory: View>: View {
                 content()
                     .frame(width: rect.width, height: rect.height)
                     .clipShape(RoundedRectangle(cornerRadius: sourceRadius * (1 - progress), style: .continuous))
+                    .scaleEffect(scale)
+                    .offset(pan)
                     .position(x: rect.midX + drag.width, y: rect.midY + drag.height)
                 accessory()
-                    .opacity(Double(max(0, progress * 2 - 1)))
+                    .opacity(Double(max(0, progress * 2 - 1)) * (scale > 1.01 ? 0 : 1))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .padding(.bottom, 48)
             }
             .contentShape(Rectangle())
-            .gesture(dragBack)
-            .simultaneousGesture(pinchBack)
-            .onTapGesture(perform: close)
+            .gesture(dragGesture(full.size))
+            .simultaneousGesture(pinch(full.size))
+            .onTapGesture(count: 2) {
+                guard zoomable else { return }
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
+                    scale = scale > 1.01 ? 1 : 2.5
+                    lastScale = scale
+                    pan = .zero
+                    lastPan = .zero
+                }
+            }
+            .onTapGesture { if scale <= 1.01 { close() } }
         }
         .ignoresSafeArea()
     }
 
-    private var dragBack: some Gesture {
+    private func dragGesture(_ size: CGSize) -> some Gesture {
         DragGesture()
             .onChanged { value in
-                drag = value.translation
-                progress = max(0.3, 1 - hypot(value.translation.width, value.translation.height) / 500)
+                if scale > 1.01 {
+                    pan = clamp(CGSize(width: lastPan.width + value.translation.width,
+                                       height: lastPan.height + value.translation.height), size)
+                } else {
+                    drag = value.translation
+                    progress = max(0.3, 1 - hypot(value.translation.width, value.translation.height) / 500)
+                }
             }
             .onEnded { value in
-                if hypot(value.translation.width, value.translation.height) > 90 { close() } else { settle() }
+                if scale > 1.01 {
+                    lastPan = pan
+                } else if hypot(value.translation.width, value.translation.height) > 90 {
+                    close()
+                } else {
+                    settle()
+                }
             }
     }
 
-    private var pinchBack: some Gesture {
+    private func pinch(_ size: CGSize) -> some Gesture {
         MagnifyGesture()
-            .onChanged { value in progress = min(1, max(0, value.magnification)) }
-            .onEnded { _ in if progress < 0.8 { close() } else { settle() } }
+            .onChanged { value in
+                if zoomable && (zooming || lastScale > 1.01 || (value.magnification > 1 && progress >= 1)) {
+                    zooming = true
+                    scale = min(5, max(1, lastScale * value.magnification))
+                    pan = clamp(pan, size)
+                } else {
+                    progress = min(1, max(0, value.magnification))
+                }
+            }
+            .onEnded { _ in
+                if zooming {
+                    zooming = false
+                    lastScale = scale
+                    lastPan = pan
+                    if scale <= 1.01 {
+                        withAnimation(.snappy) {
+                            scale = 1
+                            lastScale = 1
+                            pan = .zero
+                            lastPan = .zero
+                        }
+                    }
+                } else if progress < 0.8 {
+                    close()
+                } else {
+                    settle()
+                }
+            }
+    }
+
+    private func clamp(_ offset: CGSize, _ size: CGSize) -> CGSize {
+        let maxX = max(0, (size.width * scale - size.width) / 2)
+        let maxY = max(0, (size.height * scale - size.height) / 2)
+        return CGSize(width: min(max(offset.width, -maxX), maxX), height: min(max(offset.height, -maxY), maxY))
     }
 
     private func settle() {
@@ -259,6 +375,8 @@ struct ToocZoomLayer<Content: View, Backdrop: View, Accessory: View>: View {
         withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
             progress = 0
             drag = .zero
+            scale = 1
+            pan = .zero
         } completion: {
             onClosed()
         }
@@ -272,7 +390,8 @@ struct ToocZoomLayer<Content: View, Backdrop: View, Accessory: View>: View {
 
 // MARK: - Crop
 
-/// Move and pinch a photo inside a frame (round for an icon), then keep just what's inside.
+/// Move and pinch a photo inside a frame (round for an icon), larger or smaller, then keep what's inside. Space the
+/// photo doesn't cover comes out black.
 struct ToocCropView: View {
     let image: UIImage
     /// Height ÷ width of the result.
@@ -286,6 +405,8 @@ struct ToocCropView: View {
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
     @State private var area: CGSize = .zero
+
+    private static let minScale: CGFloat = 0.3
 
     private func frame(_ area: CGSize) -> CGSize {
         let width = max(1, min(area.width - 40, (area.height - 40) / aspect))
@@ -331,7 +452,7 @@ struct ToocCropView: View {
                     SimultaneousGesture(
                         MagnifyGesture()
                             .onChanged { value in
-                                scale = max(1, min(8, lastScale * value.magnification))
+                                scale = max(Self.minScale, min(8, lastScale * value.magnification))
                                 offset = clamp(offset, frame: frame)
                             }
                             .onEnded { _ in
@@ -383,11 +504,12 @@ struct ToocCropView: View {
         }
     }
 
+    /// Larger than the frame: the photo must cover it. Smaller: the photo must stay inside it.
     private func clamp(_ offset: CGSize, frame: CGSize) -> CGSize {
         let shownWidth = image.size.width * fill(frame) * scale
         let shownHeight = image.size.height * fill(frame) * scale
-        let maxX = max(0, (shownWidth - frame.width) / 2)
-        let maxY = max(0, (shownHeight - frame.height) / 2)
+        let maxX = abs(shownWidth - frame.width) / 2
+        let maxY = abs(shownHeight - frame.height) / 2
         return CGSize(width: min(max(offset.width, -maxX), maxX), height: min(max(offset.height, -maxY), maxY))
     }
 
@@ -401,7 +523,9 @@ struct ToocCropView: View {
         )
         let format = UIGraphicsImageRendererFormat()
         format.scale = image.scale
-        return UIGraphicsImageRenderer(size: cropSize, format: format).image { _ in
+        return UIGraphicsImageRenderer(size: cropSize, format: format).image { context in
+            UIColor.black.setFill()
+            context.fill(CGRect(origin: .zero, size: cropSize))
             image.draw(in: CGRect(x: -origin.x, y: -origin.y, width: image.size.width, height: image.size.height))
         }
     }
