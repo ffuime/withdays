@@ -26,6 +26,13 @@ struct ToocSettingsView: View {
                 link("非表示・ブロック", "eye.slash", .settingsHidden)
                 link("トーク", "message", .settingsTalk)
             }
+            Section {
+                Toggle("toocIDで友だち追加を許可", isOn: Binding(get: { store.me.findable }, set: { store.setFindable($0) }))
+            } header: {
+                Text("プライバシー")
+            } footer: {
+                Text("オフのあいだは、toocIDを入力して検索されても見つかりません。QRコードとリンクからは追加できます。")
+            }
         }
         .navigationTitle("設定")
         .navigationBarTitleDisplayMode(.inline)
@@ -49,6 +56,8 @@ struct ToocAccountSettingsView: View {
             Section {
                 LabeledContent("toocID", value: "@\(store.me.id)")
                 NavigationLink("パスワードを変更", value: ToocRoute.settingsPassword)
+                NavigationLink("メールアドレス", value: ToocRoute.settingsEmail)
+                NavigationLink("電話番号", value: ToocRoute.settingsPhone)
             }
             Section {
                 Button("ログアウト") { confirmLogOut = true }

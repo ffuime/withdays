@@ -39,6 +39,18 @@ jobs:
           brew install xcodegen
           xcodegen generate
 
+      - name: URL scheme for tooc's phone sign-in
+        run: |
+          # Firebase's reCAPTCHA check returns to app-<GOOGLE_APP_ID with : as ->.
+          [ -f WithDays/GoogleService-Info.plist ] || exit 0
+          APP_ID=$(/usr/libexec/PlistBuddy -c "Print :GOOGLE_APP_ID" WithDays/GoogleService-Info.plist)
+          SCHEME="app-$(echo "$APP_ID" | tr ':' '-')"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:1 dict" \
+            -c "Add :CFBundleURLTypes:1:CFBundleURLName string firebase-phone" \
+            -c "Add :CFBundleURLTypes:1:CFBundleURLSchemes array" \
+            -c "Add :CFBundleURLTypes:1:CFBundleURLSchemes:0 string $SCHEME" WithDays/Info.plist
+          /usr/libexec/PlistBuddy -c "Print :CFBundleURLTypes" WithDays/Info.plist
+
       - name: Resolve version
         id: version
         run: |

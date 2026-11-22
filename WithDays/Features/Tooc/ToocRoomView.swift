@@ -989,9 +989,10 @@ struct ToocMessageRow: View {
     private func longText(_ text: String) -> some View {
         let color = mine ? Color.white : Color.primary
         return VStack(alignment: .leading, spacing: 6) {
-            Text(text)
+            Text(ToocLinks.attributed(text))
                 .font(.system(size: textSize))
                 .foregroundStyle(color)
+                .tint(mine ? Color.white : theme.accent)
                 .lineLimit(14)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { shownHeight = $0 }
                 // The whole text at the same width, unseen, to tell whether anything was cut.

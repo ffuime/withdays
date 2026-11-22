@@ -569,6 +569,8 @@ struct HomeView: View {
 
     /// Widget links: withdays://day/<date> focuses that day, withdays://todo opens ToDo.
     private func open(_ url: URL) {
+        // The phone number check (reCAPTCHA) comes back through a link of Firebase's own.
+        if ToocServer.handle(url) { return }
         path.removeAll()
         editor = nil
         detail = nil

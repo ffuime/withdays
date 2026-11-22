@@ -194,8 +194,11 @@ struct ToocWelcomeView: View {
                 .scaleEffect(stage >= 1 ? 4 : 0.2)
                 .opacity(stage >= 2 ? 0 : 1)
             VStack(spacing: 10) {
-                Text("tooc")
-                    .font(.system(size: 68, weight: .heavy, design: .rounded))
+                Image("ToocLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 62)
+                    .accessibilityLabel("tooc")
                     .scaleEffect(stage >= 1 ? 1 : 0.4)
                     .blur(radius: stage >= 1 ? 0 : 14)
                     .opacity(stage >= 1 ? 1 : 0)

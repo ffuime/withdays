@@ -239,6 +239,8 @@ struct ToocFindView: View {
     }
 
     private func search() {
+        // Opened from a QR code or a link (and not retyped since): always found.
+        let viaLink = !initialID.isEmpty && ToocID.normalize(text) == ToocID.normalize(initialID)
         focused = false
         guard let id = ToocID.normalize(text) else {
             withAnimation(.snappy) {
@@ -249,7 +251,7 @@ struct ToocFindView: View {
         }
         text = id
         Task {
-            let user = await store.fetchUser(id)
+            let user = await store.fetchUser(id, bySearch: !viaLink)
             withAnimation(.snappy) {
                 found = user
                 error = user == nil ? "@\(id) は見つかりませんでした。" : nil

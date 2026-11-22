@@ -32,6 +32,8 @@ struct ToocUser: Identifiable, Hashable, Codable {
     /// The icon and background photos on the server.
     var iconURL: String?
     var backgroundURL: String?
+    /// Whether others can find this person by typing the toocID.
+    var findable = false
 
     var displayName: String { nickname ?? name }
     var color: Color { Color(hue: hue, saturation: 0.55, brightness: 0.85) }

@@ -96,10 +96,7 @@ struct ToocQRView: View {
     private var shareRow: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 18) {
-                share("LINE", color: Color(red: 0.02, green: 0.78, blue: 0.33), mark: .text("L")) {
-                    open("https://line.me/R/share?text=", link.absoluteString)
-                }
-                share("Instagram", color: Color(red: 0.83, green: 0.16, blue: 0.48), mark: .symbol("camera")) {
+                share("Instagram", mark: .glyph("ToocShareInstagram", AnyShapeStyle(Self.instagram))) {
                     // Instagram has no link for sharing text: copy it, then open Instagram.
                     UIPasteboard.general.url = link
                     copied = true
@@ -109,17 +106,20 @@ struct ToocQRView: View {
                         }
                     }
                 }
-                share("iMessage", color: Color(red: 0.2, green: 0.78, blue: 0.35), mark: .symbol("message.fill")) {
-                    open("sms:&body=", link.absoluteString)
+                share("LINE", mark: .full("ToocShareLINE")) {
+                    open("https://line.me/R/share?text=", link.absoluteString)
                 }
-                share("X", color: .black, mark: .text("X")) {
+                share("X", mark: .glyph("ToocShareX", AnyShapeStyle(Color.black))) {
                     open("https://x.com/intent/post?text=", link.absoluteString)
                 }
-                share("Facebook", color: Color(red: 0.09, green: 0.47, blue: 0.95), mark: .text("f")) {
+                share("Facebook", mark: .full("ToocShareFacebook")) {
                     open("https://www.facebook.com/sharer/sharer.php?u=", link.absoluteString)
                 }
+                share("iMessage", mark: .symbol("message.fill", AnyShapeStyle(Color(red: 0.2, green: 0.78, blue: 0.35)))) {
+                    open("sms:&body=", link.absoluteString)
+                }
                 ShareLink(item: link) {
-                    shareLabel("その他", color: Color(.systemGray), mark: .symbol("square.and.arrow.up"))
+                    shareLabel("その他", mark: .symbol("square.and.arrow.up", AnyShapeStyle(Color(.systemGray))))
                 }
                 .buttonStyle(.plain)
             }
@@ -128,24 +128,52 @@ struct ToocQRView: View {
         .scrollIndicators(.hidden)
     }
 
-    private enum Mark { case text(String), symbol(String) }
+    /// Instagram's gradient, from yellow at the lower left to purple at the upper right.
+    private static let instagram = LinearGradient(
+        colors: [Color(red: 0.99, green: 0.69, blue: 0.27), Color(red: 0.97, green: 0.47, blue: 0.22),
+                 Color(red: 0.88, green: 0.19, blue: 0.42), Color(red: 0.76, green: 0.21, blue: 0.52),
+                 Color(red: 0.51, green: 0.23, blue: 0.71)],
+        startPoint: .bottomLeading, endPoint: .topTrailing
+    )
 
-    private func share(_ name: String, color: Color, mark: Mark, action: @escaping () -> Void) -> some View {
-        Button(action: action) { shareLabel(name, color: color, mark: mark) }
+    private enum Mark {
+        /// A white mark on a coloured circle.
+        case glyph(String, AnyShapeStyle)
+        /// The brand's own round mark, as it is.
+        case full(String)
+        case symbol(String, AnyShapeStyle)
+    }
+
+    private func share(_ name: String, mark: Mark, action: @escaping () -> Void) -> some View {
+        Button(action: action) { shareLabel(name, mark: mark) }
             .buttonStyle(.plain)
     }
 
-    private func shareLabel(_ name: String, color: Color, mark: Mark) -> some View {
+    private func shareLabel(_ name: String, mark: Mark) -> some View {
         VStack(spacing: 6) {
             Group {
                 switch mark {
-                case .text(let text): Text(text).font(.system(size: 22, weight: .heavy, design: .rounded))
-                case .symbol(let symbol): Image(systemName: symbol).font(.system(size: 20, weight: .semibold))
+                case .glyph(let image, let background):
+                    Image(image)
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(.white)
+                        .frame(width: 24, height: 24)
+                        .frame(width: 52, height: 52)
+                        .background(background, in: Circle())
+                case .full(let image):
+                    Image(image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 52, height: 52)
+                case .symbol(let symbol, let background):
+                    Image(systemName: symbol)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 52, height: 52)
+                        .background(background, in: Circle())
                 }
             }
-            .foregroundStyle(.white)
-            .frame(width: 52, height: 52)
-            .background(color, in: Circle())
             Text(name)
                 .font(.caption2)
                 .foregroundStyle(.secondary)

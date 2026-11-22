@@ -309,8 +309,11 @@ final class ToocStore {
         signedIn(as: id, password: password)
     }
 
-    func logIn(id: String, password: String) async throws {
+    func logIn(id typed: String, password: String) async throws {
         guard ToocServer.available else { throw ToocError("サーバーの設定が入っていません。") }
+        // An email address stands for the toocID it's linked to.
+        let id: String
+        if typed.contains("@") { id = try await Self.toocID(forEmail: typed) } else { id = typed }
         do {
             _ = try await Auth.auth().signIn(withEmail: ToocServer.email(id), password: password)
         } catch {
@@ -322,6 +325,17 @@ final class ToocStore {
     private func signedIn(as id: String, password: String) {
         if let account, account != id { ToocAccounts.previous = account }
         ToocAccounts.store(id, password: password)
+        savedAccounts = ToocAccounts.saved
+        UserDefaults.standard.set(id, forKey: Self.accountKey)
+        start(id)
+    }
+
+    /// After signing in with an SMS code (no password to remember for switching).
+    func signedInByPhone(as id: String) {
+        if let account, account != id { ToocAccounts.previous = account }
+        if !ToocAccounts.saved.contains(where: { $0.id == id }) {
+            ToocAccounts.saved.append(ToocAccounts.Saved(id: id, name: id, hue: ToocUser.hue(for: id)))
+        }
         savedAccounts = ToocAccounts.saved
         UserDefaults.standard.set(id, forKey: Self.accountKey)
         start(id)
@@ -614,6 +628,7 @@ final class ToocStore {
         user.hasBackground = data["hasBackground"] as? Bool ?? true
         user.birthday = (data["birthday"] as? Timestamp)?.dateValue()
         user.profileUpdatedAt = (data["updatedAt"] as? Timestamp)?.dateValue() ?? .distantPast
+        user.findable = data["findable"] as? Bool ?? false
         return user
     }
 
@@ -777,10 +792,12 @@ final class ToocStore {
         return ToocUser(id: id, name: id, bio: "", hue: ToocUser.hue(for: id), isFriend: false)
     }
 
-    /// Someone by toocID, from the server; nil when nobody has it.
-    func fetchUser(_ id: String) async -> ToocUser? {
+    /// Someone by toocID, from the server; nil when nobody has it. A typed search finds only people who allow it
+    /// (or are already friends); QR codes and links always find.
+    func fetchUser(_ id: String, bySearch: Bool = false) async -> ToocUser? {
         if id == account { return me }
         guard let snapshot = try? await ToocServer.user(id).getDocument(), let data = snapshot.data() else { return nil }
+        if bySearch, data["findable"] as? Bool != true, friendIDs[id] == nil { return nil }
         var user = Self.profile(id, data, keeping: users[id])
         user.isFriend = friendIDs[id] != nil
         watchUser(id)

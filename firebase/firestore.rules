@@ -28,11 +28,25 @@ service cloud.firestore {
         allow read, write: if owns(toocID);
       }
 
+      // The linked email address, seen only by its owner.
+      match /private/{docID} {
+        allow read, write: if owns(toocID);
+      }
+
       // Friend requests: written by the one who added, read and cleared by the one added.
       match /requests/{fromID} {
         allow read, delete: if owns(toocID) || owns(fromID);
         allow create, update: if owns(fromID);
       }
+    }
+
+    // Signing in with an email address: sha256(email) → toocID. Readable one at a time, never listed.
+    match /emailIndex/{hash} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid
+        && owns(request.resource.data.toocID);
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
     }
 
     match /rooms/{roomID} {

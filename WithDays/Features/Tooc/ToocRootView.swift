@@ -13,6 +13,8 @@ enum ToocRoute: Hashable {
     case settingsNotifications
     case settingsHidden
     case settingsTalk
+    case settingsEmail
+    case settingsPhone
 }
 
 enum ToocSheet: Identifiable, Hashable {
@@ -386,6 +388,8 @@ private struct ToocDestination: View {
         case .settingsNotifications: ToocNotificationSettingsView()
         case .settingsHidden: ToocHiddenSettingsView()
         case .settingsTalk: ToocTalkSettingsView()
+        case .settingsEmail: ToocEmailSettingsView()
+        case .settingsPhone: ToocPhoneSettingsView()
         }
     }
 }

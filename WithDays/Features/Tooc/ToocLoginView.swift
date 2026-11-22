@@ -11,6 +11,7 @@ struct ToocLoginView: View {
     @State private var password = ""
     @State private var errorMessage: String?
     @State private var working = false
+    @State private var phoneLogin = false
     @FocusState private var field: Field?
 
     private enum Field { case id, password }
@@ -20,10 +21,13 @@ struct ToocLoginView: View {
             Form {
                 Section {
                     VStack(spacing: 6) {
-                        Text("tooc")
-                            .font(.system(size: 44, weight: .heavy, design: .rounded))
+                        Image("ToocLogo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 40)
                             .foregroundStyle(Color.brand)
-                        Text(creating ? "toocIDとパスワードを決めるだけではじめられます" : "toocIDとパスワードでログイン")
+                            .accessibilityLabel("tooc")
+                        Text(creating ? "toocIDとパスワードを決めるだけではじめられます" : "toocID（またはメールアドレス）とパスワードでログイン")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -45,7 +49,7 @@ struct ToocLoginView: View {
                 Section {
                     HStack(spacing: 2) {
                         Text("@").foregroundStyle(.secondary)
-                        TextField("toocID", text: $id)
+                        TextField(creating ? "toocID" : "toocID・メールアドレス", text: $id)
                             .textContentType(.username)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
@@ -83,6 +87,12 @@ struct ToocLoginView: View {
                     .listRowInsets(EdgeInsets())
                 }
 
+                if !creating {
+                    Section {
+                        Button("電話番号でログイン・パスワードを忘れた", systemImage: "phone") { phoneLogin = true }
+                    }
+                }
+
                 ToocSavedAccountsSection()
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -98,6 +108,7 @@ struct ToocLoginView: View {
                 Text(errorMessage ?? "")
             }
             .onAppear { creating = !store.hasDeviceAccount }
+            .sheet(isPresented: $phoneLogin) { ToocPhoneLoginView() }
         }
     }
 
