@@ -860,6 +860,26 @@ struct ToocMessageRow: View {
         }
     }
 
+    private var quoted: ToocMessage? {
+        guard let id = message.replyTo else { return nil }
+        return room.messages.first { $0.id == id }
+    }
+
+    private func quote(_ quoted: ToocMessage) -> some View {
+        let name = store.displayName(quoted.senderID)
+        return HStack(spacing: 6) {
+            Capsule()
+                .fill(mine ? Color.white.opacity(0.7) : theme.accent)
+                .frame(width: 3)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name).font(.caption.bold())
+                Text(quoted.preview).font(.caption).lineLimit(1)
+            }
+            .foregroundStyle(mine ? Color.white.opacity(0.85) : Color.secondary)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
     // MARK: Reply swipe
 
     /// Shown in the space the drag opens on the right: grows with the drag, and is full once letting go would reply.
