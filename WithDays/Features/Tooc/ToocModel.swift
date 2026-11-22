@@ -52,6 +52,10 @@ struct ToocPoll: Hashable, Codable {
     var multiple: Bool
     /// Who chose which options.
     var votes: [String: [Int]] = [:]
+    /// After this, nobody can vote or change their vote.
+    var deadline: Date?
+
+    var closed: Bool { deadline.map { $0 <= .now } ?? false }
 
     func count(_ option: Int) -> Int { votes.values.filter { $0.contains(option) }.count }
 }
@@ -61,6 +65,9 @@ struct ToocDatePoll: Hashable, Codable {
     var title: String
     var dates: [Date]
     var answers: [String: [Int]] = [:]
+    var deadline: Date?
+
+    var closed: Bool { deadline.map { $0 <= .now } ?? false }
 
     func count(_ date: Int, _ answer: Int) -> Int {
         answers.values.filter { date < $0.count && $0[date] == answer }.count
@@ -80,13 +87,17 @@ struct ToocAmida: Hashable, Codable {
     var prizes: [String]
     var rungs: [Rung]
     var revealed = false
+    var deadline: Date?
+
+    var closed: Bool { deadline.map { $0 <= .now } ?? false }
 
     static let levels = 9
 
-    init(title: String, entrants: [String], prizes: [String]) {
+    init(title: String, entrants: [String], prizes: [String], deadline: Date? = nil) {
         self.title = title
         self.entrants = entrants
         self.prizes = prizes
+        self.deadline = deadline
         var rungs: [Rung] = []
         for level in 0..<Self.levels {
             var column = 0
@@ -420,6 +431,7 @@ final class ToocStore {
             flush()
         }
         finishSending()
+        fetchSamplePhotos(for: Array(users.keys))
     }
 
     // MARK: Saving
@@ -687,7 +699,7 @@ final class ToocStore {
     func vote(_ option: Int, in id: UUID, roomID: String) {
         let me = me.id
         setMessage(id, in: roomID) { message in
-            guard case .poll(var poll) = message.kind else { return }
+            guard case .poll(var poll) = message.kind, !poll.closed else { return }
             var mine = poll.votes[me] ?? []
             if mine.contains(option) {
                 mine.removeAll { $0 == option }
@@ -702,7 +714,7 @@ final class ToocStore {
     func answer(_ date: Int, _ answer: Int, in id: UUID, roomID: String) {
         let me = me.id
         setMessage(id, in: roomID) { message in
-            guard case .datePoll(var poll) = message.kind else { return }
+            guard case .datePoll(var poll) = message.kind, !poll.closed else { return }
             var mine = poll.answers[me] ?? Array(repeating: -1, count: poll.dates.count)
             mine[date] = mine[date] == answer ? -1 : answer
             poll.answers[me] = mine
@@ -789,10 +801,11 @@ final class ToocStore {
         setMessage(id, in: roomID) { message in
             switch message.kind {
             case .poll(var poll):
-                guard !poll.options.isEmpty else { return }
+                guard !poll.options.isEmpty, !poll.closed else { return }
                 poll.votes[member] = [Int.random(in: 0..<poll.options.count)]
                 message.kind = .poll(poll)
             case .datePoll(var poll):
+                guard !poll.closed else { return }
                 poll.answers[member] = poll.dates.map { _ in [2, 2, 1, 0].randomElement()! }
                 message.kind = .datePoll(poll)
             default:
@@ -861,20 +874,23 @@ final class ToocStore {
 
     // MARK: Samples
 
-    /// Icons and backgrounds for the sample people, from picsum.photos. Some keep the generated icon.
+    /// Icons and backgrounds for the sample people, from picsum.photos (anyone still without one gets one).
     private func fetchSamplePhotos(for ids: [String]) {
         Task { [weak self] in
             for id in ids {
-                let side = Int.random(in: 300...600)
-                if Bool.random() || id == "haruka_m",
-                   let icon = await ToocFiles.remoteImage("https://picsum.photos/\(side)/\(side)"),
-                   let file = ToocFiles.save(icon, side: 600) {
-                    self?.updateUser(id) { $0.iconFile = file }
+                if self?.users[id]?.iconFile == nil {
+                    let side = Int.random(in: 300...600)
+                    if let icon = await ToocFiles.remoteImage("https://picsum.photos/\(side)/\(side)"),
+                       let file = ToocFiles.save(icon, side: 600) {
+                        self?.updateUser(id) { $0.iconFile = file }
+                    }
                 }
-                if Bool.random() || id == "taku",
-                   let background = await ToocFiles.remoteImage(ToocFiles.randomPhotoURL()),
-                   let file = ToocFiles.save(background, side: 1600) {
-                    self?.updateUser(id) { $0.backgroundFile = file }
+                if self?.users[id]?.backgroundFile == nil {
+                    let width = Int.random(in: 600...900)
+                    if let background = await ToocFiles.remoteImage("https://picsum.photos/\(width)/\(width * 16 / 10)"),
+                       let file = ToocFiles.save(background, side: 1600) {
+                        self?.updateUser(id) { $0.backgroundFile = file }
+                    }
                 }
             }
         }
@@ -898,7 +914,6 @@ final class ToocStore {
                      isFavorite: true),
         ]
         users = Dictionary(uniqueKeysWithValues: samples.map { ($0.id, $0) })
-        fetchSamplePhotos(for: samples.map(\.id))
         let me = self.me.id
         rooms = [
             ToocRoom(id: "mynote", memberIDs: [me], isMynote: true, messages: [

@@ -23,6 +23,25 @@ struct ToocComposerView: View {
     }
 }
 
+/// 期限: off, or a date and time after which answers can't change.
+private struct ToocDeadlineSection: View {
+    @Binding var on: Bool
+    @Binding var date: Date
+
+    var body: some View {
+        Section {
+            Toggle("期限", isOn: $on.animation(.snappy))
+            if on {
+                DatePicker("締め切り", selection: $date, in: Date.now..., displayedComponents: [.date, .hourAndMinute])
+            }
+        }
+    }
+}
+
+private func defaultDeadline() -> Date {
+    Calendar.current.date(bySettingHour: 23, minute: 59, second: 0, of: Date.now.addingTimeInterval(60 * 60 * 24 * 2)) ?? .now
+}
+
 /// The ✕ and ✓ of an editor sheet.
 private struct ToocEditorToolbar: ToolbarContent {
     var canSend: Bool
@@ -54,6 +73,8 @@ struct ToocPollEditor: View {
     @State private var question = ""
     @State private var options = ["", ""]
     @State private var multiple = false
+    @State private var hasDeadline = false
+    @State private var deadline = defaultDeadline()
 
     private var filled: [String] {
         options.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
@@ -81,13 +102,14 @@ struct ToocPollEditor: View {
                 Section {
                     Toggle("複数選択できる", isOn: $multiple)
                 }
+                ToocDeadlineSection(on: $hasDeadline, date: $deadline)
             }
             .navigationTitle("投票")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToocEditorToolbar(canSend: !question.trimmingCharacters(in: .whitespaces).isEmpty && filled.count >= 2, dismiss: dismiss) {
                     onSend(.poll(ToocPoll(question: question.trimmingCharacters(in: .whitespacesAndNewlines),
-                                          options: filled, multiple: multiple)))
+                                          options: filled, multiple: multiple, deadline: hasDeadline ? deadline : nil)))
                 }
             }
         }
@@ -99,6 +121,8 @@ struct ToocDatePollEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var title = ""
     @State private var dates: [Date] = []
+    @State private var hasDeadline = false
+    @State private var deadline = defaultDeadline()
     @State private var next = Calendar.current.date(bySettingHour: 19, minute: 0, second: 0,
                                                      of: Date.now.addingTimeInterval(60 * 60 * 24)) ?? .now
 
@@ -124,12 +148,14 @@ struct ToocDatePollEditor: View {
                 } header: {
                     Text("候補日（\(dates.count)）")
                 }
+                ToocDeadlineSection(on: $hasDeadline, date: $deadline)
             }
             .navigationTitle("日程調整")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToocEditorToolbar(canSend: !title.trimmingCharacters(in: .whitespaces).isEmpty && !dates.isEmpty, dismiss: dismiss) {
-                    onSend(.datePoll(ToocDatePoll(title: title.trimmingCharacters(in: .whitespacesAndNewlines), dates: dates)))
+                    onSend(.datePoll(ToocDatePoll(title: title.trimmingCharacters(in: .whitespacesAndNewlines), dates: dates,
+                                                  deadline: hasDeadline ? deadline : nil)))
                 }
             }
         }
@@ -145,6 +171,8 @@ struct ToocAmidaEditor: View {
     @State private var entrants: [String] = []
     @State private var prizes: [String] = []
     @State private var loaded = false
+    @State private var hasDeadline = false
+    @State private var deadline = defaultDeadline()
 
     private var ready: Bool {
         entrants.count >= 2 && entrants.allSatisfy { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -174,16 +202,16 @@ struct ToocAmidaEditor: View {
                     }
                 } header: {
                     Text("結果")
-                } footer: {
-                    Text("参加する人と同じ数だけ並びます。")
                 }
+                ToocDeadlineSection(on: $hasDeadline, date: $deadline)
             }
             .navigationTitle("あみだくじ")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToocEditorToolbar(canSend: ready, dismiss: dismiss) {
                     let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
-                    onSend(.amida(ToocAmida(title: name.isEmpty ? "あみだくじ" : name, entrants: entrants, prizes: prizes)))
+                    onSend(.amida(ToocAmida(title: name.isEmpty ? "あみだくじ" : name, entrants: entrants, prizes: prizes,
+                                            deadline: hasDeadline ? deadline : nil)))
                 }
             }
             .onChange(of: entrants.count) { fitPrizes() }
@@ -367,6 +395,17 @@ struct ToocCardBubble: View {
             .foregroundStyle(theme.accent)
     }
 
+    /// 「締め切り 11/24(月) 23:59」, or 「締め切りました」 once past.
+    @ViewBuilder
+    private func deadline(_ date: Date?) -> some View {
+        if let date {
+            let closed = date <= .now
+            Label(closed ? "締め切りました" : "締め切り \(ToocTime.candidate(date))", systemImage: closed ? "lock.fill" : "clock")
+                .font(.caption)
+                .foregroundStyle(closed ? Color.red : Color.secondary)
+        }
+    }
+
     private func pollCard(_ poll: ToocPoll) -> some View {
         let total = max(1, poll.votes.count)
         let mineVotes = poll.votes[store.me.id] ?? []
@@ -374,6 +413,7 @@ struct ToocCardBubble: View {
             header(poll.multiple ? "投票（複数選択）" : "投票", "chart.bar.fill")
             Text(poll.question)
                 .font(.headline)
+            deadline(poll.deadline)
             ForEach(poll.options.indices, id: \.self) { index in
                 let count = poll.count(index)
                 let chosen = mineVotes.contains(index)
@@ -405,6 +445,7 @@ struct ToocCardBubble: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .disabled(poll.closed)
             }
             Text("\(poll.votes.count)人が投票")
                 .font(.caption)
@@ -419,6 +460,7 @@ struct ToocCardBubble: View {
             header("日程調整", "calendar")
             Text(poll.title)
                 .font(.headline)
+            deadline(poll.deadline)
             ForEach(poll.dates.indices, id: \.self) { index in
                 let answer = index < mineAnswers.count ? mineAnswers[index] : -1
                 VStack(alignment: .leading, spacing: 4) {
@@ -445,6 +487,7 @@ struct ToocCardBubble: View {
                                                 in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
                             .buttonStyle(.plain)
+                            .disabled(poll.closed)
                         }
                     }
                 }
@@ -461,6 +504,7 @@ struct ToocCardBubble: View {
             header("あみだくじ", "line.3.horizontal")
             Text(amida.title)
                 .font(.headline)
+            deadline(amida.deadline)
             if amida.revealed {
                 ForEach(amida.entrants.indices, id: \.self) { index in
                     HStack {
@@ -476,15 +520,12 @@ struct ToocCardBubble: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            Button {
-                showAmida = true
-            } label: {
-                Text(amida.revealed ? "もう一度見る" : "結果を見る")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 4)
-            }
-            .buttonStyle(.glassProminent)
+            Button(amida.revealed ? "もう一度見る" : "結果を見る") { showAmida = true }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(theme.accent)
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 2)
         }
     }
 }

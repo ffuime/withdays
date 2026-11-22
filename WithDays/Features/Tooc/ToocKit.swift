@@ -79,166 +79,6 @@ extension View {
     }
 }
 
-// MARK: - Tab bar
-
-/// tooc's floating tab bar (like LINE's): a frosted base bar with the tabs spread evenly, and the chosen tab lifted
-/// out of it as its own capsule of Liquid Glass — clear, with a thin white rim, a faint rainbow at the edge and a
-/// soft shadow. The capsule springs sideways to the tab you pick or follows your finger as you slide along the bar;
-/// only the part of each icon under the glass is filled and coloured.
-struct ToocTabBar: View {
-    @Binding var selection: ToocTab
-    var badge: Int
-
-    @Environment(\.toocTheme) private var theme
-    @Environment(\.colorScheme) private var colorScheme
-    /// The capsule's centre while a finger moves it.
-    @State private var dragX: CGFloat?
-
-    private struct Item: Hashable {
-        let tab: ToocTab
-        let title: String
-        let symbol: String
-    }
-
-    private static let items = [
-        Item(tab: .talk, title: "トーク", symbol: "message"),
-        Item(tab: .friends, title: "友だち", symbol: "person.2"),
-        Item(tab: .me, title: "じぶん", symbol: "face.smiling"),
-    ]
-
-    private static let barHeight: CGFloat = 58
-    /// How much taller the chosen capsule is than the bar, and how far it rises above the bar's middle.
-    private static let lift: CGFloat = 14
-    private static let rise: CGFloat = 4
-    private static let spring = Animation.spring(response: 0.42, dampingFraction: 0.86)
-
-    var body: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width / CGFloat(Self.items.count)
-            let index = Self.items.firstIndex { $0.tab == selection } ?? 0
-            let center = dragX ?? (CGFloat(index) + 0.5) * width
-            let capsule = CGRect(
-                x: center - (width + 8) / 2,
-                y: (proxy.size.height - Self.barHeight - Self.lift) / 2 - Self.rise,
-                width: width + 8,
-                height: Self.barHeight + Self.lift
-            )
-            ZStack {
-                // The base bar.
-                Capsule()
-                    .fill(.regularMaterial)
-                    .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
-                    .frame(height: Self.barHeight)
-                    .shadow(color: .black.opacity(colorScheme == .dark ? 0.35 : 0.08), radius: 12, y: 4)
-                row(filled: false)
-                    .foregroundStyle(.primary)
-                    .frame(height: Self.barHeight)
-                // The chosen capsule: glass first, then the filled icons seen through it.
-                glassCapsule
-                    .frame(width: capsule.width, height: capsule.height)
-                    .position(x: capsule.midX, y: capsule.midY)
-                    .allowsHitTesting(false)
-                row(filled: true)
-                    .foregroundStyle(theme.accent)
-                    .frame(height: Self.barHeight)
-                    .mask {
-                        Capsule()
-                            .frame(width: capsule.width, height: capsule.height)
-                            .position(x: capsule.midX, y: capsule.midY)
-                    }
-                    .allowsHitTesting(false)
-            }
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        // Follows the finger; until it moves, it stays where it is (a tap just springs over on release).
-                        guard dragX != nil || abs(value.translation.width) > 6 else { return }
-                        let x = min(max(value.location.x, width / 2), proxy.size.width - width / 2)
-                        if dragX == nil {
-                            withAnimation(.snappy(duration: 0.18)) { dragX = x }
-                        } else {
-                            dragX = x
-                        }
-                    }
-                    .onEnded { value in
-                        let picked = min(max(Int(value.location.x / width), 0), Self.items.count - 1)
-                        withAnimation(Self.spring) {
-                            dragX = nil
-                            selection = Self.items[picked].tab
-                        }
-                    }
-            )
-        }
-        .frame(height: Self.barHeight + Self.lift + Self.rise * 2)
-        .frame(maxWidth: 460)
-        .padding(.horizontal, 24)
-        .padding(.bottom, 2)
-        .sensoryFeedback(.selection, trigger: selection)
-    }
-
-    /// Clear Liquid Glass with a thin white rim, a very faint rainbow where the light bends, and a soft shadow.
-    private var glassCapsule: some View {
-        Capsule()
-            .fill(.clear)
-            .glassEffect(.clear.interactive(), in: .capsule)
-            .overlay {
-                // The rim: white, brightest at the top.
-                Capsule()
-                    .strokeBorder(
-                        LinearGradient(colors: [.white.opacity(0.9), .white.opacity(0.15), .white.opacity(0.5)],
-                                       startPoint: .top, endPoint: .bottom),
-                        lineWidth: 1
-                    )
-            }
-            .overlay {
-                // A whisper of interference colour along the edge.
-                Capsule()
-                    .strokeBorder(
-                        AngularGradient(colors: [.pink, .orange, .yellow, .green, .cyan, .blue, .purple, .pink],
-                                        center: .center),
-                        lineWidth: 1.5
-                    )
-                    .opacity(colorScheme == .dark ? 0.22 : 0.16)
-                    .blur(radius: 0.8)
-                    .blendMode(.plusLighter)
-            }
-            .shadow(color: .black.opacity(colorScheme == .dark ? 0.4 : 0.14), radius: 10, y: 6)
-    }
-
-    private func row(filled: Bool) -> some View {
-        HStack(spacing: 0) {
-            ForEach(Self.items, id: \.self) { item in
-                VStack(spacing: 3) {
-                    Image(systemName: filled ? "\(item.symbol).fill" : item.symbol)
-                        .font(.system(size: 20, weight: .medium))
-                        .frame(height: 24)
-                        .overlay(alignment: .topTrailing) {
-                            if item.tab == .talk, badge > 0, !filled {
-                                Text(badge > 99 ? "99+" : "\(badge)")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .monospacedDigit()
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 5)
-                                    .frame(minWidth: 18, minHeight: 18)
-                                    .background(Capsule().fill(.red))
-                                    .offset(x: 12, y: -6)
-                            }
-                        }
-                    Text(item.title)
-                        .font(.system(size: 10, weight: filled ? .bold : .medium))
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .accessibilityElement(children: .combine)
-                .accessibilityAddTraits(item.tab == selection ? AccessibilityTraits([.isButton, .isSelected]) : AccessibilityTraits.isButton)
-                .accessibilityHidden(filled)
-            }
-        }
-        .environment(\.symbolVariants, .none)
-    }
-}
-
 // MARK: - Zoom
 
 /// Something small (an icon, a photo in a bubble) grown from where it sits to fill the screen. Drag it or pinch in to
@@ -308,8 +148,8 @@ struct ToocZoomLayer<Content: View, Backdrop: View, Accessory: View>: View {
         DragGesture()
             .onChanged { value in
                 if scale > 1.01 {
-                    pan = clamp(CGSize(width: lastPan.width + value.translation.width,
-                                       height: lastPan.height + value.translation.height), size)
+                    pan = CGSize(width: lastPan.width + value.translation.width,
+                                 height: lastPan.height + value.translation.height)
                 } else {
                     drag = value.translation
                     progress = max(0.3, 1 - hypot(value.translation.width, value.translation.height) / 500)
@@ -331,8 +171,7 @@ struct ToocZoomLayer<Content: View, Backdrop: View, Accessory: View>: View {
             .onChanged { value in
                 if zoomable && (zooming || lastScale > 1.01 || (value.magnification > 1 && progress >= 1)) {
                     zooming = true
-                    scale = min(5, max(1, lastScale * value.magnification))
-                    pan = clamp(pan, size)
+                    scale = min(10, max(1, lastScale * value.magnification))
                 } else {
                     progress = min(1, max(0, value.magnification))
                 }
@@ -356,12 +195,6 @@ struct ToocZoomLayer<Content: View, Backdrop: View, Accessory: View>: View {
                     settle()
                 }
             }
-    }
-
-    private func clamp(_ offset: CGSize, _ size: CGSize) -> CGSize {
-        let maxX = max(0, (size.width * scale - size.width) / 2)
-        let maxY = max(0, (size.height * scale - size.height) / 2)
-        return CGSize(width: min(max(offset.width, -maxX), maxX), height: min(max(offset.height, -maxY), maxY))
     }
 
     private func settle() {

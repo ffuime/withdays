@@ -55,10 +55,8 @@ enum ToocConfirm: Identifiable, Hashable {
 
     var message: String {
         switch self {
-        case .hideRooms: "トーク一覧から隠れます。設定の「非表示・ブロック」か、新しいメッセージで戻ります。"
-        case .deleteRooms: "メッセージと写真がすべて消え、元に戻せません。"
-        case .hideFriends: "友だち一覧から隠れます。設定の「非表示・ブロック」で戻せます。"
-        case .blockFriends: "メッセージが届かなくなり、トークも隠れます。設定の「非表示・ブロック」で解除できます。"
+        case .deleteRooms: "元に戻せません。"
+        default: ""
         }
     }
 
@@ -176,30 +174,45 @@ struct ToocRootView: View {
                 }
             }
         } message: { confirm in
-            Text(confirm.message)
+            if !confirm.message.isEmpty { Text(confirm.message) }
         }
         .overlay(alignment: .top) { ToocBanner() }
     }
 
-    /// The three tabs stay alive (each keeps its scroll), with tooc's own glass tab bar over them.
     private var tabs: some View {
         let selection = Binding(get: { router.tab }, set: { tab in withAnimation(.snappy) { router.tab = tab } })
-        return ZStack {
-            page(.talk) { ToocTalkListView() }
-            page(.friends) { ToocFriendListView() }
-            page(.me) { ToocMeView() }
+        return TabView(selection: selection) {
+            Tab(value: ToocTab.talk) {
+                ToocTalkListView()
+            } label: {
+                tabLabel("トーク", "message", .talk)
+            }
+            .badge(store.unreadTotal)
+
+            Tab(value: ToocTab.friends) {
+                ToocFriendListView()
+            } label: {
+                tabLabel("友だち", "person.2", .friends)
+            }
+
+            Tab(value: ToocTab.me) {
+                ToocMeView()
+            } label: {
+                tabLabel("じぶん", "face.smiling", .me)
+            }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            ToocTabBar(selection: selection, badge: store.unreadTotal)
-        }
-        .background(store.theme.fill.ignoresSafeArea())
+        // Outlined everywhere; only the chosen tab names its filled symbol.
+        .environment(\.symbolVariants, .none)
     }
 
-    private func page<Content: View>(_ tab: ToocTab, @ViewBuilder content: () -> Content) -> some View {
-        content()
-            .opacity(router.tab == tab ? 1 : 0)
-            .allowsHitTesting(router.tab == tab)
-            .accessibilityHidden(router.tab != tab)
+    private func tabLabel(_ title: String, _ symbol: String, _ tab: ToocTab) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(systemName: router.tab == tab ? "\(symbol).fill" : symbol)
+                .environment(\.symbolVariants, .none)
+        }
+        .environment(\.symbolVariants, .none)
     }
 
     // MARK: Top bar, shared by the tabs so its pills morph between them

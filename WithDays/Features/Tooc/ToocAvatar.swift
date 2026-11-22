@@ -98,7 +98,7 @@ struct ToocCountBadge: View {
 /// Someone's profile background: their background photo, or their icon spread over everything and blurred.
 struct ToocIconBackdrop: View {
     let user: ToocUser
-    var blur: CGFloat = 16
+    var blur: CGFloat = 6
 
     var body: some View {
         if let file = user.backgroundFile, let photo = ToocFiles.image(file) {

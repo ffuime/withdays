@@ -48,8 +48,6 @@ struct ToocAccountSettingsView: View {
             Section {
                 LabeledContent("toocID", value: "@\(store.me.id)")
                 NavigationLink("パスワードを変更", value: ToocRoute.settingsPassword)
-            } footer: {
-                Text("アカウントはこの端末の中に保存されています。メールアドレスや電話番号の登録は、サーバーができてからになります。")
             }
             Section {
                 Button("ログアウト") { confirmLogOut = true }
@@ -62,8 +60,6 @@ struct ToocAccountSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("ログアウトしますか？", isPresented: $confirmLogOut, titleVisibility: .visible) {
             Button("ログアウト", role: .destructive) { store.logOut() }
-        } message: {
-            Text("トークはこの端末に残り、もう一度ログインすると戻ります。")
         }
         .confirmationDialog("アカウントを削除しますか？", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("アカウントを削除", role: .destructive) { store.deleteAccount() }
@@ -137,8 +133,6 @@ struct ToocNotificationSettingsView: View {
                 Toggle("通知", isOn: $store.settings.notifications)
                 Toggle("メッセージの内容を表示", isOn: $store.settings.showContent)
                     .disabled(!store.settings.notifications)
-            } footer: {
-                Text("ほかの画面を見ているあいだに届いたメッセージを、上にバナーで知らせます。お知らせ（じぶんタブのベル）にはいつでも残ります。ミュートしたトークは知らせません。")
             }
         }
         .navigationTitle("通知")
@@ -243,13 +237,9 @@ struct ToocTalkSettingsView: View {
                 .padding(.vertical, 4)
             } header: {
                 Text("テーマ")
-            } footer: {
-                Text("ボタン・文字・吹き出しの色と、tooc 全体の背景が変わります。")
             }
             Section {
                 Toggle("改行キーで送信", isOn: $store.settings.returnSends)
-            } footer: {
-                Text("オンにすると、キーボードの改行キーでそのまま送信します。")
             }
         }
         .navigationTitle("トーク")

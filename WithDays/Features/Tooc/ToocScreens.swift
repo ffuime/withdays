@@ -294,10 +294,6 @@ struct ToocEditProfileView: View {
                     header
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets())
-                } footer: {
-                    Text("背景やアイコンをタップで写真を選んで切り抜き、長押しで外せます。")
-                        .frame(maxWidth: .infinity)
-                        .multilineTextAlignment(.center)
                 }
                 Section("名前") {
                     TextField("名前", text: $name)
@@ -737,8 +733,7 @@ struct ToocScheduledView: View {
         .toocBackground(theme)
         .overlay {
             if waiting.isEmpty {
-                ContentUnavailableView("送信予約はありません", systemImage: "clock",
-                                       description: Text("送信ボタンを長押しして「時刻指定して送信」で予約できます。"))
+                ContentUnavailableView("送信予約はありません", systemImage: "clock")
             }
         }
         .navigationTitle("送信予約")

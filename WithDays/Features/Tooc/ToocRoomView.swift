@@ -36,7 +36,6 @@ struct ToocRoomView: View {
     @State private var confirmClear = false
     @State private var confirmLeave = false
     @State private var confirmHide = false
-    @State private var menu = ToocMessageMenu()
     @State private var reactingTo: ToocMessage?
 
     private var room: ToocRoom? { store.room(roomID) }
@@ -45,14 +44,7 @@ struct ToocRoomView: View {
         Group {
             if let room {
                 messages(room)
-                    .environment(menu)
                     .safeAreaInset(edge: .bottom, spacing: 0) { inputBar(room) }
-                    .overlay { menuOverlay }
-                    .onChange(of: menu.chosen) { _, choice in
-                        guard let choice, let message = menu.message else { return }
-                        menu.chosen = nil
-                        perform(choice, on: message)
-                    }
                     .toolbar { toolbar(room) }
                     .background(theme.fill.ignoresSafeArea())
             } else {
@@ -137,7 +129,7 @@ struct ToocRoomView: View {
         .confirmationDialog("トーク履歴を削除しますか？", isPresented: $confirmClear, titleVisibility: .visible) {
             Button("トーク履歴を削除", role: .destructive) { store.clearHistory(roomID) }
         } message: {
-            Text("このトークのメッセージと写真がすべて消え、元に戻せません。")
+            Text("元に戻せません。")
         }
         .confirmationDialog("グループを退会しますか？", isPresented: $confirmLeave, titleVisibility: .visible) {
             Button("退会", role: .destructive) {
@@ -150,8 +142,6 @@ struct ToocRoomView: View {
                 dismiss()
                 store.update(roomID) { $0.hidden = true }
             }
-        } message: {
-            Text("トーク一覧から隠れます。設定の「非表示・ブロック」か、新しいメッセージで戻ります。")
         }
     }
 
@@ -277,13 +267,13 @@ struct ToocRoomView: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
-            .background(theme.card.opacity(0.92), in: Capsule())
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
     }
 
     private func actions(for message: ToocMessage) -> ToocMessageActions {
         ToocMessageActions(
+            moreReactions: { reactingTo = message },
             reply: {
                 withAnimation(.snappy) {
                     editing = nil
@@ -309,44 +299,6 @@ struct ToocRoomView: View {
             },
             openFile: { quickLook = ToocFiles.url($0) }
         )
-    }
-
-    /// The long-press menu over the talk, while one is open.
-    @ViewBuilder
-    private var menuOverlay: some View {
-        if let message = menu.message {
-            ToocMessageMenuOverlay(
-                menu: menu,
-                message: message,
-                mine: message.senderID == store.me.id,
-                favorites: store.settings.favoriteReactions
-            ) { choice in
-                perform(choice, on: message)
-            }
-            .transition(.opacity)
-        }
-    }
-
-    /// Does what was picked in the long-press menu: a reaction (the same again takes it back), or an action.
-    private func perform(_ choice: String, on message: ToocMessage) {
-        menu.close()
-        if choice.hasPrefix("emoji:") {
-            let emoji = String(choice.dropFirst("emoji:".count))
-            let current = store.room(roomID)?.messages.first { $0.id == message.id }?.reactions[store.me.id]
-            withAnimation(.snappy) { store.react(current == emoji ? nil : emoji, to: message.id, in: roomID) }
-            return
-        }
-        let row = actions(for: message)
-        switch ToocMenuAction(rawValue: choice) {
-        case .more: reactingTo = message
-        case .reply: row.reply()
-        case .copy: if case .text(let text) = message.kind { UIPasteboard.general.string = text }
-        case .select: row.select()
-        case .edit: row.edit()
-        case .unsend: withAnimation(.snappy) { store.unsend(message.id, in: roomID) }
-        case .delete: withAnimation(.snappy) { store.deleteMessage(message.id, in: roomID) }
-        case nil: break
-        }
     }
 
     /// Messages waiting for their time, under the talk: dimmed, with when they'll go.
@@ -683,6 +635,7 @@ struct ToocRoomView: View {
 // MARK: - A message
 
 struct ToocMessageActions {
+    var moreReactions: () -> Void
     var reply: () -> Void
     var edit: () -> Void
     var select: () -> Void
@@ -705,10 +658,8 @@ struct ToocMessageRow: View {
     @Environment(ToocStore.self) private var store
     @Environment(ToocRouter.self) private var router
     @Environment(\.toocTheme) private var theme
-    @Environment(ToocMessageMenu.self) private var menu
     @State private var dragX: CGFloat = 0
     @State private var armed = false
-    @State private var bubbleFrame: CGRect = .zero
 
     private static let replyDistance: CGFloat = 64
     private static let maxPull: CGFloat = 96
@@ -874,46 +825,39 @@ struct ToocMessageRow: View {
             }
         }
         .opacity(message.sending ? 0.6 : 1)
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { bubbleFrame = $0 }
-        .gesture(pressMenu)
-        .sensoryFeedback(.impact(weight: .medium), trigger: menu.message?.id) { _, new in new == message.id }
+        .contextMenu { menu }
     }
 
-    /// Hold to open the menu; without lifting, slide onto a reaction or an action and let go to pick it.
-    private var pressMenu: some Gesture {
-        LongPressGesture(minimumDuration: 0.35)
-            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
-            .onChanged { value in
-                guard case .second(true, let drag) = value else { return }
-                if menu.message?.id != message.id { menu.open(message, bubble: bubbleFrame) }
-                if let drag { menu.track(drag.location) }
+    /// The system's long-press menu: the five favourite reactions (and ⋯ for every emoji) on top, then the actions.
+    @ViewBuilder
+    private var menu: some View {
+        ControlGroup {
+            ForEach(store.settings.favoriteReactions, id: \.self) { emoji in
+                Button(emoji) {
+                    let current = message.reactions[store.me.id]
+                    withAnimation(.snappy) { store.react(current == emoji ? nil : emoji, to: message.id, in: room.id) }
+                }
             }
-            .onEnded { value in
-                guard case .second(true, let drag) = value, let drag,
-                      hypot(drag.translation.width, drag.translation.height) > 12,
-                      let choice = menu.hovered else { return }
-                menu.chosen = choice
-            }
-    }
-
-    private var quoted: ToocMessage? {
-        guard let id = message.replyTo else { return nil }
-        return room.messages.first { $0.id == id }
-    }
-
-    private func quote(_ quoted: ToocMessage) -> some View {
-        let name = store.displayName(quoted.senderID)
-        return HStack(spacing: 6) {
-            Capsule()
-                .fill(mine ? Color.white.opacity(0.7) : theme.accent)
-                .frame(width: 3)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(name).font(.caption.bold())
-                Text(quoted.preview).font(.caption).lineLimit(1)
-            }
-            .foregroundStyle(mine ? Color.white.opacity(0.85) : Color.secondary)
+            Button("その他の絵文字", systemImage: "ellipsis", action: actions.moreReactions)
         }
-        .fixedSize(horizontal: false, vertical: true)
+        .controlGroupStyle(.palette)
+        Button("返信", systemImage: "arrowshape.turn.up.left", action: actions.reply)
+        if case .text(let text) = message.kind {
+            Button("コピー", systemImage: "doc.on.doc") { UIPasteboard.general.string = text }
+            Button("選択", systemImage: "selection.pin.in.out", action: actions.select)
+            if mine {
+                Button("編集", systemImage: "pencil", action: actions.edit)
+            }
+        }
+        Divider()
+        if mine {
+            Button("送信取消", systemImage: "arrow.uturn.backward", role: .destructive) {
+                withAnimation(.snappy) { store.unsend(message.id, in: room.id) }
+            }
+        }
+        Button("削除", systemImage: "trash", role: .destructive) {
+            withAnimation(.snappy) { store.deleteMessage(message.id, in: room.id) }
+        }
     }
 
     // MARK: Reply swipe
@@ -972,14 +916,28 @@ struct ToocLeftPan: UIGestureRecognizerRepresentable {
         func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
             guard let pan = recognizer as? UIPanGestureRecognizer else { return false }
             let velocity = pan.velocity(in: pan.view)
-            return velocity.x < 0 && abs(velocity.x) > abs(velocity.y) * 1.2
+            let translation = pan.translation(in: pan.view)
+            let x = abs(velocity.x) > 1 ? velocity.x : translation.x
+            let y = abs(velocity.x) > 1 ? velocity.y : translation.y
+            return x < 0 && abs(x) > abs(y)
+        }
+
+        /// The talk's scrolling waits for this pan to start or give up, so a sideways drag is never taken by it.
+        func gestureRecognizer(_ recognizer: UIGestureRecognizer,
+                               shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+            other.view is UIScrollView && other is UIPanGestureRecognizer
+        }
+
+        func gestureRecognizer(_ recognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            false
         }
     }
 }
 
-/// A bubble: rounded, with LINE's tail on the first of a burst. The tail's top runs straight out along the bubble's
-/// top to a sharp point, and its underside sweeps back in a deep curve to the bubble's side. Text bubbles in a burst
-/// keep their gaps but tighten the corners they share.
+/// A bubble: fully rounded, with LINE's tail on the first of a burst — a small horn on the upper outer side, its tip
+/// pointing up and out. Its upper edge dips in a soft curve from the bubble's rounded corner to the tip; its lower edge
+/// swells back down into the bubble's side. Text bubbles in a burst keep their gaps but tighten the corners they share.
 struct ToocBubbleShape: Shape {
     let mine: Bool
     let tail: Bool
@@ -987,7 +945,7 @@ struct ToocBubbleShape: Shape {
     let joinedBelow: Bool
 
     /// The room kept beside the bubble for the tail.
-    static let tail: CGFloat = 10
+    static let tail: CGFloat = 9
     private static let radius: CGFloat = 18
     private static let joined: CGFloat = 6
 
@@ -998,8 +956,7 @@ struct ToocBubbleShape: Shape {
             width: rect.width - Self.tail,
             height: rect.height
         )
-        // Under the tail the corner is square, so the tail's top carries on from the bubble's top in one line.
-        let outerTop = tail ? 0 : (joinedAbove ? Self.joined : Self.radius)
+        let outerTop = joinedAbove && !tail ? Self.joined : Self.radius
         let outerBottom = joinedBelow ? Self.joined : Self.radius
         let radii = mine
             ? RectangleCornerRadii(topLeading: Self.radius, bottomLeading: Self.radius,
@@ -1010,19 +967,17 @@ struct ToocBubbleShape: Shape {
         if tail {
             let edge = mine ? body.maxX : body.minX
             let out: CGFloat = mine ? 1 : -1
-            let drop = min(22, body.height * 0.55)
+            let top = body.minY
             var horn = Path()
-            horn.move(to: CGPoint(x: edge - out * 2, y: body.minY))
-            // The top: straight out to the point.
-            horn.addLine(to: CGPoint(x: edge + out * (Self.tail - 0.5), y: body.minY))
-            // A hint of rounding at the very tip.
-            horn.addQuadCurve(to: CGPoint(x: edge + out * (Self.tail - 2.5), y: body.minY + 2.5),
-                              control: CGPoint(x: edge + out * Self.tail, y: body.minY + 1.2))
-            // The underside: a deep curve back to the bubble's side.
-            horn.addCurve(to: CGPoint(x: edge, y: body.minY + drop),
-                          control1: CGPoint(x: edge + out * 2.5, y: body.minY + 6),
-                          control2: CGPoint(x: edge, y: body.minY + drop * 0.55))
-            horn.addLine(to: CGPoint(x: edge - out * 2, y: body.minY + drop))
+            // Starts on the rounded corner, inside the bubble's outline.
+            horn.move(to: CGPoint(x: edge - out * 11, y: top + 3))
+            // Upper edge: dips softly out to the tip, which sits a little below the bubble's top.
+            horn.addQuadCurve(to: CGPoint(x: edge + out * Self.tail, y: top + 4),
+                              control: CGPoint(x: edge + out * 1, y: top + 7))
+            // Lower edge: swells back down into the bubble's side.
+            horn.addQuadCurve(to: CGPoint(x: edge + out * 0.5, y: top + 21),
+                              control: CGPoint(x: edge + out * 6, y: top + 15))
+            horn.addLine(to: CGPoint(x: edge - out * 11, y: top + 21))
             horn.closeSubpath()
             // A union, so the overlap never cancels out whichever way each part winds.
             path = path.union(horn)
