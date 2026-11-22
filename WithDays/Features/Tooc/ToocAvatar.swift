@@ -1,21 +1,40 @@
 import SwiftUI
 import UIKit
 
-/// A user's icon, generated from their colour and initial until photos exist. Square; callers clip it.
+/// A user's icon: their photo, or one generated from their colour and initial. Mynote has its own, the same for
+/// every account. Square; callers clip it.
 struct ToocIconImage: View {
     let user: ToocUser
 
     var body: some View {
         GeometryReader { proxy in
             let side = min(proxy.size.width, proxy.size.height)
-            ZStack {
-                LinearGradient(
-                    colors: [user.color, Color(hue: user.hue + 0.08, saturation: 0.65, brightness: 0.7)],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
-                )
-                Text(user.initial)
-                    .font(.system(size: side * 0.44, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
+            if user.isMynote {
+                ZStack {
+                    LinearGradient(
+                        colors: [Color.brand, Color.brand.mix(with: .black, by: 0.3)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
+                    Image(systemName: "note.text")
+                        .font(.system(size: side * 0.44, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+            } else if let file = user.iconFile, let photo = ToocPhotos.image(file) {
+                Image(uiImage: photo)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
+            } else {
+                ZStack {
+                    LinearGradient(
+                        colors: [user.color, Color(hue: user.hue + 0.08, saturation: 0.65, brightness: 0.7)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
+                    Text(user.initial)
+                        .font(.system(size: side * 0.44, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                }
             }
         }
     }

@@ -16,26 +16,32 @@ enum ToocQRSheet: String, Identifiable {
 struct ToocQRView: View {
     let start: ToocQRSheet
 
+    private enum Step: Hashable { case scan, found(String) }
+
+    @Environment(ToocStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
-    @State private var scanning = false
-    @State private var scanned: String?
+    @State private var path: [Step] = []
+    @State private var invalid: String?
     @State private var copied = false
 
-    /// A stand-in until profiles have real links.
-    static let link = URL(string: "https://example.com")!
+    /// Your profile's link (a stand-in address until tooc has its own site).
+    private var link: URL { URL(string: "https://example.com/tooc/\(store.me.id)")! }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             VStack(spacing: 28) {
                 Spacer()
-                ToocQRCode(text: Self.link.absoluteString)
+                ToocQRCode(text: link.absoluteString)
                     .frame(width: 240, height: 240)
                     .padding(18)
                     .background(.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
                     .shadow(color: .black.opacity(0.08), radius: 16, y: 6)
+                Text("@\(store.me.id)")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
                 Button {
-                    scanning = true
+                    path = [.scan]
                 } label: {
                     Label("スキャン", systemImage: "qrcode.viewfinder")
                         .font(.headline)
@@ -56,13 +62,25 @@ struct ToocQRView: View {
                         .accessibilityLabel("閉じる")
                 }
             }
-            .navigationDestination(isPresented: $scanning) {
-                ToocScanView { scanned = $0 }
+            .navigationDestination(for: Step.self) { step in
+                switch step {
+                case .scan:
+                    ToocScanView { text in
+                        if let id = ToocID.fromQR(text) {
+                            path = [.found(id)]
+                        } else {
+                            path = []
+                            invalid = text
+                        }
+                    }
+                case .found(let id):
+                    ToocFindView(initialID: id, embedded: true)
+                }
             }
-            .alert("読み取りました", isPresented: Binding(get: { scanned != nil }, set: { if !$0 { scanned = nil } })) {
+            .alert("toocのQRコードではありません", isPresented: Binding(get: { invalid != nil }, set: { if !$0 { invalid = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text(scanned ?? "")
+                Text(invalid ?? "")
             }
             .alert("リンクをコピーしました", isPresented: $copied) {
                 Button("OK", role: .cancel) {}
@@ -70,7 +88,7 @@ struct ToocQRView: View {
                 Text("Instagram で貼り付けて送れます。")
             }
         }
-        .onAppear { if start == .scan { scanning = true } }
+        .onAppear { if start == .scan { path = [.scan] } }
     }
 
     // MARK: Sharing
@@ -79,11 +97,11 @@ struct ToocQRView: View {
         ScrollView(.horizontal) {
             HStack(spacing: 18) {
                 share("LINE", color: Color(red: 0.02, green: 0.78, blue: 0.33), mark: .text("L")) {
-                    open("https://line.me/R/share?text=", Self.link.absoluteString)
+                    open("https://line.me/R/share?text=", link.absoluteString)
                 }
                 share("Instagram", color: Color(red: 0.83, green: 0.16, blue: 0.48), mark: .symbol("camera")) {
                     // Instagram has no link for sharing text: copy it, then open Instagram.
-                    UIPasteboard.general.url = Self.link
+                    UIPasteboard.general.url = link
                     copied = true
                     if let app = URL(string: "instagram://app") {
                         openURL(app) { opened in
@@ -92,15 +110,15 @@ struct ToocQRView: View {
                     }
                 }
                 share("iMessage", color: Color(red: 0.2, green: 0.78, blue: 0.35), mark: .symbol("message.fill")) {
-                    open("sms:&body=", Self.link.absoluteString)
+                    open("sms:&body=", link.absoluteString)
                 }
                 share("X", color: .black, mark: .text("X")) {
-                    open("https://x.com/intent/post?text=", Self.link.absoluteString)
+                    open("https://x.com/intent/post?text=", link.absoluteString)
                 }
                 share("Facebook", color: Color(red: 0.09, green: 0.47, blue: 0.95), mark: .text("f")) {
-                    open("https://www.facebook.com/sharer/sharer.php?u=", Self.link.absoluteString)
+                    open("https://www.facebook.com/sharer/sharer.php?u=", link.absoluteString)
                 }
-                ShareLink(item: Self.link) {
+                ShareLink(item: link) {
                     shareLabel("その他", color: Color(.systemGray), mark: .symbol("square.and.arrow.up"))
                 }
                 .buttonStyle(.plain)
@@ -169,7 +187,6 @@ struct ToocQRCode: View {
 /// The camera, reading the first QR code it sees.
 struct ToocScanView: View {
     var onScan: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
     @State private var access = AVCaptureDevice.authorizationStatus(for: .video)
 
     var body: some View {
@@ -179,7 +196,6 @@ struct ToocScanView: View {
             } else if access == .authorized, DataScannerViewController.isSupported {
                 ToocDataScanner { text in
                     onScan(text)
-                    dismiss()
                 }
                 .ignoresSafeArea()
                 .overlay {

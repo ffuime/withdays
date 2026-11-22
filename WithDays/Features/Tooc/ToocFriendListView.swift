@@ -2,87 +2,57 @@ import SwiftUI
 
 /// 友だち: the friends, newest first by default. Tap one for their profile; the button on the right opens a talk.
 struct ToocFriendListView: View {
-    var onCalendar: () -> Void
-
     @Environment(ToocStore.self) private var store
-    @Environment(\.toocUnimplemented) private var unimplemented
-    @State private var path: [String] = []
-    @State private var qr: ToocQRSheet?
-    @State private var profile: ToocUser?
+    @Environment(ToocRouter.self) private var router
 
     var body: some View {
-        NavigationStack(path: $path) {
-            List {
-                ForEach(store.friends) { friend in
-                    ToocFriendRow(friend: friend, onOpen: { profile = friend }, onTalk: { openTalk(friend) })
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                        // A full swipe left adds / removes the favourite.
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button {
-                                withAnimation { store.toggleFavorite(friend.id) }
-                            } label: {
-                                Label(friend.isFavorite ? "お気に入り解除" : "お気に入り",
-                                      systemImage: friend.isFavorite ? "star.slash.fill" : "star.fill")
-                            }
-                            .tint(.yellow)
-                        }
-                        // Right to left: hide, block. Never a full swipe.
-                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
-                                withAnimation { store.block(friend.id) }
-                            } label: {
-                                Label("ブロック", systemImage: "nosign")
-                            }
-                            .tint(.red)
-                            Button {
-                                withAnimation { store.hideFriend(friend.id) }
-                            } label: {
-                                Label("非表示", systemImage: "eye.slash.fill")
-                            }
-                            .tint(.gray)
-                        }
+        @Bindable var router = router
+        List(selection: $router.selection) {
+            ForEach(store.friends) { friend in
+                ToocFriendRow(
+                    friend: friend,
+                    onOpen: { router.sheet = .profile(friend.id) },
+                    onTalk: { router.open(room: store.room(with: friend.id).id) }
+                )
+                .allowsHitTesting(!router.selecting)
+                .tag(friend.id)
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                // A swipe right (a full one too) adds / removes the favourite.
+                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                    Button {
+                        withAnimation { store.toggleFavorite(friend.id) }
+                    } label: {
+                        Image(systemName: friend.isFavorite ? "star.slash.fill" : "star.fill")
+                    }
+                    .tint(.yellow)
+                    .accessibilityLabel(friend.isFavorite ? "お気に入りから外す" : "お気に入り")
+                }
+                // A swipe left: hide, block. Never a full swipe.
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        withAnimation { store.block(friend.id) }
+                    } label: {
+                        Image(systemName: "nosign")
+                    }
+                    .tint(.red)
+                    .accessibilityLabel("ブロック")
+                    Button {
+                        withAnimation { store.hideFriend(friend.id) }
+                    } label: {
+                        Image(systemName: "eye.slash.fill")
+                    }
+                    .tint(.gray)
+                    .accessibilityLabel("非表示")
                 }
             }
-            .listStyle(.plain)
-            .overlay {
-                if store.friends.isEmpty {
-                    ContentUnavailableView("友だちはまだいません", systemImage: "person.2")
-                }
-            }
-            .navigationTitle("友だち")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToocBackToolbar(onCalendar: onCalendar) { sortMenu }
-                ToocListToolbar(qr: $qr, store: store, unimplemented: unimplemented)
-            }
-            .navigationDestination(for: String.self) { id in
-                ToocRoomView(roomID: id)
+        }
+        .listStyle(.plain)
+        .environment(\.editMode, .constant(router.selecting ? .active : .inactive))
+        .overlay {
+            if store.friends.isEmpty {
+                ContentUnavailableView("友だちはまだいません", systemImage: "person.2")
             }
         }
-        .sheet(item: $qr) { ToocQRView(start: $0) }
-        .sheet(item: $profile) { user in
-            ToocProfileSheet(user: user) {
-                profile = nil
-                openTalk(user)
-            }
-        }
-    }
-
-    private func openTalk(_ friend: ToocUser) {
-        path = [store.room(with: friend.id).id]
-    }
-
-    private var sortMenu: some View {
-        @Bindable var store = store
-        return Menu {
-            Picker("並び替え", selection: $store.friendSort) {
-                ForEach(ToocTalkSort.allCases) { Text($0.label).tag($0) }
-            }
-            .pickerStyle(.inline)
-        } label: {
-            Image(systemName: "arrow.up.arrow.down")
-        }
-        .accessibilityLabel("並び替え")
     }
 }
 
@@ -102,25 +72,27 @@ struct ToocFriendRow: View {
                             .lineLimit(1)
                         if !friend.bio.isEmpty {
                             Text(friend.bio)
-                                .font(.system(size: 17 * 0.88))
+                                .font(.system(size: ToocTalkRow.previewSize))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             Button(action: onTalk) {
                 Image(systemName: "plus.message")
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(Color.brand)
                     .frame(width: 40, height: 40)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
+            .buttonStyle(.plain)
             .accessibilityLabel("トークを始める")
         }
+        .frame(height: ToocTalkRow.height)
     }
 }

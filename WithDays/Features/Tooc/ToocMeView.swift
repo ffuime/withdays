@@ -2,55 +2,18 @@ import SwiftUI
 
 /// じぶん: your profile card, ways to add a friend, and a way to the friend list.
 struct ToocMeView: View {
-    var onCalendar: () -> Void
-    var onFriends: () -> Void
-
     @Environment(ToocStore.self) private var store
-    @Environment(\.toocUnimplemented) private var unimplemented
+    @Environment(ToocRouter.self) private var router
     @State private var showID = true
-    @State private var showProfile = false
-    @State private var qr: ToocQRSheet?
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    card
-                    addFriend
-                    friendsBox
-                }
-                .padding(16)
+        ScrollView {
+            VStack(spacing: 16) {
+                card
+                addFriend
+                friendsBox
             }
-            .navigationTitle("じぶん")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(action: onCalendar) {
-                        Image(systemName: "chevron.left")
-                    }
-                    .accessibilityLabel("カレンダーに戻る")
-                }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Menu {
-                        ToocAddFriendSection(qr: $qr)
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .accessibilityLabel("友だち追加")
-                    Button(action: unimplemented) {
-                        Image(systemName: "bell")
-                    }
-                    .accessibilityLabel("通知")
-                    Button(action: unimplemented) {
-                        Image(systemName: "gearshape")
-                    }
-                    .accessibilityLabel("設定")
-                }
-            }
-        }
-        .sheet(item: $qr) { ToocQRView(start: $0) }
-        .sheet(isPresented: $showProfile) {
-            ToocProfileSheet(user: store.me, onTalk: nil)
+            .padding(16)
         }
     }
 
@@ -95,22 +58,24 @@ struct ToocMeView: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .onTapGesture { showProfile = true }
+        .onTapGesture { router.sheet = .profile(me.id) }
         .accessibilityAddTraits(.isButton)
     }
 
+    /// Two plain halves: your QR code, and a search by toocID.
     private var addFriend: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("友だち追加")
                 .font(.headline)
-            HStack(spacing: 12) {
-                addButton("QRコード", "qrcode.viewfinder") { qr = .scan }
-                addButton("toocID", "at", action: unimplemented)
+                .padding(.leading, 4)
+            HStack(spacing: 0) {
+                addButton("QRコード", "qrcode") { router.sheet = .qr(.show) }
+                Divider()
+                    .frame(height: 44)
+                addButton("toocID", "at") { router.sheet = .find("") }
             }
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     private func addButton(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
@@ -118,17 +83,21 @@ struct ToocMeView: View {
             VStack(spacing: 6) {
                 Image(systemName: symbol)
                     .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(Color.brand)
                 Text(title)
                     .font(.footnote.weight(.semibold))
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            .padding(.vertical, 16)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.glass)
+        .buttonStyle(.plain)
     }
 
     private var friendsBox: some View {
-        Button(action: onFriends) {
+        Button {
+            withAnimation(.snappy) { router.tab = .friends }
+        } label: {
             HStack(spacing: 12) {
                 Image(systemName: "person.2.fill")
                     .font(.system(size: 20))

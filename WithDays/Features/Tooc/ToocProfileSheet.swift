@@ -2,26 +2,29 @@ import SwiftUI
 
 private enum ToocProfilePage: Hashable { case bio, name }
 
-/// Someone's profile (or your own): their background, dark and blurred, behind the icon, name and one line of bio.
-/// Tap the icon to see it whole; tap the bio or the name for all of it.
+/// Someone's profile (or your own): their background, dark and blurred, with the icon in the middle and the name and
+/// one line of bio under it. Tap or pinch out the icon to see it whole; tap the bio or the name for all of it.
 struct ToocProfileSheet: View {
-    let user: ToocUser
-    /// Opens the talk with this friend; nil for yourself.
-    var onTalk: (() -> Void)?
+    let userID: String
 
     @Environment(ToocStore.self) private var store
+    @Environment(ToocRouter.self) private var router
     @Environment(\.dismiss) private var dismiss
     @State private var path: [ToocProfilePage] = []
-    @State private var qr: ToocQRSheet?
+    @State private var showQR = false
+    @State private var editing = false
 
-    /// The icon's place in the sheet, so the enlarged icon grows out of it and goes back into it.
+    /// The round icon's place on screen, so the enlarged one grows out of it and goes back into it.
     @State private var avatarFrame: CGRect = .zero
     @State private var zoomShown = false
-    @State private var zoomOpen = false
-    @State private var zoomDrag: CGSize = .zero
+    /// 0: the round icon; 1: the whole icon, as wide as the screen. Gestures move it in between.
+    @State private var progress: CGFloat = 0
+    @State private var drag: CGSize = .zero
 
-    private static let space = "toocProfile"
     private static let avatarSize: CGFloat = 112
+
+    private var user: ToocUser { store.user(userID) ?? store.lookUp(userID) }
+    private var isMe: Bool { userID == store.me.id }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -33,16 +36,14 @@ struct ToocProfileSheet: View {
                         .containerBackground(.clear, for: .navigation)
                 }
         }
+        .tint(.white)
         .background { backdrop.ignoresSafeArea() }
         .overlay { zoomLayer }
-        .coordinateSpace(.named(Self.space))
         .environment(\.colorScheme, .dark)
         .presentationBackground(.black)
-        .sheet(item: $qr) { ToocQRView(start: $0) }
-        .toocUnimplementedHost()
+        .sheet(isPresented: $showQR) { ToocQRView(start: .show) }
+        .sheet(isPresented: $editing) { ToocEditProfileView() }
     }
-
-    private var isMe: Bool { user.id == store.me.id }
 
     // MARK: Parts
 
@@ -57,55 +58,75 @@ struct ToocProfileSheet: View {
         }
     }
 
+    /// The icon sits in the middle of the sheet; the name and bio hang from it.
     private var main: some View {
-        VStack(spacing: 14) {
-            Spacer()
-            ToocIconImage(user: user)
-                .frame(width: Self.avatarSize, height: Self.avatarSize)
-                .clipShape(Circle())
-                .opacity(zoomShown ? 0 : 1)
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { avatarFrame = $0 }
-                .onTapGesture(perform: openZoom)
-                .accessibilityLabel("アイコンを拡大")
-                .accessibilityAddTraits(.isButton)
-            Button { path.append(.name) } label: {
-                Text(user.name)
-                    .font(.title2.bold())
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-            }
-            .buttonStyle(.plain)
-            if !user.bio.isEmpty {
-                Button { path.append(.bio) } label: {
-                    Text(user.bio)
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.8))
+        GeometryReader { proxy in
+            VStack(spacing: 14) {
+                ToocIconImage(user: user)
+                    .frame(width: Self.avatarSize, height: Self.avatarSize)
+                    .clipShape(Circle())
+                    .opacity(zoomShown ? 0 : 1)
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { avatarFrame = $0 }
+                    .onTapGesture(perform: openZoom)
+                    .gesture(pinchOpen)
+                    .accessibilityLabel("アイコンを拡大")
+                    .accessibilityAddTraits(.isButton)
+                Button { path.append(.name) } label: {
+                    Text(user.name)
+                        .font(.title2.bold())
+                        .foregroundStyle(.white)
                         .lineLimit(1)
                 }
                 .buttonStyle(.plain)
+                if !user.bio.isEmpty {
+                    Button { path.append(.bio) } label: {
+                        Text(user.bio)
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.8))
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            Spacer()
-            Spacer()
+            .padding(.horizontal, 32)
+            .padding(.top, max(0, (proxy.size.height - Self.avatarSize) / 2))
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
-        .padding(.horizontal, 32)
-        .frame(maxWidth: .infinity)
+        .ignoresSafeArea()
     }
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            Button { dismiss() } label: { Image(systemName: "xmark") }
-                .accessibilityLabel("閉じる")
+            Button { dismiss() } label: {
+                Image(systemName: "xmark").foregroundStyle(.white)
+            }
+            .accessibilityLabel("閉じる")
         }
-        ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItemGroup(placement: .topBarTrailing) {
             if isMe {
-                Button { qr = .show } label: { Image(systemName: "qrcode") }
-                    .accessibilityLabel("MyQR")
-            } else if user.isFriend, let onTalk {
-                Button(action: onTalk) { Image(systemName: "message") }
-                    .accessibilityLabel("トーク")
+                Button { editing = true } label: {
+                    Image(systemName: "pencil").foregroundStyle(.white)
+                }
+                .accessibilityLabel("プロフィールを編集")
+                Button { showQR = true } label: {
+                    Image(systemName: "qrcode").foregroundStyle(.white)
+                }
+                .accessibilityLabel("MyQR")
+            } else if user.isFriend, !user.isBlocked {
+                Button {
+                    router.open(room: store.room(with: user.id).id)
+                } label: {
+                    Image(systemName: "message").foregroundStyle(.white)
+                }
+                .accessibilityLabel("トーク")
             } else {
-                AddFriendButton()
+                Button {
+                    withAnimation(.snappy) { store.addFriend(user) }
+                } label: {
+                    Image(systemName: "person.badge.plus").foregroundStyle(.white)
+                }
+                .accessibilityLabel("友だち追加")
             }
         }
     }
@@ -139,75 +160,94 @@ struct ToocProfileSheet: View {
 
     // MARK: Enlarged icon
 
-    /// The icon, uncut and as wide as the screen, grown out of the round one. Drag it anywhere to put it back.
+    /// Pinching out the round icon opens it along with the fingers.
+    private var pinchOpen: some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                if !zoomShown {
+                    drag = .zero
+                    zoomShown = true
+                }
+                progress = min(1, max(0, (value.magnification - 1) / 1.2))
+            }
+            .onEnded { _ in
+                if progress > 0.25 { settleOpen() } else { closeZoom() }
+            }
+    }
+
+    /// The icon, uncut and as wide as the screen, grown out of the round one. Dragging or pinching in takes it
+    /// back step by step, its corners rounding as it shrinks.
     @ViewBuilder
     private var zoomLayer: some View {
         if zoomShown {
             GeometryReader { proxy in
+                let layer = proxy.frame(in: .global)
+                let small = avatarFrame.offsetBy(dx: -layer.minX, dy: -layer.minY)
                 let width = proxy.size.width
                 let full = CGRect(x: 0, y: (proxy.size.height - width) / 2, width: width, height: width)
-                let distance: CGFloat = hypot(zoomDrag.width, zoomDrag.height)
-                let shrink: CGFloat = max(0.7, 1 - distance / 900)
-                let fade: Double = zoomOpen ? max(0, 1 - Double(distance) / 400) : 0
-                // The round icon's place, from the sheet's space into this layer's (which reaches under the bars).
-                let origin = proxy.frame(in: .named(Self.space)).origin
-                let small = avatarFrame.offsetBy(dx: -origin.x, dy: -origin.y)
-                let frame = zoomOpen ? full : small
+                let rect = Self.mix(small, full, progress)
                 ZStack {
                     ZStack {
                         ToocIconBackdrop(user: user, blur: 60)
                         Color.black.opacity(0.55)
                     }
-                    .opacity(fade)
-                    .ignoresSafeArea()
+                    .opacity(Double(progress))
                     ToocIconImage(user: user)
-                        .frame(width: frame.width, height: frame.height)
-                        .clipShape(RoundedRectangle(cornerRadius: zoomOpen ? 0 : frame.width / 2, style: .continuous))
-                        .scaleEffect(zoomOpen ? shrink : 1)
-                        .position(x: frame.midX + (zoomOpen ? zoomDrag.width : 0),
-                                  y: frame.midY + (zoomOpen ? zoomDrag.height : 0))
+                        .frame(width: rect.width, height: rect.height)
+                        .clipShape(RoundedRectangle(cornerRadius: rect.width / 2 * (1 - progress), style: .continuous))
+                        .position(x: rect.midX + drag.width, y: rect.midY + drag.height)
                 }
                 .contentShape(Rectangle())
-                .gesture(
-                    DragGesture()
-                        .onChanged { zoomDrag = $0.translation }
-                        .onEnded { value in
-                            if hypot(value.translation.width, value.translation.height) > 90 {
-                                closeZoom()
-                            } else {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { zoomDrag = .zero }
-                            }
-                        }
-                )
+                .gesture(dragBack)
+                .simultaneousGesture(pinchBack)
                 .onTapGesture(perform: closeZoom)
             }
             .ignoresSafeArea()
         }
     }
 
+    private var dragBack: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                drag = value.translation
+                progress = max(0.3, 1 - hypot(value.translation.width, value.translation.height) / 500)
+            }
+            .onEnded { value in
+                if hypot(value.translation.width, value.translation.height) > 90 { closeZoom() } else { settleOpen() }
+            }
+    }
+
+    private var pinchBack: some Gesture {
+        MagnifyGesture()
+            .onChanged { value in progress = min(1, max(0, value.magnification)) }
+            .onEnded { _ in if progress < 0.8 { closeZoom() } else { settleOpen() } }
+    }
+
+    private static func mix(_ a: CGRect, _ b: CGRect, _ t: CGFloat) -> CGRect {
+        CGRect(x: a.minX + (b.minX - a.minX) * t, y: a.minY + (b.minY - a.minY) * t,
+               width: a.width + (b.width - a.width) * t, height: a.height + (b.height - a.height) * t)
+    }
+
     private func openZoom() {
-        zoomDrag = .zero
+        drag = .zero
+        progress = 0
         zoomShown = true
-        Task { @MainActor in
-            withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { zoomOpen = true }
+        Task { @MainActor in settleOpen() }
+    }
+
+    private func settleOpen() {
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.84)) {
+            progress = 1
+            drag = .zero
         }
     }
 
     private func closeZoom() {
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-            zoomOpen = false
-            zoomDrag = .zero
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
+            progress = 0
+            drag = .zero
         } completion: {
             zoomShown = false
         }
-    }
-}
-
-private struct AddFriendButton: View {
-    @Environment(\.toocUnimplemented) private var unimplemented
-
-    var body: some View {
-        Button(action: unimplemented) { Image(systemName: "person.badge.plus") }
-            .accessibilityLabel("友だち追加")
     }
 }

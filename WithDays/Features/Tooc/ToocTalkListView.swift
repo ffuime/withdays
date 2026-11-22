@@ -1,61 +1,59 @@
 import SwiftUI
+import UIKit
 
 /// トーク: the rooms, pinned ones first, then by the chosen order.
 struct ToocTalkListView: View {
-    var onCalendar: () -> Void
-
     @Environment(ToocStore.self) private var store
-    @Environment(\.toocUnimplemented) private var unimplemented
-    @State private var path: [String] = []
-    @State private var qr: ToocQRSheet?
+    @Environment(ToocRouter.self) private var router
 
     var body: some View {
-        NavigationStack(path: $path) {
-            List {
-                ForEach(store.visibleRooms) { room in
-                    NavigationLink(value: room.id) {
-                        ToocTalkRow(room: room)
-                    }
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    .swipeActions(edge: .leading, allowsFullSwipe: room.unread > 0) { leadingActions(room) }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) { trailingActions(room) }
+        @Bindable var router = router
+        List(selection: $router.selection) {
+            ForEach(store.visibleRooms) { room in
+                ZStack {
+                    // Hidden, so the row opens the room without a chevron.
+                    NavigationLink(value: ToocRoute.room(room.id)) { EmptyView() }
+                        .opacity(0)
+                    ToocTalkRow(room: room)
                 }
-            }
-            .listStyle(.plain)
-            .navigationTitle("トーク")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToocBackToolbar(onCalendar: onCalendar) { sortMenu }
-                ToocListToolbar(qr: $qr, store: store, unimplemented: unimplemented)
-            }
-            .navigationDestination(for: String.self) { id in
-                ToocRoomView(roomID: id)
+                .tag(room.id)
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                .swipeActions(edge: .leading, allowsFullSwipe: room.unread > 0) { leadingActions(room) }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) { trailingActions(room) }
             }
         }
-        .sheet(item: $qr) { ToocQRView(start: $0) }
+        .listStyle(.plain)
+        .environment(\.editMode, .constant(router.selecting ? .active : .inactive))
     }
 
-    /// Left to right: read (a full swipe, while anything is unread), pin, mute.
+    /// Left to right: read (only while anything is unread; a full swipe), pin, mute.
     @ViewBuilder
     private func leadingActions(_ room: ToocRoom) -> some View {
-        Button {
-            store.markRead(room.id)
-        } label: {
-            Label("既読", systemImage: "checkmark.message.fill")
+        if room.unread > 0 {
+            Button {
+                store.markRead(room.id)
+            } label: {
+                Image(systemName: "checkmark.message.fill")
+            }
+            .tint(.blue)
+            .accessibilityLabel("既読にする")
         }
-        .tint(.blue)
         Button {
             store.update(room.id) { $0.pinned.toggle() }
         } label: {
-            Label(room.pinned ? "ピン留め解除" : "ピン留め", systemImage: room.pinned ? "pin.slash.fill" : "pin.fill")
+            Image(systemName: room.pinned ? "pin.slash.fill" : "pin.fill")
         }
         .tint(.orange)
-        Button {
-            store.update(room.id) { $0.muted.toggle() }
-        } label: {
-            Label(room.muted ? "通知オン" : "ミュート", systemImage: room.muted ? "speaker.2.fill" : "speaker.slash.fill")
+        .accessibilityLabel(room.pinned ? "ピン留めを外す" : "ピン留め")
+        if !room.isMynote {
+            Button {
+                store.update(room.id) { $0.muted.toggle() }
+            } label: {
+                Image(systemName: room.muted ? "speaker.2.fill" : "speaker.slash.fill")
+            }
+            .tint(.indigo)
+            .accessibilityLabel(room.muted ? "通知をオン" : "ミュート")
         }
-        .tint(.indigo)
     }
 
     /// Left to right: hide, delete (Mynote can only be hidden). Never a full swipe.
@@ -66,44 +64,30 @@ struct ToocTalkListView: View {
             Button(role: .destructive) {
                 withAnimation { store.delete(room.id) }
             } label: {
-                Label("削除", systemImage: "minus.circle")
+                Image(systemName: "minus.circle")
             }
             .tint(.red)
+            .accessibilityLabel("削除")
         }
         Button {
             withAnimation { store.update(room.id) { $0.hidden = true } }
         } label: {
-            Label("非表示", systemImage: "eye.slash.fill")
+            Image(systemName: "eye.slash.fill")
         }
         .tint(.gray)
-    }
-
-    private var sortMenu: some View {
-        @Bindable var store = store
-        return Menu {
-            Section {
-                Toggle("お気に入りを優先", isOn: $store.favoritesFirst)
-                Toggle("未読メッセージを優先", isOn: $store.unreadFirst)
-            }
-            Section {
-                Picker("並び替え", selection: $store.talkSort) {
-                    ForEach([ToocTalkSort.added, .conversation, .profile]) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.inline)
-            }
-        } label: {
-            Image(systemName: "arrow.up.arrow.down")
-        }
-        .accessibilityLabel("並び替え")
+        .accessibilityLabel("非表示")
     }
 }
 
-/// One room in the list: icon, name and last message, time and unread count.
+/// One room in the list: icon, name and up to two lines of the last message; the time at the top right and the
+/// unread count in the middle. Every row is the same height.
 struct ToocTalkRow: View {
     let room: ToocRoom
     @Environment(ToocStore.self) private var store
 
-    private static let previewSize: CGFloat = 17 * 0.88
+    static let previewSize: CGFloat = 14
+    private static let previewLine = UIFont.systemFont(ofSize: previewSize).lineHeight
+    static let height: CGFloat = 60
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -112,20 +96,25 @@ struct ToocTalkRow: View {
                 nameLine
                 preview
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .trailing, spacing: 6) {
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            ZStack {
                 if let last = room.last {
                     Text(ToocTime.listLabel(last.date))
                         .font(.system(size: 12))
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
+                        .padding(.top, 3)
+                        .frame(maxHeight: .infinity, alignment: .top)
                 }
                 if room.unread > 0 {
                     ToocCountBadge(count: room.unread, prominent: true)
                         .opacity(room.muted ? 0.45 : 1)
                 }
             }
+            .fixedSize(horizontal: true, vertical: false)
         }
+        .frame(height: Self.height)
+        .contentShape(Rectangle())
     }
 
     private var nameLine: some View {
@@ -149,10 +138,12 @@ struct ToocTalkRow: View {
     @ViewBuilder
     private var preview: some View {
         if let last = room.last {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
+            HStack(alignment: .top, spacing: 4) {
                 if last.sending {
+                    // Centred on the first line of text.
                     ProgressView()
                         .controlSize(.mini)
+                        .frame(height: Self.previewLine)
                 }
                 previewText(last)
                     .font(.system(size: Self.previewSize))
