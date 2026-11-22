@@ -58,11 +58,13 @@ struct ToocAccountSettingsView: View {
         }
         .navigationTitle("アカウント")
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("ログアウトしますか？", isPresented: $confirmLogOut, titleVisibility: .visible) {
+        .alert("ログアウトしますか？", isPresented: $confirmLogOut) {
+            Button("キャンセル", role: .cancel) {}
             Button("ログアウト", role: .destructive) { store.logOut() }
         }
-        .confirmationDialog("アカウントを削除しますか？", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("アカウントを削除", role: .destructive) { store.deleteAccount() }
+        .alert("アカウントを削除しますか？", isPresented: $confirmDelete) {
+            Button("キャンセル", role: .cancel) {}
+            Button("削除", role: .destructive) { store.deleteAccount() }
         } message: {
             Text("友だち・トーク・写真がすべて消え、元に戻せません。")
         }

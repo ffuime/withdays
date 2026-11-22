@@ -17,6 +17,7 @@ struct ToocProfileSheet: View {
     @State private var clear = false
     @State private var renaming = false
     @State private var nickname = ""
+    @FocusState private var nameFocused: Bool
 
     /// The round icon's place on screen, so the enlarged one grows out of it and goes back into it.
     @State private var avatarFrame: CGRect = .zero
@@ -46,16 +47,7 @@ struct ToocProfileSheet: View {
         .presentationBackground(.black)
         .sheet(isPresented: $showQR) { ToocQRView(start: .show) }
         .sheet(isPresented: $editing) { ToocEditProfileView() }
-        .alert("表示名を変更", isPresented: $renaming) {
-            TextField(user.name, text: $nickname)
-            Button("キャンセル", role: .cancel) {}
-            if user.nickname != nil {
-                Button("元に戻す") { store.rename(userID, to: nil) }
-            }
-            Button("変更") { store.rename(userID, to: nickname) }
-        } message: {
-            Text("この端末でだけ、\(user.name)さんの名前をこう表示します。")
-        }
+
     }
 
     // MARK: Parts
@@ -64,7 +56,7 @@ struct ToocProfileSheet: View {
     private var backdrop: some View {
         ZStack {
             if user.backgroundFile != nil || user.hasBackground {
-                ToocIconBackdrop(user: user, blur: clear ? 0 : 6)
+                ToocIconBackdrop(user: user, blur: clear ? 0 : 9)
             } else {
                 LinearGradient(colors: [Color(white: 0.22), Color(white: 0.08)], startPoint: .top, endPoint: .bottom)
             }
@@ -179,9 +171,19 @@ struct ToocProfileSheet: View {
                         .font(.body)
                         .foregroundStyle(.white)
                 case .name:
-                    Text(user.displayName)
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(.white)
+                    if renaming {
+                        // The name itself becomes the field; empty goes back to their own name.
+                        TextField(user.name, text: $nickname)
+                            .font(.largeTitle.bold())
+                            .foregroundStyle(.white)
+                            .focused($nameFocused)
+                            .submitLabel(.done)
+                            .onSubmit(finishRename)
+                    } else {
+                        Text(user.displayName)
+                            .font(.largeTitle.bold())
+                            .foregroundStyle(.white)
+                    }
                     if user.nickname != nil {
                         Text("本人の名前：\(user.name)")
                             .font(.subheadline)
@@ -201,14 +203,27 @@ struct ToocProfileSheet: View {
         .toolbar {
             if page == .name, !isMe, store.users[userID] != nil {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("変更") {
-                        nickname = user.nickname ?? ""
-                        renaming = true
+                    Button(renaming ? "完了" : "変更") {
+                        if renaming {
+                            finishRename()
+                        } else {
+                            nickname = user.nickname ?? user.name
+                            renaming = true
+                            nameFocused = true
+                        }
                     }
+                    .fontWeight(renaming ? .semibold : .regular)
                     .foregroundStyle(.white)
                 }
             }
         }
+    }
+
+    private func finishRename() {
+        let typed = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+        store.rename(userID, to: typed == user.name ? nil : typed)
+        renaming = false
+        nameFocused = false
     }
 
     // MARK: Enlarged icon

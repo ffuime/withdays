@@ -127,6 +127,7 @@ struct ToocRootView: View {
 
     @State private var store = ToocStore()
     @State private var router = ToocRouter()
+    @State private var welcome = false
 
     var body: some View {
         let theme = store.theme
@@ -142,7 +143,16 @@ struct ToocRootView: View {
         .environment(\.toocTheme, theme)
         .tint(theme.accent)
         .environment(\.colorScheme, theme.dark ? .dark : colorScheme)
-        .onChange(of: store.signedIn) { router.reset() }
+        .overlay {
+            if welcome {
+                ToocWelcomeView(name: store.me.name) { welcome = false }
+                    .environment(\.toocTheme, store.theme)
+            }
+        }
+        .onChange(of: store.signedIn) { _, signedIn in
+            router.reset()
+            if signedIn { welcome = true }
+        }
         .task {
             // Scheduled messages go out when their time comes.
             while !Task.isCancelled {
@@ -164,9 +174,10 @@ struct ToocRootView: View {
                 .navigationDestination(for: ToocRoute.self) { ToocDestination(route: $0) }
         }
         .sheet(item: $router.sheet) { ToocSheetView(sheet: $0) }
-        .confirmationDialog(router.confirm?.title ?? "", isPresented: Binding(
+        .alert(router.confirm?.title ?? "", isPresented: Binding(
             get: { router.confirm != nil }, set: { if !$0 { router.confirm = nil } }
-        ), titleVisibility: .visible, presenting: router.confirm) { confirm in
+        ), presenting: router.confirm) { confirm in
+            Button("キャンセル", role: .cancel) {}
             Button(confirm.button, role: .destructive) {
                 withAnimation(.snappy) {
                     confirm.perform(store)

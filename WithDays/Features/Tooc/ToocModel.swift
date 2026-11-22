@@ -221,6 +221,9 @@ struct ToocRoom: Identifiable, Hashable, Codable {
     var muted = false
     var hidden = false
     var draft = ""
+    /// A group's own icon and background photos.
+    var iconFile: String?
+    var backgroundFile: String?
 
     /// Sent (or arrived) messages, oldest first; scheduled ones wait apart.
     var sent: [ToocMessage] { messages.filter { $0.scheduledAt == nil } }
@@ -481,7 +484,11 @@ final class ToocStore {
     func iconUser(of room: ToocRoom) -> ToocUser {
         if room.isMynote { return .mynote }
         if room.isGroup {
-            return ToocUser(id: room.id, name: room.title ?? "G", bio: "", hue: ToocUser.hue(for: room.id))
+            var group = ToocUser(id: room.id, name: room.title ?? "G", bio: "", hue: ToocUser.hue(for: room.id))
+            group.iconFile = room.iconFile
+            group.backgroundFile = room.backgroundFile
+            group.hasBackground = true
+            return group
         }
         return room.memberIDs.compactMap { user($0) }.first ?? me
     }
@@ -628,6 +635,18 @@ final class ToocStore {
         let room = ToocRoom(id: "g-\(UUID().uuidString.prefix(8))", title: name, memberIDs: members, isGroup: true)
         rooms.append(room)
         return room
+    }
+
+    func editGroup(_ id: String, name: String, iconFile: String?, backgroundFile: String?, members: [String]) {
+        guard let room = room(id) else { return }
+        if room.iconFile != iconFile, let old = room.iconFile { ToocFiles.delete(old) }
+        if room.backgroundFile != backgroundFile, let old = room.backgroundFile { ToocFiles.delete(old) }
+        update(id) {
+            $0.title = name.isEmpty ? $0.title : name
+            $0.iconFile = iconFile
+            $0.backgroundFile = backgroundFile
+            $0.memberIDs = members
+        }
     }
 
     func leave(_ id: String) {

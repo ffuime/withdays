@@ -21,7 +21,9 @@ struct ToocRoomView: View {
     @State private var scheduling = false
     @State private var scheduleDate = Date.now.addingTimeInterval(60 * 60)
     @State private var pickingPhoto = false
-    @State private var photoItem: PhotosPickerItem?
+    @State private var photoItems: [PhotosPickerItem] = []
+    /// Photos picked or taken, joined to the input until sent.
+    @State private var attachments: [ToocPendingPhoto] = []
     @State private var usingCamera = false
     @State private var pickingFile = false
     @State private var quickLook: URL?
@@ -31,8 +33,7 @@ struct ToocRoomView: View {
     @State private var searching = false
     @State private var highlight: UUID?
     @State private var showMembers = false
-    @State private var renaming = false
-    @State private var newName = ""
+    @State private var editingGroup = false
     @State private var confirmClear = false
     @State private var confirmLeave = false
     @State private var confirmHide = false
@@ -89,13 +90,15 @@ struct ToocRoomView: View {
         .sheet(item: Binding(get: { selecting.map { ToocSelectText(text: $0) } }, set: { selecting = $0?.text })) { item in
             ToocSelectTextView(text: item.text)
         }
-        .photosPicker(isPresented: $pickingPhoto, selection: $photoItem, matching: .images)
-        .onChange(of: photoItem) { _, item in
-            guard let item else { return }
-            photoItem = nil
+        .photosPicker(isPresented: $pickingPhoto, selection: $photoItems, maxSelectionCount: 10, matching: .images)
+        .onChange(of: photoItems) { _, items in
+            guard !items.isEmpty else { return }
+            photoItems = []
             Task {
-                if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
-                    sendPhoto(image)
+                for item in items {
+                    if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+                        withAnimation(.snappy) { attachments.append(ToocPendingPhoto(image: image)) }
+                    }
                 }
             }
         }
@@ -108,7 +111,9 @@ struct ToocRoomView: View {
         }
         .quickLookPreview($quickLook)
         .fullScreenCover(isPresented: $usingCamera) {
-            ToocCameraPicker { image in sendPhoto(image) }
+            ToocCameraPicker { image in
+                withAnimation(.snappy) { attachments.append(ToocPendingPhoto(image: image)) }
+            }
                 .ignoresSafeArea()
         }
         .fullScreenCover(item: $zoom) { item in
@@ -118,26 +123,22 @@ struct ToocRoomView: View {
                 withTransaction(transaction) { zoom = nil }
             }
         }
-        .alert("グループ名を変更", isPresented: $renaming) {
-            TextField("グループ名", text: $newName)
+        .sheet(isPresented: $editingGroup) { ToocGroupEditView(roomID: roomID) }
+        .alert("トーク履歴を削除しますか？", isPresented: $confirmClear) {
             Button("キャンセル", role: .cancel) {}
-            Button("変更") {
-                let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !name.isEmpty { store.update(roomID) { $0.title = name } }
-            }
-        }
-        .confirmationDialog("トーク履歴を削除しますか？", isPresented: $confirmClear, titleVisibility: .visible) {
-            Button("トーク履歴を削除", role: .destructive) { store.clearHistory(roomID) }
+            Button("削除", role: .destructive) { store.clearHistory(roomID) }
         } message: {
             Text("元に戻せません。")
         }
-        .confirmationDialog("グループを退会しますか？", isPresented: $confirmLeave, titleVisibility: .visible) {
+        .alert("グループを退会しますか？", isPresented: $confirmLeave) {
+            Button("キャンセル", role: .cancel) {}
             Button("退会", role: .destructive) {
                 dismiss()
                 store.leave(roomID)
             }
         }
-        .confirmationDialog("トークを非表示にしますか？", isPresented: $confirmHide, titleVisibility: .visible) {
+        .alert("トークを非表示にしますか？", isPresented: $confirmHide) {
+            Button("キャンセル", role: .cancel) {}
             Button("非表示", role: .destructive) {
                 dismiss()
                 store.update(roomID) { $0.hidden = true }
@@ -348,15 +349,27 @@ struct ToocRoomView: View {
 
     private var trimmed: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
 
+    /// Something to send: text, or photos (text is optional with photos).
+    private var canSend: Bool { !trimmed.isEmpty || (!attachments.isEmpty && editing == nil) }
+
     private func send(silent: Bool = false) {
         let text = trimmed
-        guard !text.isEmpty else { return }
+        guard canSend else { return }
         withAnimation(.snappy) {
             if let editing {
-                store.edit(editing.id, in: roomID, text: text)
+                if !text.isEmpty { store.edit(editing.id, in: roomID, text: text) }
                 self.editing = nil
             } else {
-                store.send(.text(text), in: roomID, replyTo: replyTo?.id, silent: silent)
+                // The photos first, then the words, as one burst.
+                for photo in attachments {
+                    if let file = ToocFiles.save(photo.image) {
+                        store.send(.photo(file), in: roomID, replyTo: replyTo?.id, silent: silent)
+                    }
+                }
+                if !text.isEmpty {
+                    store.send(.text(text), in: roomID, replyTo: attachments.isEmpty ? replyTo?.id : nil, silent: silent)
+                }
+                attachments = []
                 replyTo = nil
             }
             draft = ""
@@ -374,12 +387,37 @@ struct ToocRoomView: View {
         scheduling = false
     }
 
-    private func sendPhoto(_ image: UIImage) {
-        guard let file = ToocFiles.save(image) else { return }
-        withAnimation(.snappy) {
-            store.send(.photo(file), in: roomID, replyTo: replyTo?.id)
-            replyTo = nil
+    /// The photos waiting to go, joined to the top of the input like a reply.
+    private var attachmentBar: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(attachments) { photo in
+                    Image(uiImage: photo.image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 64, height: 64)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(alignment: .topTrailing) {
+                            Button {
+                                withAnimation(.snappy) { attachments.removeAll { $0.id == photo.id } }
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 22, height: 22)
+                                    .background(Circle().fill(.black.opacity(0.6)))
+                            }
+                            .padding(3)
+                            .accessibilityLabel("添付を外す")
+                        }
+                        .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
         }
+        .scrollIndicators(.hidden)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     private var scheduleSheet: some View {
@@ -442,10 +480,7 @@ struct ToocRoomView: View {
             Section {
                 if room.isGroup {
                     Button("メンバー", systemImage: "person.2") { showMembers = true }
-                    Button("グループ名を変更", systemImage: "pencil") {
-                        newName = room.title ?? ""
-                        renaming = true
-                    }
+                    Button("グループプロフィールを編集", systemImage: "pencil") { editingGroup = true }
                 } else if !room.isMynote, let other = room.memberIDs.first {
                     Button("プロフィール", systemImage: "person.crop.circle") { router.sheet = .profile(other) }
                 }
@@ -495,7 +530,7 @@ struct ToocRoomView: View {
                         Button("あみだくじ", systemImage: "line.3.horizontal") { composer = .amida }
                     }
                     Button("時刻指定して送信", systemImage: "clock") { openSchedule() }
-                        .disabled(trimmed.isEmpty || editing != nil)
+                        .disabled(trimmed.isEmpty || editing != nil || !attachments.isEmpty)
                 } label: {
                     Image(systemName: "plus").frame(width: 44, height: Self.barHeight)
                 }
@@ -519,6 +554,10 @@ struct ToocRoomView: View {
                     editBar
                     Divider().padding(.horizontal, 12)
                 }
+                if !attachments.isEmpty {
+                    attachmentBar
+                    Divider().padding(.horizontal, 12)
+                }
                 HStack(alignment: .bottom, spacing: 6) {
                     TextField("\(store.name(of: room))へ送信", text: $draft, axis: .vertical)
                         .lineLimit(1...6)
@@ -534,14 +573,14 @@ struct ToocRoomView: View {
                                 send()
                             }
                         }
-                    if !trimmed.isEmpty {
+                    if canSend {
                         sendButton(room)
                             .padding(.bottom, 6)
                             .transition(.scale.combined(with: .opacity))
                     }
                 }
-                .padding(.trailing, trimmed.isEmpty ? 16 : 6)
-                .animation(.snappy(duration: 0.2), value: trimmed.isEmpty)
+                .padding(.trailing, canSend ? 6 : 16)
+                .animation(.snappy(duration: 0.2), value: canSend)
             }
             // The whole field is glass that stretches under the finger.
             .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: Self.barHeight / 2, style: .continuous))
@@ -566,7 +605,9 @@ struct ToocRoomView: View {
                 if !room.isMynote {
                     Button("ミュートメッセージで送信", systemImage: "bell.slash") { send(silent: true) }
                 }
-                Button("時刻指定して送信", systemImage: "clock") { openSchedule() }
+                if attachments.isEmpty {
+                    Button("時刻指定して送信", systemImage: "clock") { openSchedule() }
+                }
             } label: {
                 icon
             } primaryAction: {
@@ -660,6 +701,7 @@ struct ToocMessageRow: View {
     @Environment(\.toocTheme) private var theme
     @State private var dragX: CGFloat = 0
     @State private var armed = false
+    @State private var showFull = false
 
     private static let replyDistance: CGFloat = 64
     private static let maxPull: CGFloat = 96
@@ -796,9 +838,7 @@ struct ToocMessageRow: View {
                 let shape = ToocBubbleShape(mine: mine, tail: first, joinedAbove: joinedAbove, joinedBelow: joinedBelow)
                 VStack(alignment: .leading, spacing: 6) {
                     if let quotedMessage = quoted { quote(quotedMessage) }
-                    Text(text)
-                        .font(.system(size: textSize))
-                        .foregroundStyle(mine ? Color.white : Color.primary)
+                    longText(text)
                 }
                 .padding(.horizontal, 13)
                 .padding(.vertical, 8)
@@ -857,6 +897,47 @@ struct ToocMessageRow: View {
         }
         Button("削除", systemImage: "trash", role: .destructive) {
             withAnimation(.snappy) { store.deleteMessage(message.id, in: room.id) }
+        }
+    }
+
+    /// Long text stops at about 14 lines, with すべてを表示 for the rest in a sheet.
+    private func longText(_ text: String) -> some View {
+        let color = mine ? Color.white : Color.primary
+        return ViewThatFits(in: .vertical) {
+            Text(text)
+                .font(.system(size: textSize))
+                .foregroundStyle(color)
+                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(text)
+                    .font(.system(size: textSize))
+                    .foregroundStyle(color)
+                    .lineLimit(14)
+                Button("すべてを表示") { showFull = true }
+                    .font(.system(size: textSize * 0.88, weight: .semibold))
+                    .foregroundStyle(mine ? Color.white : theme.accent)
+                    .buttonStyle(.plain)
+            }
+        }
+        .frame(maxHeight: textSize * 1.25 * 15)
+        .sheet(isPresented: $showFull) {
+            NavigationStack {
+                ScrollView {
+                    Text(text)
+                        .font(.system(size: textSize))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(20)
+                }
+                .navigationTitle(store.displayName(message.senderID))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button { showFull = false } label: { Image(systemName: "xmark") }
+                            .accessibilityLabel("閉じる")
+                    }
+                }
+            }
         }
     }
 
@@ -965,7 +1046,7 @@ struct ToocBubbleShape: Shape {
     let joinedBelow: Bool
 
     /// The room kept beside the bubble for the tail.
-    static let tail: CGFloat = 9
+    static let tail: CGFloat = 6
     private static let radius: CGFloat = 18
     private static let joined: CGFloat = 6
 
@@ -989,15 +1070,15 @@ struct ToocBubbleShape: Shape {
             let out: CGFloat = mine ? 1 : -1
             let top = body.minY
             var horn = Path()
-            // Starts on the rounded corner, inside the bubble's outline.
-            horn.move(to: CGPoint(x: edge - out * 11, y: top + 3))
-            // Upper edge: dips softly out to the tip, which sits a little below the bubble's top.
-            horn.addQuadCurve(to: CGPoint(x: edge + out * Self.tail, y: top + 4),
-                              control: CGPoint(x: edge + out * 1, y: top + 7))
-            // Lower edge: swells back down into the bubble's side.
-            horn.addQuadCurve(to: CGPoint(x: edge + out * 0.5, y: top + 21),
-                              control: CGPoint(x: edge + out * 6, y: top + 15))
-            horn.addLine(to: CGPoint(x: edge - out * 11, y: top + 21))
+            // Small, and out of the bubble's side a little below its top, so it reads as part of the bubble.
+            horn.move(to: CGPoint(x: edge - out * 8, y: top + 6))
+            // Upper edge: dips gently out to the tip, which stays below the bubble's top.
+            horn.addQuadCurve(to: CGPoint(x: edge + out * Self.tail, y: top + 3),
+                              control: CGPoint(x: edge + out * 2, y: top + 7.5))
+            // Lower edge: swells back into the side.
+            horn.addQuadCurve(to: CGPoint(x: edge - out * 0.5, y: top + 16),
+                              control: CGPoint(x: edge + out * 4, y: top + 11))
+            horn.addLine(to: CGPoint(x: edge - out * 8, y: top + 16))
             horn.closeSubpath()
             // A union, so the overlap never cancels out whichever way each part winds.
             path = path.union(horn)
