@@ -42,6 +42,7 @@ struct ToocAccountSettingsView: View {
     @Environment(ToocStore.self) private var store
     @State private var confirmLogOut = false
     @State private var confirmDelete = false
+    @State private var deleteError: String?
 
     var body: some View {
         List {
@@ -58,13 +59,26 @@ struct ToocAccountSettingsView: View {
         }
         .navigationTitle("アカウント")
         .navigationBarTitleDisplayMode(.inline)
+        .alert("削除できませんでした", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deleteError ?? "")
+        }
         .alert("ログアウトしますか？", isPresented: $confirmLogOut) {
             Button("キャンセル", role: .cancel) {}
             Button("ログアウト", role: .destructive) { store.logOut() }
         }
         .alert("アカウントを削除しますか？", isPresented: $confirmDelete) {
             Button("キャンセル", role: .cancel) {}
-            Button("削除", role: .destructive) { store.deleteAccount() }
+            Button("削除", role: .destructive) {
+                Task {
+                    do {
+                        try await store.deleteAccount()
+                    } catch {
+                        deleteError = error.localizedDescription
+                    }
+                }
+            }
         } message: {
             Text("友だち・トーク・写真がすべて消え、元に戻せません。")
         }
@@ -102,11 +116,13 @@ struct ToocPasswordView: View {
             }
             Section {
                 Button("変更する") {
-                    do {
-                        try store.changePassword(current: current, new: new)
-                        done = true
-                    } catch {
-                        self.error = error.localizedDescription
+                    Task {
+                        do {
+                            try await store.changePassword(current: current, new: new)
+                            done = true
+                        } catch {
+                            self.error = error.localizedDescription
+                        }
                     }
                 }
                 .disabled(!valid)

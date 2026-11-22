@@ -55,7 +55,7 @@ struct ToocProfileSheet: View {
     /// Their background photo, or one drawn from their icon; dark and blurred unless cleared by a tap.
     private var backdrop: some View {
         ZStack {
-            if user.backgroundFile != nil || user.hasBackground {
+            if user.backgroundFile != nil || user.backgroundURL != nil || user.hasBackground {
                 ToocIconBackdrop(user: user, blur: clear ? 0 : 9)
             } else {
                 LinearGradient(colors: [Color(white: 0.22), Color(white: 0.08)], startPoint: .top, endPoint: .bottom)

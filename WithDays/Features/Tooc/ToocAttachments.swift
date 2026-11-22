@@ -337,7 +337,24 @@ struct ToocCardBubble: View {
     private var content: some View {
         switch message.kind {
         case .file(let name, let file, let size):
-            Button { openFile(file) } label: {
+            fileRow(name, size) { openFile(file) }
+        case .remoteFile(let name, let url, let size):
+            fileRow(name, size) { openFile(url) }
+        case .location(let latitude, let longitude, let title):
+            locationCard(latitude, longitude, title)
+        case .poll(let poll):
+            pollCard(poll)
+        case .datePoll(let poll):
+            datePollCard(poll)
+        case .amida(let amida):
+            amidaCard(amida)
+        default:
+            EmptyView()
+        }
+    }
+
+    private func fileRow(_ name: String, _ size: Int, open: @escaping () -> Void) -> some View {
+            Button(action: open) {
                 HStack(spacing: 10) {
                     Image(systemName: "doc.fill")
                         .font(.system(size: 18))
@@ -356,9 +373,11 @@ struct ToocCardBubble: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-        case .location(let latitude, let longitude, let title):
+    }
+
+    private func locationCard(_ latitude: Double, _ longitude: Double, _ title: String) -> some View {
             let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-            Button {
+            return Button {
                 let query = title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
                 if let url = URL(string: "maps://?ll=\(latitude),\(longitude)&q=\(query)") { openURL(url) }
             } label: {
@@ -378,15 +397,6 @@ struct ToocCardBubble: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-        case .poll(let poll):
-            pollCard(poll)
-        case .datePoll(let poll):
-            datePollCard(poll)
-        case .amida(let amida):
-            amidaCard(amida)
-        default:
-            EmptyView()
-        }
     }
 
     private func header(_ title: String, _ symbol: String) -> some View {

@@ -7,13 +7,17 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "1.14.1"
+    MARKETING_VERSION: "1.15.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
 
 packages:
   SlidesFeature:
     path: SlidesFeature
+  # tooc's server. 12.x: 13 needs Xcode 26.2 or later.
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: 12.0.0
 
 targets:
   WithDays:
@@ -21,6 +25,12 @@ targets:
     platform: iOS
     sources:
       - path: WithDays
+        excludes:
+          - GoogleService-Info.plist
+      # Written by the build from the GOOGLE_SERVICE_INFO_PLIST secret; without it tooc has no server.
+      - path: WithDays/GoogleService-Info.plist
+        buildPhase: resources
+        optional: true
     info:
       path: WithDays/Info.plist
       properties:
@@ -55,6 +65,14 @@ targets:
     dependencies:
       - target: WithDaysWidget
       - package: SlidesFeature
+      - package: Firebase
+        product: FirebaseCore
+      - package: Firebase
+        product: FirebaseAuth
+      - package: Firebase
+        product: FirebaseFirestore
+      - package: Firebase
+        product: FirebaseStorage
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ffuime.withdays

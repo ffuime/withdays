@@ -7,3 +7,5 @@ Payload/
 *.ipa
 xcuserdata/
 WithDaysWidget/Info.plist
+# Firebase settings come from a GitHub secret at build time.
+WithDays/GoogleService-Info.plist

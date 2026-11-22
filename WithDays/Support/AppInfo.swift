@@ -23,6 +23,10 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.15.0", date: "2026.11.22", notes: [
+            "tooc：サーバー（Firebase）につながるように。アカウント・友だち・トーク・写真・ファイルが同期されます",
+            "tooc：ダミーの友だちとトークはなくなりました",
+        ]),
         Release(version: "1.14.1", date: "2026.11.22", notes: [
             "tooc：通知（タップでそのトークを開く）",
         ]),

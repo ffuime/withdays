@@ -33,6 +33,8 @@ struct ToocGroupEditView: View {
         var user = ToocUser(id: roomID, name: name.isEmpty ? "G" : name, bio: "", hue: ToocUser.hue(for: roomID))
         user.iconFile = iconFile
         user.backgroundFile = backgroundFile
+        if let room, iconFile == room.iconURL.map(ToocFiles.remoteName) { user.iconURL = room.iconURL }
+        if let room, backgroundFile == room.backgroundURL.map(ToocFiles.remoteName) { user.backgroundURL = room.backgroundURL }
         user.hasBackground = true
         return user
     }
@@ -110,8 +112,8 @@ struct ToocGroupEditView: View {
             guard !loaded, let room else { return }
             loaded = true
             name = room.title ?? ""
-            iconFile = room.iconFile
-            backgroundFile = room.backgroundFile
+            iconFile = room.iconFile ?? room.iconURL.map(ToocFiles.remoteName)
+            backgroundFile = room.backgroundFile ?? room.backgroundURL.map(ToocFiles.remoteName)
             members = Set(room.memberIDs)
         }
         .onDisappear {

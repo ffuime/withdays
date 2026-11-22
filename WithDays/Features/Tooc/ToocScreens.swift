@@ -248,9 +248,12 @@ struct ToocFindView: View {
             return
         }
         text = id
-        withAnimation(.snappy) {
-            error = nil
-            found = id == store.me.id ? store.me : store.lookUp(id)
+        Task {
+            let user = await store.fetchUser(id)
+            withAnimation(.snappy) {
+                found = user
+                error = user == nil ? "@\(id) は見つかりませんでした。" : nil
+            }
         }
     }
 }
@@ -283,6 +286,8 @@ struct ToocEditProfileView: View {
         user.hue = hue
         user.iconFile = iconFile
         user.backgroundFile = backgroundFile
+        if iconFile == nil { user.iconURL = nil }
+        if backgroundFile == nil { user.backgroundURL = nil }
         user.hasBackground = hasBackground
         return user
     }
@@ -352,8 +357,8 @@ struct ToocEditProfileView: View {
             name = me.name
             bio = me.bio
             hue = me.hue
-            iconFile = me.iconFile
-            backgroundFile = me.backgroundFile
+            iconFile = me.iconFile ?? me.iconURL.map(ToocFiles.remoteName)
+            backgroundFile = me.backgroundFile ?? me.backgroundURL.map(ToocFiles.remoteName)
             hasBackground = me.hasBackground
             hasBirthday = me.birthday != nil
             if let date = me.birthday { birthday = date }

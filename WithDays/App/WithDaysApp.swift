@@ -1,3 +1,4 @@
+import FirebaseCore
 import MediaPlayer
 import SlidesFeature
 import SwiftUI
@@ -8,6 +9,10 @@ import UserNotifications
 final class WithDaysAppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         SlidesFonts.registerImportedFonts()
+        // tooc's server: only when the build carries Firebase's settings.
+        if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
+            FirebaseApp.configure()
+        }
         // tooc's notifications open their talk when tapped.
         UNUserNotificationCenter.current().delegate = ToocNotificationDelegate.shared
         return true

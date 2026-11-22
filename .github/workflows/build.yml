@@ -17,6 +17,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Firebase settings for tooc
+        env:
+          GOOGLE_SERVICE_INFO_PLIST: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}
+        run: |
+          if [ -n "$GOOGLE_SERVICE_INFO_PLIST" ]; then
+            echo "$GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > WithDays/GoogleService-Info.plist
+            plutil -lint WithDays/GoogleService-Info.plist
+          else
+            echo "::warning::GOOGLE_SERVICE_INFO_PLIST is not set, so tooc is built without its server"
+          fi
+
       - name: Select Xcode 26
         run: |
           XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n1 || true)

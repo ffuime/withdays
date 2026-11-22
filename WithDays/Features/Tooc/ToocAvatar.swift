@@ -34,6 +34,12 @@ struct ToocIconImage: View {
                     Text(user.initial)
                         .font(.system(size: side * 0.44, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white)
+                    // The photo on the server, over the generated icon once it's here.
+                    if let address = user.iconURL {
+                        ToocRemoteImage(address: address)
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                            .clipped()
+                    }
                 }
             }
         }
@@ -42,6 +48,11 @@ struct ToocIconImage: View {
     /// The same icon as a small round image, for laying inline in text at the text's size.
     @MainActor
     static func inline(_ user: ToocUser, size: CGFloat) -> UIImage {
+        // Rendering can't wait for a download, so it uses the photo only once it's been fetched.
+        var user = user
+        if user.iconFile == nil, let address = user.iconURL, ToocFiles.image(ToocFiles.remoteName(address)) != nil {
+            user.iconFile = ToocFiles.remoteName(address)
+        }
         let renderer = ImageRenderer(content: ToocIconImage(user: user).frame(width: size, height: size).clipShape(Circle()))
         renderer.scale = 3
         return renderer.uiImage ?? UIImage()
@@ -110,11 +121,40 @@ struct ToocIconBackdrop: View {
                 }
                 .blur(radius: blur)
                 .clipped()
+        } else if let address = user.backgroundURL {
+            Color.clear
+                .overlay { ToocRemoteImage(address: address) }
+                .blur(radius: blur)
+                .clipped()
         } else {
             ToocIconImage(user: user)
                 .scaleEffect(1.4)
                 .blur(radius: blur)
                 .clipped()
+        }
+    }
+}
+
+/// A photo from the server: from this device's copy if there is one, otherwise fetched once and kept.
+struct ToocRemoteImage: View {
+    let address: String
+    @State private var image: UIImage?
+
+    var body: some View {
+        ZStack {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .transition(.opacity)
+            }
+        }
+        .task(id: address) {
+            if let cached = ToocFiles.image(ToocFiles.remoteName(address)) {
+                image = cached
+            } else if let fetched = await ToocFiles.remoteImage(address) {
+                withAnimation(.easeOut(duration: 0.2)) { image = fetched }
+            }
         }
     }
 }

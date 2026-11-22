@@ -134,6 +134,9 @@ struct ToocRootView: View {
         Group {
             if store.signedIn {
                 main
+            } else if store.starting {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ToocLoginView(onCalendar: onCalendar)
             }

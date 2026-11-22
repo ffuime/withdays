@@ -329,7 +329,20 @@ struct ToocRoomView: View {
                 transaction.disablesAnimations = true
                 withTransaction(transaction) { zoom = ToocPhotoZoomItem(image: image, source: frame) }
             },
-            openFile: { quickLook = ToocFiles.url($0) }
+            openFile: { file in
+                guard file.hasPrefix("http"), let url = URL(string: file) else {
+                    quickLook = ToocFiles.url(file)
+                    return
+                }
+                // A file on the server: fetched into a temporary folder, then previewed.
+                Task {
+                    guard let (data, _) = try? await URLSession.shared.data(from: url) else { return }
+                    let name = url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
+                    let target = FileManager.default.temporaryDirectory.appending(path: name)
+                    try? data.write(to: target, options: .atomic)
+                    quickLook = target
+                }
+            }
         )
     }
 
@@ -598,6 +611,7 @@ struct ToocRoomView: View {
                         .padding(.leading, 16)
                         .frame(minHeight: Self.barHeight)
                         .onChange(of: draft) { old, new in
+                            if !new.isEmpty { store.typed(in: roomID) }
                             // 「改行キーで送信」: Return sends instead of breaking the line.
                             if store.settings.returnSends, new.hasSuffix("\n"), new.count == old.count + 1 {
                                 draft = String(new.dropLast())

@@ -10,6 +10,7 @@ struct ToocLoginView: View {
     @State private var id = ""
     @State private var password = ""
     @State private var errorMessage: String?
+    @State private var working = false
     @FocusState private var field: Field?
 
     private enum Field { case id, password }
@@ -67,13 +68,17 @@ struct ToocLoginView: View {
 
                 Section {
                     Button(action: submit) {
-                        Text(creating ? "アカウントを作成" : "ログイン")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
+                        ZStack {
+                            Text(creating ? "アカウントを作成" : "ログイン")
+                                .opacity(working ? 0 : 1)
+                            if working { ProgressView().tint(.white) }
+                        }
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
                     }
                     .buttonStyle(.glassProminent)
-                    .disabled(!valid)
+                    .disabled(!valid || working)
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets())
                 }
@@ -105,15 +110,19 @@ struct ToocLoginView: View {
     }
 
     private func submit() {
-        guard valid else { return }
-        if creating {
+        guard valid, !working else { return }
+        working = true
+        Task {
             do {
-                try store.createAccount(id: normalizedID, password: password)
+                if creating {
+                    try await store.createAccount(id: normalizedID, password: password)
+                } else {
+                    try await store.logIn(id: normalizedID, password: password)
+                }
             } catch {
                 errorMessage = error.localizedDescription
             }
-        } else if !store.logIn(id: normalizedID, password: password) {
-            errorMessage = "toocIDかパスワードが違います。"
+            working = false
         }
     }
 }
