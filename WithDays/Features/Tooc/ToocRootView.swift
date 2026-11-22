@@ -25,6 +25,8 @@ enum ToocSheet: Identifiable, Hashable {
     case profile(String)
     case editProfile
     case accounts
+    case notes(String, String?)
+    case albums(String, String?)
 
     var id: String {
         switch self {
@@ -35,6 +37,8 @@ enum ToocSheet: Identifiable, Hashable {
         case .profile(let id): "profile-\(id)"
         case .editProfile: "editProfile"
         case .accounts: "accounts"
+        case .notes(let room, let note): "notes-\(room)-\(note ?? "")"
+        case .albums(let room, let album): "albums-\(room)-\(album ?? "")"
         }
     }
 }
@@ -132,6 +136,8 @@ struct ToocRootView: View {
     @State private var store = ToocStore()
     @State private var router = ToocRouter()
     @State private var welcome = false
+    /// Who you were when a switch began, for the overlay's first face.
+    @State private var switchFrom: ToocUser?
 
     var body: some View {
         let theme = store.theme
@@ -150,11 +156,39 @@ struct ToocRootView: View {
         .environment(\.toocTheme, theme)
         .tint(theme.accent)
         .environment(\.colorScheme, theme.dark ? .dark : colorScheme)
+        .scaleEffect(switching ? 0.93 : 1)
+        .blur(radius: switching ? 8 : 0)
+        .animation(.spring(response: 0.5, dampingFraction: 0.82), value: switching)
         .overlay {
             if welcome {
                 ToocWelcomeView(name: store.me.name) { welcome = false }
                     .environment(\.toocTheme, store.theme)
             }
+        }
+        .overlay {
+            if let to = store.switchingTo, let from = switchFrom {
+                ToocSwitchOverlay(
+                    from: from, to: to, ready: store.account == to.id,
+                    onMidway: { router.reset() },
+                    onDone: {
+                        store.switchingTo = nil
+                        switchFrom = nil
+                    }
+                )
+                .environment(\.toocTheme, store.theme)
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.25), value: store.switchingTo?.id)
+        .onChange(of: store.switchingTo?.id) { _, id in
+            if id != nil, switchFrom == nil { switchFrom = store.me }
+            if id == nil { switchFrom = nil }
+        }
+        .alert("切り替えられませんでした", isPresented: Binding(get: { store.switchError != nil },
+                                                        set: { if !$0 { store.switchError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(store.switchError ?? "")
         }
         .onChange(of: store.signedIn) { _, signedIn in
             router.reset()
@@ -181,6 +215,9 @@ struct ToocRootView: View {
 
     @Environment(\.colorScheme) private var colorScheme
 
+    /// The overlay is up and the new account isn't in front yet.
+    private var switching: Bool { store.switchingTo != nil && switchFrom != nil }
+
     private var main: some View {
         @Bindable var router = router
         return NavigationStack(path: $router.path) {
@@ -204,11 +241,6 @@ struct ToocRootView: View {
             if !confirm.message.isEmpty { Text(confirm.message) }
         }
         .overlay(alignment: .top) { ToocBanner() }
-        .alert("切り替えられませんでした", isPresented: Binding(get: { switchError != nil }, set: { if !$0 { switchError = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(switchError ?? "")
-        }
     }
 
     private var tabs: some View {
@@ -245,14 +277,12 @@ struct ToocRootView: View {
         .environment(\.symbolVariants, .none)
     }
 
-    @State private var switchError: String?
-
     private func switchBack() {
         Task {
             do {
                 try await store.switchToPrevious()
             } catch {
-                switchError = error.localizedDescription
+                store.switchError = error.localizedDescription
             }
         }
     }
@@ -406,6 +436,8 @@ private struct ToocSheetView: View {
         case .profile(let id): ToocProfileSheet(userID: id)
         case .editProfile: ToocEditProfileView()
         case .accounts: ToocAccountsView()
+        case .notes(let room, let note): ToocNotesView(roomID: room, openID: note)
+        case .albums(let room, let album): ToocAlbumsView(roomID: room, openID: album)
         }
     }
 }

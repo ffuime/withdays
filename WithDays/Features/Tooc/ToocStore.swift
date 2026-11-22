@@ -239,6 +239,11 @@ final class ToocStore {
     private(set) var requests: [ToocUser] = []
     /// The accounts on this device, for switching.
     private(set) var savedAccounts: [ToocAccounts.Saved] = ToocAccounts.saved
+    /// Your stickers, newest first.
+    private(set) var stickers: [ToocSticker] = []
+    /// The account being switched to (for the animation), until it's ready or fails.
+    var switchingTo: ToocAccounts.Saved? = nil
+    var switchError: String? = nil
     @ObservationIgnored private var requestIDs: [String: Date] = [:]
 
     @ObservationIgnored private var local = ToocLocal()
@@ -357,7 +362,24 @@ final class ToocStore {
             throw ToocError("このアカウントのパスワードが保存されていません。ログインし直してください。")
         }
         flush()
-        try await logIn(id: id, password: password)
+        if account != nil { switchingTo = ToocAccounts.saved.first { $0.id == id } }
+        do {
+            try await logIn(id: id, password: password)
+        } catch {
+            switchingTo = nil
+            throw error
+        }
+    }
+
+    /// Switches, and shows what went wrong as an alert (for buttons that don't wait).
+    func switchAccountShowingErrors(to id: String) {
+        Task {
+            do {
+                try await switchAccount(to: id)
+            } catch {
+                switchError = error.localizedDescription
+            }
+        }
     }
 
     /// Back to the account used before this one.
@@ -439,6 +461,7 @@ final class ToocStore {
         listenToMe(id)
         listenToFriends(id)
         listenToRequests(id)
+        listenToStickers(id)
         listenToRooms()
     }
 
@@ -458,6 +481,7 @@ final class ToocStore {
         typing = [:]
         requestIDs = [:]
         requests = []
+        stickers = []
         account = nil
         openRoomID = nil
         banner = nil
@@ -558,9 +582,14 @@ final class ToocStore {
     private func listenToMessages(_ roomID: String) {
         guard listeners["messages:\(roomID)"] == nil else { return }
         listeners["messages:\(roomID)"] = ToocServer.messages(roomID).order(by: "date").limit(toLast: 300)
-            .addSnapshotListener { [weak self] snapshot, _ in
+            .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
-                    guard let self, let snapshot else { return }
+                    guard let self else { return }
+                    if error != nil {
+                        self.retryMessages(roomID)
+                        return
+                    }
+                    guard let snapshot else { return }
                     let first = !self.loadedRooms.contains(roomID)
                     var list: [ToocMessage] = []
                     for doc in snapshot.documents {
@@ -581,6 +610,30 @@ final class ToocStore {
                     }
                     self.rebuildRooms()
                     if self.openRoomID == roomID { self.markRead(roomID) }
+                }
+            }
+    }
+
+    /// A talk made a moment ago may not be readable yet (its listener is refused and stops): listen again shortly.
+    private func retryMessages(_ roomID: String) {
+        listeners["messages:\(roomID)"]?.remove()
+        listeners["messages:\(roomID)"] = nil
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.5))
+            guard let self, self.account != nil, self.serverRooms[roomID] != nil else { return }
+            self.listenToMessages(roomID)
+        }
+    }
+
+    private func listenToStickers(_ id: String) {
+        listeners["stickers"] = ToocServer.user(id).collection("stickers").order(by: "createdAt", descending: true)
+            .addSnapshotListener { [weak self] snapshot, _ in
+                Task { @MainActor in
+                    guard let self, let snapshot else { return }
+                    self.stickers = snapshot.documents.compactMap { doc in
+                        guard let url = doc.data()["url"] as? String else { return nil }
+                        return ToocSticker(id: doc.documentID, url: url)
+                    }
                 }
             }
     }
@@ -664,6 +717,7 @@ final class ToocStore {
         message.silent = data["silent"] as? Bool ?? false
         message.edited = data["edited"] as? Bool ?? false
         message.reactions = data["reactions"] as? [String: String] ?? [:]
+        message.mentions = data["mentions"] as? [String] ?? []
         return message
     }
 
@@ -707,9 +761,11 @@ final class ToocStore {
             room.muted = prefs.muted
             room.hidden = prefs.hidden
             room.draft = prefs.draft
-            room.unread = openRoomID == room.id ? 0 : messages.filter {
+            let unread = openRoomID == room.id ? [] : messages.filter {
                 $0.scheduledAt == nil && $0.senderID != account && $0.date > prefs.lastRead
-            }.count
+            }
+            room.unread = unread.count
+            room.mentioned = unread.contains { $0.mentions.contains(account ?? "") }
             if !room.isGroup && !room.isMynote, let other = room.memberIDs.first, local.friends[other]?.blocked == true {
                 room.hidden = true
             }
@@ -722,9 +778,14 @@ final class ToocStore {
     private func arrived(_ message: ToocMessage, in roomID: String) {
         guard message.senderID != account, openRoomID != roomID, let room = serverRooms[roomID] else { return }
         if local.rooms[roomID]?.hidden == true { local.rooms[roomID]?.hidden = false }
-        guard local.rooms[roomID]?.muted != true, !message.silent,
-              local.friends[message.senderID]?.blocked != true else { return }
+        guard local.friends[message.senderID]?.blocked != true else { return }
         let who = displayName(message.senderID)
+        if let account, message.mentions.contains(account) {
+            announce(ToocNotice(title: "\(who)があなたをメンションしました", body: message.preview, userID: message.senderID,
+                                roomID: roomID))
+            return
+        }
+        guard local.rooms[roomID]?.muted != true, !message.silent else { return }
         let title = room.isGroup ? "\(name(of: room))・\(who)" : who
         announce(ToocNotice(title: title, body: message.preview, userID: message.senderID, roomID: roomID))
     }
@@ -972,6 +1033,13 @@ final class ToocStore {
         let room = ToocRoom(id: id, memberIDs: [userID])
         serverRooms[id] = room
         rebuildRooms()
+        createDM(id, with: userID)
+        return room
+    }
+
+    /// Writes a one-to-one talk to the server (again, harmlessly, if it's already there).
+    private func createDM(_ id: String, with userID: String) {
+        guard let account else { return }
         let theirUID = users[userID]?.uid ?? profiles[userID]?.uid
         creating[id] = Task {
             var uid = theirUID
@@ -982,7 +1050,6 @@ final class ToocStore {
                 "updatedAt": Timestamp(date: .now),
             ], merge: true)
         }
-        return room
     }
 
     func makeGroup(name: String, members: [String]) -> ToocRoom {
@@ -1074,9 +1141,11 @@ final class ToocStore {
 
     // MARK: Sending
 
-    func send(_ kind: ToocMessage.Kind, in roomID: String, replyTo: UUID? = nil, silent: Bool = false, at time: Date? = nil) {
+    func send(_ kind: ToocMessage.Kind, in roomID: String, replyTo: UUID? = nil, silent: Bool = false, at time: Date? = nil,
+              mentions: [String] = []) {
         var message = ToocMessage(senderID: me.id, kind: kind, date: time ?? .now, sending: true, replyTo: replyTo,
                                   silent: silent, scheduledAt: time)
+        message.mentions = mentions
         if let time, time > .now {
             message.sending = false
             local.scheduled[roomID, default: []].append(message)
@@ -1096,7 +1165,7 @@ final class ToocStore {
     }
 
     private func upload(_ message: ToocMessage, in roomID: String) {
-        guard let uid = Auth.auth().currentUser?.uid else { return }
+        guard let uid = Auth.auth().currentUser?.uid else { return failed(message, in: roomID) }
         let waitFor = creating[roomID]
         Task {
             await waitFor?.value
@@ -1128,8 +1197,15 @@ final class ToocStore {
                 "readBy": [String](),
             ]
             if let reply = message.replyTo { fields["replyTo"] = reply.uuidString }
+            if !message.mentions.isEmpty { fields["mentions"] = message.mentions }
             do {
                 try await ToocServer.messages(roomID).document(message.id.uuidString).setData(fields)
+                // On the server: no longer "sending", even before the talk's listener hears of it.
+                if let index = pending[roomID]?.firstIndex(where: { $0.id == message.id }) {
+                    pending[roomID]?[index].sending = false
+                    pending[roomID]?[index].kind = kind
+                    rebuildRooms()
+                }
                 try? await ToocServer.room(roomID).updateData([
                     "updatedAt": Timestamp(date: .now),
                     FieldPath(["typing", message.senderID]): FieldValue.delete(),
@@ -1140,10 +1216,76 @@ final class ToocStore {
         }
     }
 
+    /// Kept in the talk with a mark, to send again or delete.
     private func failed(_ message: ToocMessage, in roomID: String) {
-        pending[roomID]?.removeAll { $0.id == message.id }
+        if let index = pending[roomID]?.firstIndex(where: { $0.id == message.id }) {
+            pending[roomID]?[index].sending = false
+            pending[roomID]?[index].failed = true
+        }
         rebuildRooms()
-        notify(ToocNotice(title: "送信できませんでした", body: message.preview, roomID: roomID))
+    }
+
+    func resend(_ id: UUID, in roomID: String) {
+        guard let index = pending[roomID]?.firstIndex(where: { $0.id == id }), var message = pending[roomID]?[index] else { return }
+        message.failed = false
+        message.sending = true
+        message.date = .now
+        pending[roomID]?.remove(at: index)
+        pending[roomID, default: []].append(message)
+        rebuildRooms()
+        // The talk may still be missing on the server: make sure it's there first.
+        if let room = serverRooms[roomID], !room.isGroup, !room.isMynote,
+           let other = room.memberIDs.first(where: { $0 != account }) {
+            createDM(roomID, with: other)
+        }
+        upload(message, in: roomID)
+    }
+
+    func discardFailed(_ id: UUID, in roomID: String) {
+        pending[roomID]?.removeAll { $0.id == id }
+        rebuildRooms()
+    }
+
+    /// Sends a copy of a message to other talks.
+    func forward(_ message: ToocMessage, to roomIDs: [String]) {
+        for id in roomIDs { send(message.kind, in: id) }
+    }
+
+    // MARK: Stickers
+
+    /// Makes a sticker from a picture (already cut out): a PNG with see-through edges, kept on your account.
+    func addSticker(_ image: UIImage) async throws {
+        guard let account else { return }
+        let side: CGFloat = 512
+        let scale = min(side / max(image.size.width, 1), side / max(image.size.height, 1), 1)
+        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+        let png = UIGraphicsImageRenderer(size: size, format: format)
+            .image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+            .pngData()
+        guard let png else { throw ToocError("画像を作れませんでした。") }
+        let id = UUID().uuidString
+        let url = try await ToocServer.upload(png, to: "users/\(account)/stickers/\(id).png", type: "image/png")
+        try? png.write(to: ToocFiles.url(ToocFiles.remoteName(url)))
+        try await ToocServer.user(account).collection("stickers").document(id)
+            .setData(["url": url, "createdAt": Timestamp(date: .now)])
+    }
+
+    /// Someone else's sticker, kept among yours.
+    func saveSticker(_ url: String) {
+        guard let account, !stickers.contains(where: { $0.url == url }) else { return }
+        Task {
+            try? await ToocServer.user(account).collection("stickers").document(UUID().uuidString)
+                .setData(["url": url, "createdAt": Timestamp(date: .now)])
+        }
+    }
+
+    func deleteSticker(_ id: String) {
+        guard let account else { return }
+        stickers.removeAll { $0.id == id }
+        Task { try? await ToocServer.user(account).collection("stickers").document(id).delete() }
     }
 
     /// Tells the others you're typing (at most every few seconds).

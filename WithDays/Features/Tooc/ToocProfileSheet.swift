@@ -163,6 +163,7 @@ struct ToocProfileSheet: View {
     /// All of the bio, or the name with the toocID (and 変更 for a friend's display name).
     @ViewBuilder
     private func detail(_ page: ToocProfilePage) -> some View {
+        GeometryReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
                 switch page {
@@ -170,6 +171,7 @@ struct ToocProfileSheet: View {
                     Text(user.bio)
                         .font(.body)
                         .foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
                 case .name:
                     if renaming {
                         // The name itself becomes the field; empty goes back to their own name.
@@ -197,9 +199,12 @@ struct ToocProfileSheet: View {
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 28)
-            .containerRelativeFrame(.vertical, alignment: .center)
+            .padding(.vertical, 24)
+            // At least the screen's height, so a short one sits in the middle; a long one scrolls in full.
+            .frame(minHeight: proxy.size.height, alignment: .center)
         }
         .scrollBounceBehavior(.basedOnSize)
+        }
         .toolbar {
             if page == .name, !isMe, store.users[userID] != nil {
                 ToolbarItem(placement: .topBarTrailing) {

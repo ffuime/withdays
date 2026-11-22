@@ -28,6 +28,11 @@ service cloud.firestore {
         allow read, write: if owns(toocID);
       }
 
+      // Stickers made from your photos: yours only.
+      match /stickers/{stickerID} {
+        allow read, write: if owns(toocID);
+      }
+
       // The linked email address, seen only by its owner.
       match /private/{docID} {
         allow read, write: if owns(toocID);
@@ -60,6 +65,28 @@ service cloud.firestore {
         allow create: if memberOf(roomID) && request.resource.data.senderUID == request.auth.uid;
         allow update: if memberOf(roomID);
         allow delete: if memberOf(roomID) && resource.data.senderUID == request.auth.uid;
+      }
+
+      // ノート: posts with likes and comments; anyone in the talk reads, likes and comments, the author deletes.
+      match /notes/{noteID} {
+        allow read: if memberOf(roomID);
+        allow create: if memberOf(roomID) && request.resource.data.authorUID == request.auth.uid;
+        allow update: if memberOf(roomID);
+        allow delete: if memberOf(roomID) && resource.data.authorUID == request.auth.uid;
+
+        match /comments/{commentID} {
+          allow read: if memberOf(roomID);
+          allow create: if memberOf(roomID) && request.resource.data.authorUID == request.auth.uid;
+          allow delete: if memberOf(roomID) && resource.data.authorUID == request.auth.uid;
+        }
+      }
+
+      // アルバム: anyone in the talk adds photos; the one who made it deletes it.
+      match /albums/{albumID} {
+        allow read: if memberOf(roomID);
+        allow create: if memberOf(roomID) && request.resource.data.authorUID == request.auth.uid;
+        allow update: if memberOf(roomID);
+        allow delete: if memberOf(roomID) && resource.data.authorUID == request.auth.uid;
       }
     }
   }

@@ -84,15 +84,8 @@ struct ToocAccountsView: View {
     private func switchTo(_ id: String) {
         guard id != store.me.id else { return dismiss() }
         switching = id
-        Task {
-            do {
-                try await store.switchAccount(to: id)
-                dismiss()
-            } catch {
-                self.error = error.localizedDescription
-            }
-            switching = nil
-        }
+        dismiss()
+        store.switchAccountShowingErrors(to: id)
     }
 }
 

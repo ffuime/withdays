@@ -158,6 +158,12 @@ struct ToocMessage: Identifiable, Hashable, Codable {
         case poll(ToocPoll)
         case datePoll(ToocDatePoll)
         case amida(ToocAmida)
+        /// A sticker made from someone's photo (a PNG on the server).
+        case sticker(url: String)
+        /// A post in the talk's ノート, announced in the talk.
+        case note(id: String, text: String)
+        /// Photos added to one of the talk's アルバム.
+        case album(id: String, title: String, count: Int)
         /// What's left after unsending.
         case unsent
     }
@@ -178,6 +184,10 @@ struct ToocMessage: Identifiable, Hashable, Codable {
     /// Who reacted with what.
     var reactions: [String: String] = [:]
     var edited = false
+    /// Who was called with @name (toocIDs).
+    var mentions: [String] = []
+    /// Couldn't be sent: kept here, to send again or delete.
+    var failed = false
 
     var preview: String {
         switch kind {
@@ -188,6 +198,9 @@ struct ToocMessage: Identifiable, Hashable, Codable {
         case .poll(let poll): "投票：\(poll.question)"
         case .datePoll(let poll): "日程調整：\(poll.title)"
         case .amida(let amida): "あみだくじ：\(amida.title)"
+        case .sticker: "スタンプ"
+        case .note(_, let text): "ノート：\(text)"
+        case .album(_, let title, let count): "アルバム「\(title)」に写真を\(count)枚追加"
         case .unsent: "送信が取り消されました"
         }
     }
@@ -200,6 +213,9 @@ struct ToocMessage: Identifiable, Hashable, Codable {
         case .poll: "chart.bar.fill"
         case .datePoll: "calendar"
         case .amida: "line.3.horizontal"
+        case .sticker: "face.smiling"
+        case .note: "note.text"
+        case .album: "photo.stack"
         case .text, .unsent: nil
         }
     }
@@ -212,6 +228,36 @@ struct ToocMessage: Identifiable, Hashable, Codable {
     var isUnsent: Bool {
         if case .unsent = kind { return true }
         return false
+    }
+
+    /// Can go to another talk as it is (not polls and the like, whose answers belong to this one).
+    var forwardable: Bool {
+        switch kind {
+        case .text, .remotePhoto, .remoteFile, .location, .sticker: !sending && !failed
+        default: false
+        }
+    }
+}
+
+extension ToocMessage {
+    enum CodingKeys: String, CodingKey {
+        case id, senderID, kind, date, sending, readCount, replyTo, silent, scheduledAt, reactions, edited, mentions
+    }
+
+    /// Messages saved by an older version (scheduled ones) have no mentions yet.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(senderID: try c.decode(String.self, forKey: .senderID), kind: try c.decode(Kind.self, forKey: .kind),
+                  date: try c.decode(Date.self, forKey: .date))
+        id = try c.decode(UUID.self, forKey: .id)
+        sending = try c.decodeIfPresent(Bool.self, forKey: .sending) ?? false
+        readCount = try c.decodeIfPresent(Int.self, forKey: .readCount) ?? 0
+        replyTo = try c.decodeIfPresent(UUID.self, forKey: .replyTo)
+        silent = try c.decodeIfPresent(Bool.self, forKey: .silent) ?? false
+        scheduledAt = try c.decodeIfPresent(Date.self, forKey: .scheduledAt)
+        reactions = try c.decodeIfPresent([String: String].self, forKey: .reactions) ?? [:]
+        edited = try c.decodeIfPresent(Bool.self, forKey: .edited) ?? false
+        mentions = try c.decodeIfPresent([String].self, forKey: .mentions) ?? []
     }
 }
 
@@ -229,6 +275,8 @@ struct ToocRoom: Identifiable, Hashable, Codable {
     var muted = false
     var hidden = false
     var draft = ""
+    /// Someone called you with @ in a message you haven't read.
+    var mentioned = false
     /// A group's own icon and background photos.
     var iconFile: String?
     var backgroundFile: String?

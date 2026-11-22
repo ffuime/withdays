@@ -36,6 +36,7 @@ struct ToocTalkListView: View {
                 .tag(room.id)
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                 .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
                 .swipeActions(edge: .leading, allowsFullSwipe: room.unread > 0) { leadingActions(room) }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) { trailingActions(room) }
             }
@@ -153,6 +154,7 @@ struct ToocTalkRow: View {
     let room: ToocRoom
     @Environment(ToocStore.self) private var store
     @Environment(ToocRouter.self) private var router
+    @Environment(\.toocTheme) private var theme
 
     static let previewSize: CGFloat = 14
     private static let previewLine = UIFont.systemFont(ofSize: previewSize).lineHeight
@@ -206,6 +208,12 @@ struct ToocTalkRow: View {
             if room.isGroup {
                 ToocCountBadge(count: room.memberIDs.count + 1)
             }
+            if room.mentioned {
+                Image(systemName: "at.circle.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(theme.accent)
+                    .accessibilityLabel("メンションがあります")
+            }
             Group {
                 if !room.draft.isEmpty { Image(systemName: "pencil.circle.fill") }
                 if room.muted { Image(systemName: "speaker.slash.fill") }
@@ -220,7 +228,12 @@ struct ToocTalkRow: View {
     private var preview: some View {
         if let last = room.last {
             HStack(alignment: .top, spacing: 4) {
-                if last.sending {
+                if last.failed {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.red)
+                        .frame(height: Self.previewLine)
+                } else if last.sending {
                     // Centred on the first line of text.
                     ProgressView()
                         .controlSize(.mini)

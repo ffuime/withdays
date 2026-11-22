@@ -62,7 +62,7 @@ struct ToocIconImage: View {
 /// The round icon used in the lists, with a badge (pin or star) in the lower right when given.
 struct ToocAvatar: View {
     let user: ToocUser
-    var size: CGFloat = 52
+    var size: CGFloat = 48
     var badge: String?
     @Environment(\.toocTheme) private var theme
 

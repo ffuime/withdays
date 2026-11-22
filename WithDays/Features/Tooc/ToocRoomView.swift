@@ -38,6 +38,10 @@ struct ToocRoomView: View {
     @State private var confirmLeave = false
     @State private var confirmHide = false
     @State private var reactingTo: ToocMessage?
+    @State private var forwarding: ToocMessage?
+    @State private var showStickers = false
+    /// People called with @ while typing (their name as typed → toocID).
+    @State private var mentionPicks: [String: String] = [:]
     /// The sticky date: which day is at the top, where each day's own label is, and the bars' height above.
     @State private var topDay: Date?
     @State private var dayTops: [Date: CGFloat] = [:]
@@ -53,7 +57,25 @@ struct ToocRoomView: View {
                         if let stranger = notFriend(room) {
                             notFriendBar(stranger)
                         } else {
-                            inputBar(room)
+                            VStack(spacing: 0) {
+                                let candidates = mentionCandidates(room)
+                                if !candidates.isEmpty {
+                                    ToocMentionStrip(candidates: candidates, onPick: pickMention)
+                                        .padding(.top, 6)
+                                }
+                                inputBar(room)
+                                if showStickers {
+                                    ToocStickerPanel { url in
+                                        withAnimation(.snappy) {
+                                            store.send(.sticker(url: url), in: roomID, replyTo: replyTo?.id)
+                                            replyTo = nil
+                                        }
+                                    }
+                                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                                }
+                            }
+                            .animation(.snappy, value: showStickers)
+                            .animation(.snappy, value: mentionCandidates(room).map(\.id))
                         }
                     }
                     .toolbar { toolbar(room) }
@@ -87,6 +109,10 @@ struct ToocRoomView: View {
             }
         }
         .sheet(isPresented: $showMembers) { ToocMembersView(roomID: roomID) }
+        .sheet(item: $forwarding) { message in ToocForwardView(message: message) }
+        .onChange(of: focused) { _, focused in
+            if focused { withAnimation(.snappy) { showStickers = false } }
+        }
         .sheet(item: $reactingTo) { message in
             ToocEmojiPicker { emoji in
                 withAnimation(.snappy) { store.react(emoji, to: message.id, in: roomID) }
@@ -312,6 +338,7 @@ struct ToocRoomView: View {
     private func actions(for message: ToocMessage) -> ToocMessageActions {
         ToocMessageActions(
             moreReactions: { reactingTo = message },
+            forward: { forwarding = message },
             reply: {
                 withAnimation(.snappy) {
                     editing = nil
@@ -417,12 +444,44 @@ struct ToocRoomView: View {
                     }
                 }
                 if !text.isEmpty {
-                    store.send(.text(text), in: roomID, replyTo: attachments.isEmpty ? replyTo?.id : nil, silent: silent)
+                    store.send(.text(text), in: roomID, replyTo: attachments.isEmpty ? replyTo?.id : nil, silent: silent,
+                               mentions: mentions(in: text))
                 }
                 attachments = []
                 replyTo = nil
+                mentionPicks = [:]
             }
             draft = ""
+        }
+    }
+
+    /// The people still called in the text (a deleted @name no longer counts).
+    private func mentions(in text: String) -> [String] {
+        Array(Set(mentionPicks.filter { text.contains("@\($0.key)") }.map(\.value)))
+    }
+
+    /// The word being typed after @ in a group (nil when not typing a name).
+    private var mentionQuery: String? {
+        guard room?.isGroup == true, let at = draft.lastIndex(of: "@") else { return nil }
+        if at != draft.startIndex, !draft[draft.index(before: at)].isWhitespace { return nil }
+        let typed = draft[draft.index(after: at)...]
+        guard !typed.contains(where: \.isWhitespace), typed.count <= 20 else { return nil }
+        return String(typed)
+    }
+
+    private func mentionCandidates(_ room: ToocRoom) -> [ToocUser] {
+        guard let query = mentionQuery else { return [] }
+        return room.memberIDs.compactMap { store.user($0) }.filter { user in
+            query.isEmpty || user.name.localizedCaseInsensitiveContains(query)
+                || user.displayName.localizedCaseInsensitiveContains(query) || user.id.contains(query.lowercased())
+        }
+    }
+
+    private func pickMention(_ user: ToocUser) {
+        guard let at = draft.lastIndex(of: "@") else { return }
+        withAnimation(.snappy) {
+            draft = String(draft[..<at]) + "@\(user.name) "
+            mentionPicks[user.name] = user.id
         }
     }
 
@@ -534,6 +593,10 @@ struct ToocRoomView: View {
                 } else if !room.isMynote, let other = room.memberIDs.first {
                     Button("プロフィール", systemImage: "person.crop.circle") { router.sheet = .profile(other) }
                 }
+            }
+            Section {
+                Button("ノート", systemImage: "note.text") { router.sheet = .notes(roomID, nil) }
+                Button("アルバム", systemImage: "photo.stack") { router.sheet = .albums(roomID, nil) }
             }
             Section {
                 Button(room.pinned ? "ピン留めを外す" : "ピン留め", systemImage: room.pinned ? "pin.slash" : "pin") {
@@ -655,9 +718,24 @@ struct ToocRoomView: View {
                         sendButton(room)
                             .padding(.bottom, 6)
                             .transition(.scale.combined(with: .opacity))
+                    } else {
+                        Button {
+                            withAnimation(.snappy) {
+                                showStickers.toggle()
+                                if showStickers { focused = false }
+                            }
+                        } label: {
+                            Image(systemName: showStickers ? "keyboard" : "face.smiling")
+                                .font(.system(size: 21, weight: .medium))
+                                .foregroundStyle(showStickers ? theme.accent : Color.secondary)
+                                .contentTransition(.symbolEffect(.replace))
+                                .frame(width: 36, height: Self.barHeight)
+                        }
+                        .accessibilityLabel(showStickers ? "キーボード" : "スタンプ")
+                        .transition(.scale.combined(with: .opacity))
                     }
                 }
-                .padding(.trailing, canSend ? 6 : 16)
+                .padding(.trailing, 6)
                 .animation(.snappy(duration: 0.2), value: canSend)
             }
             // The whole field is glass that stretches under the finger.
@@ -755,10 +833,11 @@ struct ToocRoomView: View {
 
 struct ToocMessageActions {
     /// Nothing happens (a preview).
-    static let none = ToocMessageActions(moreReactions: {}, reply: {}, edit: {}, select: {}, openPhoto: { _, _ in },
-                                         openFile: { _ in })
+    static let none = ToocMessageActions(moreReactions: {}, forward: {}, reply: {}, edit: {}, select: {},
+                                         openPhoto: { _, _ in }, openFile: { _ in })
 
     var moreReactions: () -> Void
+    var forward: () -> Void
     var reply: () -> Void
     var edit: () -> Void
     var select: () -> Void
@@ -845,9 +924,32 @@ struct ToocMessageRow: View {
     private var myRow: some View {
         HStack(alignment: .bottom, spacing: 5) {
             Spacer(minLength: 40)
-            if last || message.sending { meta(alignment: .trailing) }
+            if message.failed {
+                failedMark
+            } else if last || message.sending {
+                meta(alignment: .trailing)
+            }
             bubbleWithReactions
         }
+    }
+
+    /// Couldn't be sent: tap to send again or give up.
+    private var failedMark: some View {
+        Menu {
+            Button("再送", systemImage: "arrow.clockwise") {
+                withAnimation(.snappy) { store.resend(message.id, in: room.id) }
+            }
+            Button("削除", systemImage: "trash", role: .destructive) {
+                withAnimation(.snappy) { store.discardFailed(message.id, in: room.id) }
+            }
+        } label: {
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 20))
+                .foregroundStyle(.red)
+                .frame(width: 28, height: 28)
+        }
+        .accessibilityLabel("送信できませんでした")
+        .transition(.scale.combined(with: .opacity))
     }
 
     /// 既読 (with the mute mark beside it) above the time.
@@ -936,6 +1038,13 @@ struct ToocMessageRow: View {
             case .remotePhoto(let address):
                 ToocPhotoBubble(file: nil, address: address, open: actions.openPhoto)
                     .padding(mine ? .trailing : .leading, ToocBubbleShape.tail)
+            case .sticker(let url):
+                ToocStickerImage(url: url)
+                    .frame(width: 136, height: 136)
+                    .padding(mine ? .trailing : .leading, ToocBubbleShape.tail)
+            case .note, .album:
+                ToocBoardCard(message: message, roomID: room.id, mine: mine)
+                    .padding(mine ? .trailing : .leading, ToocBubbleShape.tail)
             default:
                 ToocCardBubble(message: message, room: room, mine: mine, openFile: actions.openFile)
                     .padding(mine ? .trailing : .leading, ToocBubbleShape.tail)
@@ -948,8 +1057,10 @@ struct ToocMessageRow: View {
                     .padding(mine ? .trailing : .leading, ToocBubbleShape.tail)
             }
         }
-        .opacity(message.sending ? 0.6 : 1)
-        .contextMenu { menu }
+        .opacity(message.sending || message.failed ? 0.6 : 1)
+        .contextMenu {
+            if !message.sending && !message.failed { menu }
+        }
     }
 
     /// The system's long-press menu: the five favourite reactions (and ⋯ for every emoji) on top, then the actions.
@@ -967,6 +1078,12 @@ struct ToocMessageRow: View {
         .controlGroupStyle(.palette)
         .menuActionDismissBehavior(.enabled)
         Button("返信", systemImage: "arrowshape.turn.up.left", action: actions.reply)
+        if message.forwardable {
+            Button("転送", systemImage: "arrowshape.turn.up.right", action: actions.forward)
+        }
+        if case .sticker(let url) = message.kind, !store.stickers.contains(where: { $0.url == url }) {
+            Button("スタンプに追加", systemImage: "face.smiling") { store.saveSticker(url) }
+        }
         if case .text(let text) = message.kind {
             Button("コピー", systemImage: "doc.on.doc") { UIPasteboard.general.string = text }
             Button("選択", systemImage: "selection.pin.in.out", action: actions.select)
@@ -989,7 +1106,7 @@ struct ToocMessageRow: View {
     private func longText(_ text: String) -> some View {
         let color = mine ? Color.white : Color.primary
         return VStack(alignment: .leading, spacing: 6) {
-            Text(ToocLinks.attributed(text))
+            Text(ToocLinks.attributed(text, mentions: mentionNames, color: mine ? nil : theme.accent))
                 .font(.system(size: textSize))
                 .foregroundStyle(color)
                 .tint(mine ? Color.white : theme.accent)
@@ -1028,6 +1145,14 @@ struct ToocMessageRow: View {
                     }
                 }
             }
+        }
+    }
+
+    /// The names the people called go by, as they may have been typed.
+    private var mentionNames: [String] {
+        message.mentions.flatMap { id -> [String] in
+            guard let user = store.user(id) else { return [] }
+            return [user.name, user.displayName]
         }
     }
 

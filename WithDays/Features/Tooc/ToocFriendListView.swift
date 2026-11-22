@@ -15,6 +15,7 @@ struct ToocFriendListView: View {
                         ToocRequestRow(user: user)
                             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                             .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                             .selectionDisabled()
                     }
                 } header: {
@@ -31,6 +32,7 @@ struct ToocFriendListView: View {
                 .tag(friend.id)
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                 .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
                 // A swipe right (a full one too) adds / removes the favourite.
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
                     Button {
