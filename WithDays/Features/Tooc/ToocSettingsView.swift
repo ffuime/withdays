@@ -16,7 +16,7 @@ struct ToocSettingsView: View {
                             Text("@\(store.me.id)").font(.subheadline).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Text("編集").font(.subheadline).foregroundStyle(Color.brand)
+                        Text("編集").font(.subheadline).foregroundStyle(store.theme.accent)
                     }
                 }
             }
@@ -154,13 +154,13 @@ struct ToocHiddenSettingsView: View {
             Section("非表示の友だち") {
                 if store.hiddenFriends.isEmpty { empty }
                 ForEach(store.hiddenFriends) { user in
-                    row(user.name, user: user, action: "再表示") { store.showFriend(user.id) }
+                    row(user.displayName, user: user, action: "再表示") { store.showFriend(user.id) }
                 }
             }
             Section("ブロック中") {
                 if store.blockedUsers.isEmpty { empty }
                 ForEach(store.blockedUsers) { user in
-                    row(user.name, user: user, action: "ブロック解除") { store.unblock(user.id) }
+                    row(user.displayName, user: user, action: "ブロック解除") { store.unblock(user.id) }
                 }
             }
             Section("非表示のトーク") {
@@ -208,36 +208,43 @@ struct ToocTalkSettingsView: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 13)
                     .padding(.vertical, 8)
-                    .background(Color.brand, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .background(store.theme.myBubble, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            Section("トーク背景") {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
-                    ForEach(ToocRoomBackground.allCases) { background in
+            Section {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 12) {
+                    ForEach(ToocTheme.allCases) { option in
                         Button {
-                            store.settings.background = background
+                            withAnimation(.snappy) { store.settings.theme = option }
                         } label: {
-                            VStack(spacing: 4) {
-                                Circle()
-                                    .fill(background.color ?? Color(.systemBackground))
-                                    .overlay(Circle().strokeBorder(.quaternary))
-                                    .overlay {
-                                        if store.settings.background == background {
-                                            Image(systemName: "checkmark")
-                                                .font(.caption.bold())
-                                                .foregroundStyle(background == .night ? Color.white : Color.brand)
-                                        }
-                                    }
-                                    .frame(width: 36, height: 36)
-                                Text(background.label)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                            VStack(spacing: 6) {
+                                // A tiny talk in that theme.
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Capsule().fill(option.theirBubble).frame(width: 34, height: 12)
+                                    Capsule().fill(option.myBubble).frame(width: 42, height: 12)
+                                        .frame(maxWidth: .infinity, alignment: .trailing)
+                                }
+                                .padding(10)
+                                .frame(height: 64)
+                                .background(option.fill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .strokeBorder(store.settings.theme == option ? option.accent : Color.secondary.opacity(0.25),
+                                                      lineWidth: store.settings.theme == option ? 2.5 : 1)
+                                }
+                                Text(option.label)
+                                    .font(.caption.weight(store.settings.theme == option ? .bold : .regular))
+                                    .foregroundStyle(store.settings.theme == option ? option.accent : Color.secondary)
                             }
                         }
                         .buttonStyle(.plain)
                     }
                 }
                 .padding(.vertical, 4)
+            } header: {
+                Text("テーマ")
+            } footer: {
+                Text("ボタン・文字・吹き出しの色と、tooc 全体の背景が変わります。")
             }
             Section {
                 Toggle("改行キーで送信", isOn: $store.settings.returnSends)

@@ -2,8 +2,9 @@ import SwiftUI
 
 private enum ToocProfilePage: Hashable { case bio, name }
 
-/// Someone's profile (or your own): their background, dark and blurred, with the icon in the middle and the name and
-/// one line of bio under it. Tap or pinch out the icon to see it whole; tap the bio or the name for all of it.
+/// Someone's profile (or your own): their background, dark and blurred, with the icon in the middle and the name,
+/// one line of bio and the birthday under it. Tap or pinch out the icon to see it whole; tap the bio or the name for
+/// all of it; tap anywhere else to see the background clearly (tap again to go back).
 struct ToocProfileSheet: View {
     let userID: String
 
@@ -13,13 +14,15 @@ struct ToocProfileSheet: View {
     @State private var path: [ToocProfilePage] = []
     @State private var showQR = false
     @State private var editing = false
+    @State private var clear = false
+    @State private var renaming = false
+    @State private var nickname = ""
 
     /// The round icon's place on screen, so the enlarged one grows out of it and goes back into it.
     @State private var avatarFrame: CGRect = .zero
     @State private var zoomShown = false
-    /// 0: the round icon; 1: the whole icon, as wide as the screen. Gestures move it in between.
+    /// 0: the round icon; 1: the whole icon, as wide as the screen.
     @State private var progress: CGFloat = 0
-    @State private var drag: CGSize = .zero
 
     private static let avatarSize: CGFloat = 112
 
@@ -43,54 +46,88 @@ struct ToocProfileSheet: View {
         .presentationBackground(.black)
         .sheet(isPresented: $showQR) { ToocQRView(start: .show) }
         .sheet(isPresented: $editing) { ToocEditProfileView() }
+        .alert("表示名を変更", isPresented: $renaming) {
+            TextField(user.name, text: $nickname)
+            Button("キャンセル", role: .cancel) {}
+            if user.nickname != nil {
+                Button("元に戻す") { store.rename(userID, to: nil) }
+            }
+            Button("変更") { store.rename(userID, to: nickname) }
+        } message: {
+            Text("この端末でだけ、\(user.name)さんの名前をこう表示します。")
+        }
     }
 
     // MARK: Parts
 
+    /// Their background photo, or one drawn from their icon; dark and blurred unless cleared by a tap.
     private var backdrop: some View {
         ZStack {
-            if user.hasBackground {
-                ToocIconBackdrop(user: user, blur: 50)
+            if user.backgroundFile != nil || user.hasBackground {
+                ToocIconBackdrop(user: user, blur: clear ? 0 : 50)
             } else {
                 LinearGradient(colors: [Color(white: 0.22), Color(white: 0.08)], startPoint: .top, endPoint: .bottom)
             }
-            Color.black.opacity(0.45)
+            Color.black.opacity(clear ? 0 : 0.45)
         }
+        .animation(.easeInOut(duration: 0.35), value: clear)
     }
 
-    /// The icon sits in the middle of the sheet; the name and bio hang from it.
+    /// The icon sits in the middle of the sheet; the name, bio and birthday hang from it.
     private var main: some View {
         GeometryReader { proxy in
-            VStack(spacing: 14) {
-                ToocIconImage(user: user)
-                    .frame(width: Self.avatarSize, height: Self.avatarSize)
-                    .clipShape(Circle())
-                    .opacity(zoomShown ? 0 : 1)
-                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { avatarFrame = $0 }
-                    .onTapGesture(perform: openZoom)
-                    .gesture(pinchOpen)
-                    .accessibilityLabel("アイコンを拡大")
-                    .accessibilityAddTraits(.isButton)
-                Button { path.append(.name) } label: {
-                    Text(user.name)
-                        .font(.title2.bold())
+            ZStack(alignment: .top) {
+                // Empty space: a tap clears the background.
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { clear.toggle() }
+                VStack(spacing: 14) {
+                    ToocIconImage(user: user)
+                        .frame(width: Self.avatarSize, height: Self.avatarSize)
+                        .clipShape(Circle())
+                        .opacity(zoomShown ? 0 : 1)
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { avatarFrame = $0 }
+                        .onTapGesture(perform: openZoom)
+                        .gesture(pinchOpen)
+                        .accessibilityLabel("アイコンを拡大")
+                        .accessibilityAddTraits(.isButton)
+                    Button { path.append(.name) } label: {
+                        HStack(spacing: 6) {
+                            Text(user.displayName)
+                                .font(.title2.bold())
+                                .lineLimit(1)
+                            if user.nickname != nil {
+                                Image(systemName: "pencil")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.white.opacity(0.7))
+                                    .accessibilityLabel("表示名を変更済み")
+                            }
+                        }
                         .foregroundStyle(.white)
-                        .lineLimit(1)
-                }
-                .buttonStyle(.plain)
-                if !user.bio.isEmpty {
-                    Button { path.append(.bio) } label: {
-                        Text(user.bio)
-                            .font(.subheadline)
-                            .foregroundStyle(.white.opacity(0.8))
-                            .lineLimit(1)
                     }
                     .buttonStyle(.plain)
+                    if !user.bio.isEmpty {
+                        Button { path.append(.bio) } label: {
+                            Text(user.bio)
+                                .font(.subheadline)
+                                .foregroundStyle(.white.opacity(0.8))
+                                .lineLimit(1)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if let birthday = user.birthday {
+                        Label(ToocTime.birthday(birthday), systemImage: "birthday.cake")
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
                 }
+                .padding(.horizontal, 32)
+                .padding(.top, max(0, (proxy.size.height - Self.avatarSize) / 2))
+                .opacity(clear ? 0 : 1)
+                .allowsHitTesting(!clear)
             }
-            .padding(.horizontal, 32)
-            .padding(.top, max(0, (proxy.size.height - Self.avatarSize) / 2))
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            .animation(.easeInOut(duration: 0.3), value: clear)
         }
         .ignoresSafeArea()
     }
@@ -131,7 +168,7 @@ struct ToocProfileSheet: View {
         }
     }
 
-    /// All of the bio, or the name with the toocID: left-aligned, in the middle of the screen, on the same background.
+    /// All of the bio, or the name with the toocID (and 変更 for a friend's display name).
     @ViewBuilder
     private func detail(_ page: ToocProfilePage) -> some View {
         ScrollView {
@@ -142,9 +179,14 @@ struct ToocProfileSheet: View {
                         .font(.body)
                         .foregroundStyle(.white)
                 case .name:
-                    Text(user.name)
+                    Text(user.displayName)
                         .font(.largeTitle.bold())
                         .foregroundStyle(.white)
+                    if user.nickname != nil {
+                        Text("本人の名前：\(user.name)")
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
                     Text("@\(user.id)")
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.6))
@@ -156,6 +198,17 @@ struct ToocProfileSheet: View {
             .containerRelativeFrame(.vertical, alignment: .center)
         }
         .scrollBounceBehavior(.basedOnSize)
+        .toolbar {
+            if page == .name, !isMe, store.users[userID] != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("変更") {
+                        nickname = user.nickname ?? ""
+                        renaming = true
+                    }
+                    .foregroundStyle(.white)
+                }
+            }
+        }
     }
 
     // MARK: Enlarged icon
@@ -164,90 +217,47 @@ struct ToocProfileSheet: View {
     private var pinchOpen: some Gesture {
         MagnifyGesture()
             .onChanged { value in
-                if !zoomShown {
-                    drag = .zero
-                    zoomShown = true
-                }
+                if !zoomShown { zoomShown = true }
                 progress = min(1, max(0, (value.magnification - 1) / 1.2))
             }
             .onEnded { _ in
-                if progress > 0.25 { settleOpen() } else { closeZoom() }
+                if progress > 0.25 {
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.84)) { progress = 1 }
+                } else {
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) { progress = 0 } completion: {
+                        zoomShown = false
+                    }
+                }
             }
     }
 
-    /// The icon, uncut and as wide as the screen, grown out of the round one. Dragging or pinching in takes it
-    /// back step by step, its corners rounding as it shrinks.
     @ViewBuilder
     private var zoomLayer: some View {
         if zoomShown {
-            GeometryReader { proxy in
-                let layer = proxy.frame(in: .global)
-                let small = avatarFrame.offsetBy(dx: -layer.minX, dy: -layer.minY)
-                let width = proxy.size.width
-                let full = CGRect(x: 0, y: (proxy.size.height - width) / 2, width: width, height: width)
-                let rect = Self.mix(small, full, progress)
+            ToocZoomLayer(
+                source: avatarFrame,
+                aspect: 1,
+                sourceRadius: Self.avatarSize / 2,
+                progress: $progress,
+                onClosed: { zoomShown = false }
+            ) {
+                ToocIconImage(user: user)
+            } backdrop: {
                 ZStack {
-                    ZStack {
-                        ToocIconBackdrop(user: user, blur: 60)
-                        Color.black.opacity(0.55)
-                    }
-                    .opacity(Double(progress))
-                    ToocIconImage(user: user)
-                        .frame(width: rect.width, height: rect.height)
-                        .clipShape(RoundedRectangle(cornerRadius: rect.width / 2 * (1 - progress), style: .continuous))
-                        .position(x: rect.midX + drag.width, y: rect.midY + drag.height)
+                    ToocIconBackdrop(user: user, blur: 60)
+                    Color.black.opacity(0.55)
                 }
-                .contentShape(Rectangle())
-                .gesture(dragBack)
-                .simultaneousGesture(pinchBack)
-                .onTapGesture(perform: closeZoom)
+            } accessory: {
+                EmptyView()
             }
-            .ignoresSafeArea()
         }
-    }
-
-    private var dragBack: some Gesture {
-        DragGesture()
-            .onChanged { value in
-                drag = value.translation
-                progress = max(0.3, 1 - hypot(value.translation.width, value.translation.height) / 500)
-            }
-            .onEnded { value in
-                if hypot(value.translation.width, value.translation.height) > 90 { closeZoom() } else { settleOpen() }
-            }
-    }
-
-    private var pinchBack: some Gesture {
-        MagnifyGesture()
-            .onChanged { value in progress = min(1, max(0, value.magnification)) }
-            .onEnded { _ in if progress < 0.8 { closeZoom() } else { settleOpen() } }
-    }
-
-    private static func mix(_ a: CGRect, _ b: CGRect, _ t: CGFloat) -> CGRect {
-        CGRect(x: a.minX + (b.minX - a.minX) * t, y: a.minY + (b.minY - a.minY) * t,
-               width: a.width + (b.width - a.width) * t, height: a.height + (b.height - a.height) * t)
     }
 
     private func openZoom() {
-        drag = .zero
         progress = 0
         zoomShown = true
-        Task { @MainActor in settleOpen() }
-    }
-
-    private func settleOpen() {
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.84)) {
-            progress = 1
-            drag = .zero
-        }
-    }
-
-    private func closeZoom() {
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
-            progress = 0
-            drag = .zero
-        } completion: {
-            zoomShown = false
+        Task { @MainActor in
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.84)) { progress = 1 }
         }
     }
 }

@@ -19,7 +19,7 @@ struct ToocIconImage: View {
                         .font(.system(size: side * 0.44, weight: .semibold))
                         .foregroundStyle(.white)
                 }
-            } else if let file = user.iconFile, let photo = ToocPhotos.image(file) {
+            } else if let file = user.iconFile, let photo = ToocFiles.image(file) {
                 Image(uiImage: photo)
                     .resizable()
                     .scaledToFill()
@@ -53,6 +53,7 @@ struct ToocAvatar: View {
     let user: ToocUser
     var size: CGFloat = 52
     var badge: String?
+    @Environment(\.toocTheme) private var theme
 
     var body: some View {
         ToocIconImage(user: user)
@@ -66,10 +67,10 @@ struct ToocAvatar: View {
                         .rotationEffect(.degrees(badge.hasPrefix("pin") ? 45 : 0))
                         .foregroundStyle(.white)
                         .frame(width: side, height: side)
-                        .background(Circle().fill(Color.brand))
+                        .background(Circle().fill(theme.accent))
                         // A ring of the background's colour, so it reads as laid on top of the icon.
                         .padding(2)
-                        .background(Circle().fill(Color(.systemBackground)))
+                        .background(Circle().fill(theme.fill))
                         .offset(x: 3, y: 3)
                 }
             }
@@ -81,6 +82,7 @@ struct ToocAvatar: View {
 struct ToocCountBadge: View {
     let count: Int
     var prominent = false
+    @Environment(\.toocTheme) private var theme
 
     var body: some View {
         Text(count > 999 ? "999+" : "\(count)")
@@ -89,19 +91,30 @@ struct ToocCountBadge: View {
             .foregroundStyle(prominent ? Color.white : Color.secondary)
             .padding(.horizontal, prominent ? 6 : 4)
             .frame(minWidth: prominent ? 22 : 16, minHeight: prominent ? 22 : 16)
-            .background(Capsule().fill(prominent ? Color.brand : Color(.tertiarySystemFill)))
+            .background(Capsule().fill(prominent ? theme.accent : Color(.tertiarySystemFill)))
     }
 }
 
-/// The background drawn from someone's icon: their icon spread over everything and blurred.
+/// Someone's profile background: their background photo, or their icon spread over everything and blurred.
 struct ToocIconBackdrop: View {
     let user: ToocUser
     var blur: CGFloat = 40
 
     var body: some View {
-        ToocIconImage(user: user)
-            .scaleEffect(1.4)
-            .blur(radius: blur)
-            .clipped()
+        if let file = user.backgroundFile, let photo = ToocFiles.image(file) {
+            Color.clear
+                .overlay {
+                    Image(uiImage: photo)
+                        .resizable()
+                        .scaledToFill()
+                }
+                .blur(radius: blur)
+                .clipped()
+        } else {
+            ToocIconImage(user: user)
+                .scaleEffect(1.4)
+                .blur(radius: blur)
+                .clipped()
+        }
     }
 }

@@ -6,6 +6,7 @@ enum ToocRoute: Hashable {
     case room(String)
     case search
     case notices
+    case scheduled
     case settings
     case settingsAccount
     case settingsPassword
@@ -34,6 +35,52 @@ enum ToocSheet: Identifiable, Hashable {
     }
 }
 
+/// Something that needs a yes first: hiding, deleting, blocking.
+enum ToocConfirm: Identifiable, Hashable {
+    case hideRooms(Set<String>)
+    case deleteRooms(Set<String>)
+    case hideFriends(Set<String>)
+    case blockFriends(Set<String>)
+
+    var id: String { "\(self)" }
+
+    var title: String {
+        switch self {
+        case .hideRooms(let ids): ids.count > 1 ? "\(ids.count)件のトークを非表示にしますか？" : "トークを非表示にしますか？"
+        case .deleteRooms(let ids): ids.count > 1 ? "\(ids.count)件のトークを削除しますか？" : "トークを削除しますか？"
+        case .hideFriends(let ids): ids.count > 1 ? "\(ids.count)人を非表示にしますか？" : "友だちを非表示にしますか？"
+        case .blockFriends(let ids): ids.count > 1 ? "\(ids.count)人をブロックしますか？" : "ブロックしますか？"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .hideRooms: "トーク一覧から隠れます。設定の「非表示・ブロック」か、新しいメッセージで戻ります。"
+        case .deleteRooms: "メッセージと写真がすべて消え、元に戻せません。"
+        case .hideFriends: "友だち一覧から隠れます。設定の「非表示・ブロック」で戻せます。"
+        case .blockFriends: "メッセージが届かなくなり、トークも隠れます。設定の「非表示・ブロック」で解除できます。"
+        }
+    }
+
+    var button: String {
+        switch self {
+        case .hideRooms, .hideFriends: "非表示"
+        case .deleteRooms: "削除"
+        case .blockFriends: "ブロック"
+        }
+    }
+
+    @MainActor
+    func perform(_ store: ToocStore) {
+        switch self {
+        case .hideRooms(let ids): ids.forEach { id in store.update(id) { $0.hidden = true } }
+        case .deleteRooms(let ids): ids.forEach(store.delete)
+        case .hideFriends(let ids): ids.forEach(store.hideFriend)
+        case .blockFriends(let ids): ids.forEach(store.block)
+        }
+    }
+}
+
 /// Where tooc is: the pushed screens over the tabs, the tab, selection, and the sheet on top.
 @MainActor
 @Observable
@@ -42,12 +89,17 @@ final class ToocRouter {
     var tab = ToocTab.talk {
         didSet { if oldValue != tab { endSelecting() } }
     }
+    var filter = ToocTalkFilter.all
     var selecting = false
     var selection: Set<String> = []
     var sheet: ToocSheet? = nil
+    var confirm: ToocConfirm? = nil
+    /// A room to open with the keyboard up.
+    var focusRoomID: String? = nil
 
-    func open(room id: String) {
+    func open(room id: String, focus: Bool = false) {
         sheet = nil
+        focusRoomID = focus ? id : nil
         path = [.room(id)]
     }
 
@@ -64,6 +116,7 @@ final class ToocRouter {
     func reset() {
         path = []
         sheet = nil
+        confirm = nil
         tab = .talk
         endSelecting()
     }
@@ -78,6 +131,7 @@ struct ToocRootView: View {
     @State private var router = ToocRouter()
 
     var body: some View {
+        let theme = store.theme
         Group {
             if store.signedIn {
                 main
@@ -87,6 +141,9 @@ struct ToocRootView: View {
         }
         .environment(store)
         .environment(router)
+        .environment(\.toocTheme, theme)
+        .tint(theme.accent)
+        .environment(\.colorScheme, theme.dark ? .dark : colorScheme)
         .onChange(of: store.signedIn) { router.reset() }
         .task {
             // Scheduled messages go out when their time comes.
@@ -98,6 +155,8 @@ struct ToocRootView: View {
         .onDisappear { store.flush() }
     }
 
+    @Environment(\.colorScheme) private var colorScheme
+
     private var main: some View {
         @Bindable var router = router
         return NavigationStack(path: $router.path) {
@@ -107,43 +166,40 @@ struct ToocRootView: View {
                 .navigationDestination(for: ToocRoute.self) { ToocDestination(route: $0) }
         }
         .sheet(item: $router.sheet) { ToocSheetView(sheet: $0) }
+        .confirmationDialog(router.confirm?.title ?? "", isPresented: Binding(
+            get: { router.confirm != nil }, set: { if !$0 { router.confirm = nil } }
+        ), titleVisibility: .visible, presenting: router.confirm) { confirm in
+            Button(confirm.button, role: .destructive) {
+                withAnimation(.snappy) {
+                    confirm.perform(store)
+                    router.endSelecting()
+                }
+            }
+        } message: { confirm in
+            Text(confirm.message)
+        }
         .overlay(alignment: .top) { ToocBanner() }
     }
 
+    /// The three tabs stay alive (each keeps its scroll), with tooc's own glass tab bar over them.
     private var tabs: some View {
         let selection = Binding(get: { router.tab }, set: { tab in withAnimation(.snappy) { router.tab = tab } })
-        return TabView(selection: selection) {
-            Tab(value: ToocTab.talk) {
-                ToocTalkListView()
-            } label: {
-                tabLabel("トーク", "message", .talk)
-            }
-            .badge(store.unreadTotal)
-
-            Tab(value: ToocTab.friends) {
-                ToocFriendListView()
-            } label: {
-                tabLabel("友だち", "person.2", .friends)
-            }
-
-            Tab(value: ToocTab.me) {
-                ToocMeView()
-            } label: {
-                tabLabel("じぶん", "face.smiling", .me)
-            }
+        return ZStack {
+            page(.talk) { ToocTalkListView() }
+            page(.friends) { ToocFriendListView() }
+            page(.me) { ToocMeView() }
         }
-        // Outlined everywhere; only the tab under the glass names its filled symbol.
-        .environment(\.symbolVariants, .none)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            ToocTabBar(selection: selection, badge: store.unreadTotal)
+        }
+        .background(store.theme.fill.ignoresSafeArea())
     }
 
-    private func tabLabel(_ title: String, _ symbol: String, _ tab: ToocTab) -> some View {
-        Label {
-            Text(title)
-        } icon: {
-            Image(systemName: router.tab == tab ? "\(symbol).fill" : symbol)
-                .environment(\.symbolVariants, .none)
-        }
-        .environment(\.symbolVariants, .none)
+    private func page<Content: View>(_ tab: ToocTab, @ViewBuilder content: () -> Content) -> some View {
+        content()
+            .opacity(router.tab == tab ? 1 : 0)
+            .allowsHitTesting(router.tab == tab)
+            .accessibilityHidden(router.tab != tab)
     }
 
     // MARK: Top bar, shared by the tabs so its pills morph between them
@@ -154,11 +210,10 @@ struct ToocRootView: View {
             if router.selecting {
                 Button("完了") { withAnimation(.snappy) { router.endSelecting() } }
                     .fontWeight(.semibold)
+                    .foregroundStyle(store.theme.accent)
             } else {
-                Button(action: onCalendar) {
-                    Image(systemName: "chevron.left")
-                }
-                .accessibilityLabel("カレンダーに戻る")
+                Button(action: onCalendar) { ToocBarIcon("chevron.left") }
+                    .accessibilityLabel("カレンダーに戻る")
                 switch router.tab {
                 case .talk: ToocTalkSortMenu()
                 case .friends: ToocFriendSortMenu()
@@ -173,22 +228,18 @@ struct ToocRootView: View {
                 Menu {
                     ToocAddFriendSection()
                 } label: {
-                    Image(systemName: "plus")
+                    ToocBarIcon("plus")
                 }
                 .accessibilityLabel("友だち追加")
                 Button { router.path.append(.notices) } label: {
-                    Image(systemName: store.unseenNotices > 0 ? "bell.badge" : "bell")
+                    ToocBarIcon(store.unseenNotices > 0 ? "bell.badge" : "bell")
                 }
                 .accessibilityLabel("お知らせ")
-                Button { router.path.append(.settings) } label: {
-                    Image(systemName: "gearshape")
-                }
-                .accessibilityLabel("設定")
+                Button { router.path.append(.settings) } label: { ToocBarIcon("gearshape") }
+                    .accessibilityLabel("設定")
             } else {
-                Button { router.path.append(.search) } label: {
-                    Image(systemName: "magnifyingglass")
-                }
-                .accessibilityLabel("検索")
+                Button { router.path.append(.search) } label: { ToocBarIcon("magnifyingglass") }
+                    .accessibilityLabel("検索")
                 ToocPlusMenu()
                 Menu {
                     Button("toocを選択", systemImage: "checkmark.circle") {
@@ -197,39 +248,62 @@ struct ToocRootView: View {
                     Button("すべて既読にする", systemImage: "checkmark.message") { store.markAllRead() }
                     Button("設定", systemImage: "gearshape") { router.path.append(.settings) }
                 } label: {
-                    Image(systemName: "ellipsis")
+                    ToocBarIcon("ellipsis")
                 }
                 .accessibilityLabel("その他")
             }
         }
     }
 
-    /// What can be done to the chosen talks or friends.
+    /// What can be done to the chosen talks or friends. Hiding, deleting and blocking ask first.
     @ViewBuilder
     private var selectionActions: some View {
         let chosen = router.selection
         if router.tab == .friends {
-            Button { act { chosen.forEach(store.toggleFavorite) } } label: { Image(systemName: "star") }
+            Button {
+                withAnimation(.snappy) {
+                    chosen.forEach(store.toggleFavorite)
+                    router.endSelecting()
+                }
+            } label: { ToocBarIcon("star") }
                 .accessibilityLabel("お気に入り")
-            Button { act { chosen.forEach(store.hideFriend) } } label: { Image(systemName: "eye.slash") }
+                .disabled(chosen.isEmpty)
+            Button { router.confirm = .hideFriends(chosen) } label: { ToocBarIcon("eye.slash") }
                 .accessibilityLabel("非表示")
-            Button { act { chosen.forEach(store.block) } } label: { Image(systemName: "nosign") }
+                .disabled(chosen.isEmpty)
+            Button { router.confirm = .blockFriends(chosen) } label: { ToocBarIcon("nosign") }
                 .accessibilityLabel("ブロック")
+                .disabled(chosen.isEmpty)
         } else {
-            Button { act { chosen.forEach(store.markRead) } } label: { Image(systemName: "checkmark.message") }
+            Button {
+                withAnimation(.snappy) {
+                    chosen.forEach(store.markRead)
+                    router.endSelecting()
+                }
+            } label: { ToocBarIcon("checkmark.message") }
                 .accessibilityLabel("既読にする")
-            Button { act { chosen.forEach { id in store.update(id) { $0.hidden = true } } } } label: { Image(systemName: "eye.slash") }
+                .disabled(chosen.isEmpty)
+            Button { router.confirm = .hideRooms(chosen) } label: { ToocBarIcon("eye.slash") }
                 .accessibilityLabel("非表示")
-            Button(role: .destructive) { act { chosen.forEach(store.delete) } } label: { Image(systemName: "trash") }
+                .disabled(chosen.isEmpty)
+            Button { router.confirm = .deleteRooms(chosen) } label: { ToocBarIcon("trash") }
                 .accessibilityLabel("削除")
+                .disabled(chosen.isEmpty)
         }
     }
+}
 
-    private func act(_ change: () -> Void) {
-        withAnimation(.snappy) {
-            change()
-            router.endSelecting()
-        }
+/// A top-bar symbol: a little smaller than the system's, in the theme's colour.
+struct ToocBarIcon: View {
+    let name: String
+    @Environment(\.toocTheme) private var theme
+
+    init(_ name: String) { self.name = name }
+
+    var body: some View {
+        Image(systemName: name)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(theme.accent)
     }
 }
 
@@ -242,6 +316,7 @@ private struct ToocDestination: View {
         case .room(let id): ToocRoomView(roomID: id)
         case .search: ToocSearchView()
         case .notices: ToocNoticesView()
+        case .scheduled: ToocScheduledView()
         case .settings: ToocSettingsView()
         case .settingsAccount: ToocAccountSettingsView()
         case .settingsPassword: ToocPasswordView()
@@ -254,7 +329,6 @@ private struct ToocDestination: View {
 
 private struct ToocSheetView: View {
     let sheet: ToocSheet
-    @Environment(ToocStore.self) private var store
 
     var body: some View {
         switch sheet {
@@ -280,7 +354,7 @@ struct ToocPlusMenu: View {
             }
             ToocAddFriendSection()
         } label: {
-            Image(systemName: "plus")
+            ToocBarIcon("plus")
         }
         .accessibilityLabel("追加")
     }
@@ -305,17 +379,17 @@ struct ToocTalkSortMenu: View {
         @Bindable var store = store
         Menu {
             Section {
-                Toggle("お気に入りを優先", isOn: $store.favoritesFirst)
-                Toggle("未読メッセージを優先", isOn: $store.unreadFirst)
+                Toggle("お気に入りを優先", isOn: $store.favoritesFirst.animation(.snappy))
+                Toggle("未読メッセージを優先", isOn: $store.unreadFirst.animation(.snappy))
             }
             Section {
-                Picker("並び替え", selection: $store.talkSort) {
+                Picker("並び替え", selection: $store.talkSort.animation(.snappy)) {
                     ForEach([ToocTalkSort.added, .conversation, .profile]) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.inline)
             }
         } label: {
-            Image(systemName: "arrow.up.arrow.down")
+            ToocBarIcon("arrow.up.arrow.down")
         }
         .accessibilityLabel("並び替え")
     }
@@ -327,12 +401,12 @@ struct ToocFriendSortMenu: View {
     var body: some View {
         @Bindable var store = store
         Menu {
-            Picker("並び替え", selection: $store.friendSort) {
+            Picker("並び替え", selection: $store.friendSort.animation(.snappy)) {
                 ForEach(ToocTalkSort.allCases) { Text($0.label).tag($0) }
             }
             .pickerStyle(.inline)
         } label: {
-            Image(systemName: "arrow.up.arrow.down")
+            ToocBarIcon("arrow.up.arrow.down")
         }
         .accessibilityLabel("並び替え")
     }
@@ -342,6 +416,7 @@ struct ToocFriendSortMenu: View {
 private struct ToocBanner: View {
     @Environment(ToocStore.self) private var store
     @Environment(ToocRouter.self) private var router
+    @Environment(\.toocTheme) private var theme
 
     var body: some View {
         ZStack {
@@ -359,7 +434,7 @@ private struct ToocBanner: View {
                             ToocAvatar(user: user, size: 36)
                         } else {
                             Image(systemName: "bell.fill")
-                                .foregroundStyle(Color.brand)
+                                .foregroundStyle(theme.accent)
                                 .frame(width: 36, height: 36)
                         }
                         VStack(alignment: .leading, spacing: 1) {

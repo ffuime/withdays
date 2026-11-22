@@ -30,15 +30,18 @@ struct ToocNewTalkView: View {
 
     @Environment(ToocStore.self) private var store
     @Environment(ToocRouter.self) private var router
+    @Environment(\.toocTheme) private var theme
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     @State private var chosen: Set<String> = []
     @State private var name = ""
 
     private var friends: [ToocUser] {
-        let all = store.friends.sorted { $0.name < $1.name }
+        let all = store.friends.sorted { $0.displayName < $1.displayName }
         guard !query.isEmpty else { return all }
-        return all.filter { $0.name.localizedCaseInsensitiveContains(query) || $0.id.localizedCaseInsensitiveContains(query) }
+        return all.filter {
+            $0.displayName.localizedCaseInsensitiveContains(query) || $0.id.localizedCaseInsensitiveContains(query)
+        }
     }
 
     var body: some View {
@@ -62,13 +65,13 @@ struct ToocNewTalkView: View {
                         } label: {
                             HStack(spacing: 12) {
                                 ToocAvatar(user: friend, size: 40)
-                                Text(friend.name)
+                                Text(friend.displayName)
                                     .foregroundStyle(.primary)
                                 Spacer()
                                 if group {
                                     Image(systemName: chosen.contains(friend.id) ? "checkmark.circle.fill" : "circle")
                                         .font(.title3)
-                                        .foregroundStyle(chosen.contains(friend.id) ? Color.brand : Color.secondary)
+                                        .foregroundStyle(chosen.contains(friend.id) ? theme.accent : Color.secondary)
                                 }
                             }
                             .contentShape(Rectangle())
@@ -105,7 +108,7 @@ struct ToocNewTalkView: View {
     private func makeGroup() {
         let members = store.friends.map(\.id).filter(chosen.contains)
         let typed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let names = members.compactMap { store.user($0)?.name }
+        let names = members.compactMap { store.user($0)?.displayName }
         let title = typed.isEmpty ? (names.prefix(3).joined(separator: "、") + (names.count > 3 ? "…" : "")) : typed
         router.open(room: store.makeGroup(name: title, members: members).id)
     }
@@ -121,11 +124,14 @@ struct ToocFindView: View {
 
     @Environment(ToocStore.self) private var store
     @Environment(ToocRouter.self) private var router
+    @Environment(\.toocTheme) private var theme
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
     @State private var found: ToocUser?
     @State private var error: String?
     @FocusState private var focused: Bool
+
+    private static let fieldHeight: CGFloat = 44
 
     var body: some View {
         if embedded {
@@ -157,15 +163,17 @@ struct ToocFindView: View {
                         .onSubmit(search)
                 }
                 .padding(.horizontal, 16)
-                .frame(height: 48)
-                .background(Color(.secondarySystemBackground), in: Capsule())
+                .frame(height: Self.fieldHeight)
+                .background(theme.card, in: Capsule())
+                // As tall as the field.
                 Button(action: search) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 18, weight: .semibold))
-                        .frame(width: 48, height: 48)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: Self.fieldHeight, height: Self.fieldHeight)
+                        .background(Circle().fill(text.isEmpty ? Color.secondary.opacity(0.4) : theme.accent))
                 }
-                .buttonStyle(.glassProminent)
-                .buttonBorderShape(.circle)
+                .buttonStyle(.plain)
                 .disabled(text.isEmpty)
                 .accessibilityLabel("検索")
             }
@@ -194,7 +202,7 @@ struct ToocFindView: View {
         let current = store.user(user.id) ?? user
         return VStack(spacing: 12) {
             ToocAvatar(user: current, size: 84)
-            Text(current.name)
+            Text(current.displayName)
                 .font(.title3.bold())
             Text("@\(current.id)")
                 .font(.subheadline)
@@ -227,7 +235,7 @@ struct ToocFindView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(theme.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
     private func search() {
@@ -256,10 +264,15 @@ struct ToocEditProfileView: View {
     @State private var bio = ""
     @State private var hue = 0.58
     @State private var iconFile: String?
+    @State private var backgroundFile: String?
     @State private var hasBackground = true
-    @State private var photoItem: PhotosPickerItem?
-    /// Photos chosen here and not kept, removed on leaving.
-    @State private var picked: [String] = []
+    @State private var hasBirthday = false
+    @State private var birthday = Calendar.current.date(from: DateComponents(year: 2005, month: 1, day: 1)) ?? .now
+    @State private var iconItem: PhotosPickerItem?
+    @State private var backgroundItem: PhotosPickerItem?
+    @State private var crop: ToocCropRequest?
+    /// Photos made here and not kept, removed on leaving.
+    @State private var made: [String] = []
     @State private var loaded = false
 
     private var preview: ToocUser {
@@ -267,6 +280,8 @@ struct ToocEditProfileView: View {
         user.name = name.isEmpty ? store.me.id : name
         user.hue = hue
         user.iconFile = iconFile
+        user.backgroundFile = backgroundFile
+        user.hasBackground = hasBackground
         return user
     }
 
@@ -274,29 +289,43 @@ struct ToocEditProfileView: View {
         NavigationStack {
             Form {
                 Section {
-                    VStack(spacing: 14) {
-                        ToocAvatar(user: preview, size: 96)
-                        HStack(spacing: 10) {
-                            PhotosPicker(selection: $photoItem, matching: .images) {
-                                Label("写真を選ぶ", systemImage: "photo")
-                            }
-                            .buttonStyle(.bordered)
-                            if iconFile != nil {
-                                Button("写真を外す", systemImage: "xmark", role: .destructive) {
-                                    withAnimation(.snappy) { iconFile = nil }
-                                }
-                                .buttonStyle(.bordered)
-                            }
-                        }
-                        .font(.subheadline)
+                    ZStack(alignment: .bottom) {
+                        // The background as the profile shows it, with the icon on top.
+                        ToocIconBackdrop(user: preview, blur: 0)
+                            .frame(height: 170)
+                            .overlay(Color.black.opacity(preview.backgroundFile == nil && !hasBackground ? 0.6 : 0.15))
+                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        ToocAvatar(user: preview, size: 92)
+                            .overlay(Circle().strokeBorder(.white, lineWidth: 3))
+                            .offset(y: 30)
                     }
-                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 34)
                     .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
                 }
-                if iconFile == nil {
-                    Section("アイコンの色") {
-                        Slider(value: $hue, in: 0...1)
+                Section("アイコン") {
+                    PhotosPicker(selection: $iconItem, matching: .images) {
+                        Label("写真を選んで切り抜く", systemImage: "person.crop.circle")
+                    }
+                    if iconFile != nil {
+                        Button("写真を外す", systemImage: "xmark.circle", role: .destructive) {
+                            withAnimation(.snappy) { iconFile = nil }
+                        }
+                    } else {
+                        Slider(value: $hue, in: 0...1) { Text("色") }
                             .tint(Color(hue: hue, saturation: 0.55, brightness: 0.85))
+                    }
+                }
+                Section("背景") {
+                    PhotosPicker(selection: $backgroundItem, matching: .images) {
+                        Label("写真を選んで切り抜く", systemImage: "photo")
+                    }
+                    if backgroundFile != nil {
+                        Button("背景の写真を外す", systemImage: "xmark.circle", role: .destructive) {
+                            withAnimation(.snappy) { backgroundFile = nil }
+                        }
+                    } else {
+                        Toggle("アイコンから背景をつくる", isOn: $hasBackground)
                     }
                 }
                 Section("名前") {
@@ -313,7 +342,12 @@ struct ToocEditProfileView: View {
                     Text("\(bio.count)/500")
                 }
                 Section {
-                    Toggle("アイコンから背景をつくる", isOn: $hasBackground)
+                    Toggle("誕生日を表示", isOn: $hasBirthday.animation(.snappy))
+                    if hasBirthday {
+                        DatePicker("誕生日", selection: $birthday, in: ...Date.now, displayedComponents: .date)
+                    }
+                }
+                Section {
                     LabeledContent("toocID", value: "@\(store.me.id)")
                 }
             }
@@ -330,14 +364,14 @@ struct ToocEditProfileView: View {
                         .accessibilityLabel("保存")
                 }
             }
-            .onChange(of: photoItem) { _, item in
-                guard let item else { return }
-                photoItem = nil
-                Task {
-                    if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data),
-                       let file = ToocPhotos.save(image, side: 1024) {
-                        picked.append(file)
-                        withAnimation(.snappy) { iconFile = file }
+            .onChange(of: iconItem) { _, item in load(item, icon: true) }
+            .onChange(of: backgroundItem) { _, item in load(item, icon: false) }
+            .sheet(item: $crop) { request in
+                ToocCropView(image: request.image, aspect: request.icon ? 1 : 1.6, circle: request.icon) { cropped in
+                    guard let file = ToocFiles.save(cropped, side: request.icon ? 1024 : 2048) else { return }
+                    made.append(file)
+                    withAnimation(.snappy) {
+                        if request.icon { iconFile = file } else { backgroundFile = file }
                     }
                 }
             }
@@ -345,21 +379,36 @@ struct ToocEditProfileView: View {
         .onAppear {
             guard !loaded else { return }
             loaded = true
-            name = store.me.name
-            bio = store.me.bio
-            hue = store.me.hue
-            iconFile = store.me.iconFile
-            hasBackground = store.me.hasBackground
+            let me = store.me
+            name = me.name
+            bio = me.bio
+            hue = me.hue
+            iconFile = me.iconFile
+            backgroundFile = me.backgroundFile
+            hasBackground = me.hasBackground
+            hasBirthday = me.birthday != nil
+            if let date = me.birthday { birthday = date }
         }
         .onDisappear {
-            for file in picked where file != store.me.iconFile { ToocPhotos.delete(file) }
+            for file in made where file != store.me.iconFile && file != store.me.backgroundFile { ToocFiles.delete(file) }
+        }
+    }
+
+    private func load(_ item: PhotosPickerItem?, icon: Bool) {
+        guard let item else { return }
+        if icon { iconItem = nil } else { backgroundItem = nil }
+        Task {
+            if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+                crop = ToocCropRequest(image: image, icon: icon)
+            }
         }
     }
 
     private func save() {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         store.editProfile(name: trimmed.isEmpty ? store.me.id : trimmed, bio: bio, hue: hue, iconFile: iconFile,
-                          hasBackground: hasBackground)
+                          backgroundFile: backgroundFile, hasBackground: hasBackground,
+                          birthday: hasBirthday ? birthday : nil)
         dismiss()
     }
 }
@@ -370,6 +419,7 @@ struct ToocEditProfileView: View {
 struct ToocSearchView: View {
     @Environment(ToocStore.self) private var store
     @Environment(ToocRouter.self) private var router
+    @Environment(\.toocTheme) private var theme
     @State private var query = ""
     @State private var presented = true
 
@@ -383,7 +433,7 @@ struct ToocSearchView: View {
         let q = query.trimmingCharacters(in: .whitespaces)
         let rooms: [ToocRoom] = q.isEmpty ? [] : store.visibleRooms.filter { store.name(of: $0).localizedCaseInsensitiveContains(q) }
         let friends: [ToocUser] = q.isEmpty ? [] : store.friends.filter {
-            $0.name.localizedCaseInsensitiveContains(q) || $0.id.localizedCaseInsensitiveContains(q)
+            $0.displayName.localizedCaseInsensitiveContains(q) || $0.id.localizedCaseInsensitiveContains(q)
         }
         let hits: [Hit] = q.isEmpty ? [] : Self.hits(in: store.visibleRooms, q)
         List {
@@ -396,6 +446,7 @@ struct ToocSearchView: View {
                                 Text(store.name(of: room)).foregroundStyle(.primary)
                             }
                         }
+                        .listRowBackground(Color.clear)
                     }
                 }
             }
@@ -406,11 +457,12 @@ struct ToocSearchView: View {
                             HStack(spacing: 12) {
                                 ToocAvatar(user: friend, size: 40)
                                 VStack(alignment: .leading, spacing: 1) {
-                                    Text(friend.name).foregroundStyle(.primary)
+                                    Text(friend.displayName).foregroundStyle(.primary)
                                     Text("@\(friend.id)").font(.caption).foregroundStyle(.secondary)
                                 }
                             }
                         }
+                        .listRowBackground(Color.clear)
                     }
                 }
             }
@@ -434,11 +486,13 @@ struct ToocSearchView: View {
                             }
                             .foregroundStyle(.primary)
                         }
+                        .listRowBackground(Color.clear)
                     }
                 }
             }
         }
         .listStyle(.plain)
+        .toocBackground(theme)
         .overlay {
             if !q.isEmpty, rooms.isEmpty, friends.isEmpty, hits.isEmpty {
                 ContentUnavailableView.search(text: q)
@@ -514,7 +568,7 @@ struct ToocRoomSearchView: View {
     }
 }
 
-// MARK: - Members, notices
+// MARK: - Members, notices, scheduled
 
 struct ToocMembersView: View {
     let roomID: String
@@ -533,7 +587,7 @@ struct ToocMembersView: View {
                 } label: {
                     HStack(spacing: 12) {
                         ToocAvatar(user: member, size: 40)
-                        Text(member.id == store.me.id ? "\(member.name)（あなた）" : member.name)
+                        Text(member.id == store.me.id ? "\(member.displayName)（あなた）" : member.displayName)
                             .foregroundStyle(.primary)
                     }
                 }
@@ -550,10 +604,11 @@ struct ToocMembersView: View {
     }
 }
 
-/// お知らせ: messages that arrived while you were elsewhere, friends added, scheduled messages sent.
+/// お知らせ: messages that arrived while you were elsewhere, and friends added.
 struct ToocNoticesView: View {
     @Environment(ToocStore.self) private var store
     @Environment(ToocRouter.self) private var router
+    @Environment(\.toocTheme) private var theme
 
     var body: some View {
         List {
@@ -570,9 +625,9 @@ struct ToocNoticesView: View {
                             ToocAvatar(user: user, size: 40)
                         } else {
                             Image(systemName: "bell.fill")
-                                .foregroundStyle(Color.brand)
+                                .foregroundStyle(theme.accent)
                                 .frame(width: 40, height: 40)
-                                .background(Color(.secondarySystemBackground), in: Circle())
+                                .background(theme.card, in: Circle())
                         }
                         VStack(alignment: .leading, spacing: 2) {
                             HStack {
@@ -588,10 +643,12 @@ struct ToocNoticesView: View {
                     }
                     .foregroundStyle(.primary)
                 }
+                .listRowBackground(Color.clear)
             }
             .onDelete { store.notices.remove(atOffsets: $0) }
         }
         .listStyle(.plain)
+        .toocBackground(theme)
         .overlay {
             if store.notices.isEmpty {
                 ContentUnavailableView("お知らせはありません", systemImage: "bell")
@@ -600,7 +657,7 @@ struct ToocNoticesView: View {
         .toolbar {
             if !store.notices.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { withAnimation { store.notices.removeAll() } } label: { Image(systemName: "trash") }
+                    Button { withAnimation { store.notices.removeAll() } } label: { ToocBarIcon("trash") }
                         .accessibilityLabel("すべて削除")
                 }
             }
@@ -608,5 +665,63 @@ struct ToocNoticesView: View {
         .navigationTitle("お知らせ")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { store.markNoticesSeen() }
+    }
+}
+
+/// Every message waiting to be sent, soonest first.
+struct ToocScheduledView: View {
+    @Environment(ToocStore.self) private var store
+    @Environment(ToocRouter.self) private var router
+    @Environment(\.toocTheme) private var theme
+
+    var body: some View {
+        let waiting = store.scheduledMessages
+        List {
+            ForEach(waiting) { entry in
+                Button { router.path.append(.room(entry.room.id)) } label: {
+                    HStack(alignment: .top, spacing: 12) {
+                        ToocAvatar(user: store.iconUser(of: entry.room), size: 40)
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack {
+                                Text(store.name(of: entry.room)).font(.subheadline.bold()).lineLimit(1)
+                                Spacer()
+                                Label(ToocTime.scheduled(entry.message.scheduledAt ?? .now), systemImage: "clock")
+                                    .font(.caption)
+                                    .foregroundStyle(theme.accent)
+                            }
+                            Text(entry.message.preview)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                    }
+                    .foregroundStyle(.primary)
+                }
+                .listRowBackground(Color.clear)
+                .swipeActions(edge: .leading) {
+                    Button {
+                        withAnimation(.snappy) { store.sendNow(entry.message.id, in: entry.room.id) }
+                    } label: { Image(systemName: "paperplane.fill") }
+                        .tint(theme.accent)
+                        .accessibilityLabel("今すぐ送信")
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        withAnimation(.snappy) { store.deleteMessage(entry.message.id, in: entry.room.id) }
+                    } label: { Image(systemName: "xmark.circle.fill") }
+                        .accessibilityLabel("送信予約を取り消す")
+                }
+            }
+        }
+        .listStyle(.plain)
+        .toocBackground(theme)
+        .overlay {
+            if waiting.isEmpty {
+                ContentUnavailableView("送信予約はありません", systemImage: "clock",
+                                       description: Text("送信ボタンを長押しして「時刻指定して送信」で予約できます。"))
+            }
+        }
+        .navigationTitle("送信予約")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

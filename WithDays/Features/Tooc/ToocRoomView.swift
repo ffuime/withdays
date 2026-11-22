@@ -1,21 +1,21 @@
 import PhotosUI
+import QuickLook
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
-struct ToocPhotoFile: Identifiable, Hashable {
-    let id: String
-}
-
-/// A talk room: the messages as bubbles, and the input bar fixed at the bottom.
-/// Drag a bubble left to reply to it; drag it right (or from the edge) to go back.
+/// A talk room: the messages as bubbles under a date that stays at the top, and the input bar at the bottom.
+/// Drag a bubble left to reply to it; drag right anywhere to go back (the system's back swipe).
 struct ToocRoomView: View {
     let roomID: String
 
     @Environment(ToocStore.self) private var store
     @Environment(ToocRouter.self) private var router
+    @Environment(\.toocTheme) private var theme
     @Environment(\.dismiss) private var dismiss
     @State private var draft = ""
     @State private var replyTo: ToocMessage?
+    @State private var editing: ToocMessage?
     @FocusState private var focused: Bool
 
     @State private var scheduling = false
@@ -23,7 +23,11 @@ struct ToocRoomView: View {
     @State private var pickingPhoto = false
     @State private var photoItem: PhotosPickerItem?
     @State private var usingCamera = false
-    @State private var viewing: ToocPhotoFile?
+    @State private var pickingFile = false
+    @State private var quickLook: URL?
+    @State private var zoom: ToocPhotoZoomItem?
+    @State private var composer: ToocComposer?
+    @State private var selecting: String?
     @State private var searching = false
     @State private var highlight: UUID?
     @State private var showMembers = false
@@ -31,6 +35,7 @@ struct ToocRoomView: View {
     @State private var newName = ""
     @State private var confirmClear = false
     @State private var confirmLeave = false
+    @State private var confirmHide = false
 
     private var room: ToocRoom? { store.room(roomID) }
 
@@ -40,7 +45,7 @@ struct ToocRoomView: View {
                 messages(room)
                     .safeAreaInset(edge: .bottom, spacing: 0) { inputBar(room) }
                     .toolbar { toolbar(room) }
-                    .background((store.settings.background.color ?? Color(.systemBackground)).ignoresSafeArea())
+                    .background(theme.fill.ignoresSafeArea())
             } else {
                 ContentUnavailableView("トークが見つかりません", systemImage: "message")
             }
@@ -52,11 +57,15 @@ struct ToocRoomView: View {
             store.openRoomID = roomID
             store.markRead(roomID)
             if store.banner?.roomID == roomID { store.banner = nil }
+            if router.focusRoomID == roomID {
+                router.focusRoomID = nil
+                focused = true
+            }
         }
         .onDisappear {
             if store.openRoomID == roomID { store.openRoomID = nil }
             // Leaving with something typed keeps it, and the list shows the pencil.
-            store.update(roomID) { $0.draft = draft }
+            if editing == nil { store.update(roomID) { $0.draft = draft } }
         }
         .sheet(isPresented: $scheduling) { scheduleSheet }
         .sheet(isPresented: $searching) {
@@ -66,6 +75,14 @@ struct ToocRoomView: View {
             }
         }
         .sheet(isPresented: $showMembers) { ToocMembersView(roomID: roomID) }
+        .sheet(item: $composer) { kind in
+            ToocComposerView(kind: kind, roomID: roomID) { message in
+                withAnimation(.snappy) { store.send(message, in: roomID) }
+            }
+        }
+        .sheet(item: Binding(get: { selecting.map { ToocSelectText(text: $0) } }, set: { selecting = $0?.text })) { item in
+            ToocSelectTextView(text: item.text)
+        }
         .photosPicker(isPresented: $pickingPhoto, selection: $photoItem, matching: .images)
         .onChange(of: photoItem) { _, item in
             guard let item else { return }
@@ -76,11 +93,25 @@ struct ToocRoomView: View {
                 }
             }
         }
+        .fileImporter(isPresented: $pickingFile, allowedContentTypes: [.item]) { result in
+            guard case .success(let url) = result, let copied = ToocFiles.copy(url) else { return }
+            withAnimation(.snappy) {
+                store.send(.file(name: copied.name, file: copied.file, size: copied.size), in: roomID, replyTo: replyTo?.id)
+                replyTo = nil
+            }
+        }
+        .quickLookPreview($quickLook)
         .fullScreenCover(isPresented: $usingCamera) {
             ToocCameraPicker { image in sendPhoto(image) }
                 .ignoresSafeArea()
         }
-        .fullScreenCover(item: $viewing) { ToocPhotoViewer(file: $0.id) }
+        .fullScreenCover(item: $zoom) { item in
+            ToocPhotoZoom(item: item) {
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { zoom = nil }
+            }
+        }
         .alert("グループ名を変更", isPresented: $renaming) {
             TextField("グループ名", text: $newName)
             Button("キャンセル", role: .cancel) {}
@@ -92,7 +123,7 @@ struct ToocRoomView: View {
         .confirmationDialog("トーク履歴を削除しますか？", isPresented: $confirmClear, titleVisibility: .visible) {
             Button("トーク履歴を削除", role: .destructive) { store.clearHistory(roomID) }
         } message: {
-            Text("このトークのメッセージと写真がすべて消えます。")
+            Text("このトークのメッセージと写真がすべて消え、元に戻せません。")
         }
         .confirmationDialog("グループを退会しますか？", isPresented: $confirmLeave, titleVisibility: .visible) {
             Button("退会", role: .destructive) {
@@ -100,36 +131,91 @@ struct ToocRoomView: View {
                 store.leave(roomID)
             }
         }
+        .confirmationDialog("トークを非表示にしますか？", isPresented: $confirmHide, titleVisibility: .visible) {
+            Button("非表示", role: .destructive) {
+                dismiss()
+                store.update(roomID) { $0.hidden = true }
+            }
+        } message: {
+            Text("トーク一覧から隠れます。設定の「非表示・ブロック」か、新しいメッセージで戻ります。")
+        }
     }
 
     // MARK: Messages
+
+    private struct Item: Identifiable {
+        let message: ToocMessage
+        let first: Bool
+        let last: Bool
+        let joinedAbove: Bool
+        let joinedBelow: Bool
+        var id: UUID { message.id }
+    }
+
+    private struct Day: Identifiable {
+        let date: Date
+        var items: [Item]
+        var id: Date { date }
+    }
+
+    /// The messages by day; within a day, bursts (same person, same minute) know their first and last, and text
+    /// bubbles next to each other in a burst join corners (photos and cards never do).
+    private func days(_ list: [ToocMessage]) -> [Day] {
+        var days: [Day] = []
+        let calendar = Calendar.current
+        for (index, message) in list.enumerated() {
+            let previous = index > 0 ? list[index - 1] : nil
+            let next = index < list.count - 1 ? list[index + 1] : nil
+            let first = previous.map { !Self.sameBurst($0, message) } ?? true
+            let last = next.map { !Self.sameBurst(message, $0) } ?? true
+            let item = Item(
+                message: message, first: first, last: last,
+                joinedAbove: !first && message.isText && (previous?.isText ?? false),
+                joinedBelow: !last && message.isText && (next?.isText ?? false)
+            )
+            let day = calendar.startOfDay(for: message.date)
+            if days.last?.date == day {
+                days[days.count - 1].items.append(item)
+            } else {
+                days.append(Day(date: day, items: [item]))
+            }
+        }
+        return days
+    }
 
     private func messages(_ room: ToocRoom) -> some View {
         let list = room.sent
         let waiting = room.waiting
         let size = store.settings.textSize.points
+        let typer = store.typing[roomID].flatMap { store.user($0) }
         return ScrollViewReader { reader in
             ScrollView {
-                LazyVStack(spacing: 2) {
-                    ForEach(Array(list.enumerated()), id: \.element.id) { index, message in
-                        let first = index == 0 || !Self.sameBurst(list[index - 1], message)
-                        let last = index == list.count - 1 || !Self.sameBurst(message, list[index + 1])
-                        ToocMessageRow(
-                            message: message,
-                            room: room,
-                            first: first,
-                            last: last,
-                            textSize: size,
-                            highlighted: highlight == message.id,
-                            onReply: {
-                                withAnimation(.snappy) { replyTo = message }
-                                focused = true
-                            },
-                            onBack: { dismiss() },
-                            onPhoto: { viewing = ToocPhotoFile(id: $0) }
-                        )
-                        .padding(.top, first && index > 0 ? 10 : 0)
-                        .id(message.id)
+                LazyVStack(spacing: 2, pinnedViews: [.sectionHeaders]) {
+                    ForEach(days(list)) { day in
+                        Section {
+                            ForEach(day.items) { item in
+                                ToocMessageRow(
+                                    message: item.message,
+                                    room: room,
+                                    first: item.first,
+                                    last: item.last,
+                                    joinedAbove: item.joinedAbove,
+                                    joinedBelow: item.joinedBelow,
+                                    textSize: size,
+                                    highlighted: highlight == item.message.id,
+                                    actions: actions(for: item.message)
+                                )
+                                .padding(.top, item.first && item.message.id != day.items.first?.message.id ? 10 : 0)
+                                .id(item.message.id)
+                            }
+                        } header: {
+                            dayLabel(day.date)
+                        }
+                    }
+                    if let typer {
+                        ToocTypingRow(user: typer)
+                            .padding(.top, 10)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
                     if !waiting.isEmpty {
                         scheduledSection(waiting, size: size)
@@ -137,16 +223,26 @@ struct ToocRoomView: View {
                     Color.clear.frame(height: 1).id("bottom")
                 }
                 .padding(.horizontal, 12)
-                .padding(.vertical, 12)
+                .padding(.bottom, 12)
+                .animation(.snappy, value: typer?.id)
             }
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
             .overlay {
                 if list.isEmpty && waiting.isEmpty {
-                    ToocStartTalkText(size: 17)
+                    Button {
+                        draft = "よろしく！"
+                        focused = true
+                    } label: {
+                        ToocStartTalkText(size: 17)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .onChange(of: room.messages.count) {
+                withAnimation(.snappy) { reader.scrollTo("bottom", anchor: .bottom) }
+            }
+            .onChange(of: typer?.id) {
                 withAnimation(.snappy) { reader.scrollTo("bottom", anchor: .bottom) }
             }
             .onChange(of: highlight) { _, id in
@@ -158,6 +254,47 @@ struct ToocRoomView: View {
                 }
             }
         }
+    }
+
+    /// The day, in a small glass capsule; the current day's stays at the top while scrolling.
+    private func dayLabel(_ date: Date) -> some View {
+        Text(ToocTime.day(date))
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .glassEffect(.regular, in: .capsule)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+    }
+
+    private func actions(for message: ToocMessage) -> ToocMessageActions {
+        ToocMessageActions(
+            reply: {
+                withAnimation(.snappy) {
+                    editing = nil
+                    replyTo = message
+                }
+                focused = true
+            },
+            edit: {
+                if case .text(let text) = message.kind {
+                    withAnimation(.snappy) {
+                        replyTo = nil
+                        editing = message
+                        draft = text
+                    }
+                    focused = true
+                }
+            },
+            select: { if case .text(let text) = message.kind { selecting = text } },
+            openPhoto: { image, frame in
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { zoom = ToocPhotoZoomItem(image: image, source: frame) }
+            },
+            openFile: { quickLook = ToocFiles.url($0) }
+        )
     }
 
     /// Messages waiting for their time, under the talk: dimmed, with when they'll go.
@@ -183,7 +320,7 @@ struct ToocRoomView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 13)
                         .padding(.vertical, 8)
-                        .background(Color.brand.opacity(0.55), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .background(theme.accent.opacity(0.5), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                         .contextMenu {
                             Button("今すぐ送信", systemImage: "paperplane") {
                                 withAnimation(.snappy) { store.sendNow(message.id, in: roomID) }
@@ -197,25 +334,33 @@ struct ToocRoomView: View {
         }
     }
 
-    /// Sent by the same person in the same minute: drawn as one joined stack.
+    /// Sent by the same person in the same minute: drawn as one stack.
     static func sameBurst(_ a: ToocMessage, _ b: ToocMessage) -> Bool {
-        a.senderID == b.senderID && Calendar.current.isDate(a.date, equalTo: b.date, toGranularity: .minute)
+        a.senderID == b.senderID && !a.isUnsent && !b.isUnsent
+            && Calendar.current.isDate(a.date, equalTo: b.date, toGranularity: .minute)
     }
 
     // MARK: Sending
 
+    private var trimmed: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
+
     private func send(silent: Bool = false) {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = trimmed
         guard !text.isEmpty else { return }
         withAnimation(.snappy) {
-            store.send(.text(text), in: roomID, replyTo: replyTo?.id, silent: silent)
+            if let editing {
+                store.edit(editing.id, in: roomID, text: text)
+                self.editing = nil
+            } else {
+                store.send(.text(text), in: roomID, replyTo: replyTo?.id, silent: silent)
+                replyTo = nil
+            }
             draft = ""
-            replyTo = nil
         }
     }
 
     private func schedule() {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = trimmed
         guard !text.isEmpty else { return }
         withAnimation(.snappy) {
             store.send(.text(text), in: roomID, replyTo: replyTo?.id, at: scheduleDate)
@@ -226,7 +371,7 @@ struct ToocRoomView: View {
     }
 
     private func sendPhoto(_ image: UIImage) {
-        guard let file = ToocPhotos.save(image) else { return }
+        guard let file = ToocFiles.save(image) else { return }
         withAnimation(.snappy) {
             store.send(.photo(file), in: roomID, replyTo: replyTo?.id)
             replyTo = nil
@@ -258,6 +403,11 @@ struct ToocRoomView: View {
         .presentationDetents([.large])
     }
 
+    private func openSchedule() {
+        scheduleDate = Calendar.current.date(byAdding: .hour, value: 1, to: .now) ?? .now
+        scheduling = true
+    }
+
     // MARK: Bars
 
     @ToolbarContentBuilder
@@ -277,7 +427,7 @@ struct ToocRoomView: View {
         }
         .sharedBackgroundVisibility(.hidden)
         ToolbarItemGroup(placement: .topBarTrailing) {
-            Button { searching = true } label: { Image(systemName: "magnifyingglass") }
+            Button { searching = true } label: { ToocBarIcon("magnifyingglass") }
                 .accessibilityLabel("トーク内を検索")
             roomMenu(room)
         }
@@ -304,10 +454,7 @@ struct ToocRoomView: View {
                     Button(room.muted ? "通知をオン" : "通知をオフ", systemImage: room.muted ? "bell" : "bell.slash") {
                         store.update(roomID) { $0.muted.toggle() }
                     }
-                    Button("非表示", systemImage: "eye.slash") {
-                        dismiss()
-                        store.update(roomID) { $0.hidden = true }
-                    }
+                    Button("非表示", systemImage: "eye.slash") { confirmHide = true }
                 }
             }
             Section {
@@ -319,21 +466,32 @@ struct ToocRoomView: View {
                 }
             }
         } label: {
-            Image(systemName: "ellipsis")
+            ToocBarIcon("ellipsis")
         }
         .accessibilityLabel("その他")
     }
+
+    private static let barHeight: CGFloat = 48
 
     private func inputBar(_ room: ToocRoom) -> some View {
         HStack(alignment: .bottom, spacing: 8) {
             HStack(spacing: 2) {
                 Menu {
-                    if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                        Button("カメラ", systemImage: "camera") { usingCamera = true }
+                    Section {
+                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                            Button("カメラ", systemImage: "camera") { usingCamera = true }
+                        }
+                        Button("写真", systemImage: "photo.on.rectangle") { pickingPhoto = true }
+                        Button("ファイル", systemImage: "doc") { pickingFile = true }
+                        Button("位置情報", systemImage: "mappin.and.ellipse") { composer = .location }
                     }
-                    Button("写真を選ぶ", systemImage: "photo.on.rectangle") { pickingPhoto = true }
+                    Section {
+                        Button("投票", systemImage: "chart.bar") { composer = .poll }
+                        Button("日程調整", systemImage: "calendar") { composer = .datePoll }
+                        Button("あみだくじ", systemImage: "line.3.horizontal") { composer = .amida }
+                    }
                     Button("時刻指定して送信", systemImage: "clock") { openSchedule() }
-                        .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(trimmed.isEmpty || editing != nil)
                 } label: {
                     Image(systemName: "plus").frame(width: 44, height: Self.barHeight)
                 }
@@ -344,13 +502,17 @@ struct ToocRoomView: View {
                 .accessibilityLabel("写真")
             }
             .font(.system(size: 19, weight: .medium))
-            .foregroundStyle(.primary)
+            .foregroundStyle(theme.accent)
             .padding(.horizontal, 2)
             .glassEffect(.regular.interactive(), in: .capsule)
 
             VStack(spacing: 0) {
                 if let replyTo {
                     replyBar(replyTo)
+                    Divider().padding(.horizontal, 12)
+                }
+                if editing != nil {
+                    editBar
                     Divider().padding(.horizontal, 12)
                 }
                 HStack(alignment: .bottom, spacing: 6) {
@@ -368,46 +530,72 @@ struct ToocRoomView: View {
                                 send()
                             }
                         }
-                    if !draft.isEmpty {
+                    if !trimmed.isEmpty {
                         sendButton(room)
                             .padding(.bottom, 6)
                             .transition(.scale.combined(with: .opacity))
                     }
                 }
-                .padding(.trailing, draft.isEmpty ? 16 : 6)
-                .animation(.snappy(duration: 0.2), value: draft.isEmpty)
+                .padding(.trailing, trimmed.isEmpty ? 16 : 6)
+                .animation(.snappy(duration: 0.2), value: trimmed.isEmpty)
             }
-            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: Self.barHeight / 2, style: .continuous))
+            // The whole field is glass that stretches under the finger.
+            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: Self.barHeight / 2, style: .continuous))
         }
         .padding(.horizontal, 12)
         .padding(.top, 6)
         .padding(.bottom, 8)
     }
 
-    private static let barHeight: CGFloat = 48
-
-    /// Tap: send. Hold: ふつうに送信 / ミュートメッセージで送信 / 時刻指定して送信.
+    /// Tap: send. Hold: ふつうに送信 / ミュートメッセージで送信 / 時刻指定して送信. While editing, just saves.
+    @ViewBuilder
     private func sendButton(_ room: ToocRoom) -> some View {
-        Menu {
-            Button("ふつうに送信", systemImage: "paperplane") { send() }
-            if !room.isMynote {
-                Button("ミュートメッセージで送信", systemImage: "bell.slash") { send(silent: true) }
+        let icon = Image(systemName: editing == nil ? "arrow.up.circle.fill" : "checkmark.circle.fill")
+            .font(.system(size: 32))
+            .foregroundStyle(theme.accent)
+        if editing != nil {
+            Button { send() } label: { icon }
+                .accessibilityLabel("編集を保存")
+        } else {
+            Menu {
+                Button("ふつうに送信", systemImage: "paperplane") { send() }
+                if !room.isMynote {
+                    Button("ミュートメッセージで送信", systemImage: "bell.slash") { send(silent: true) }
+                }
+                Button("時刻指定して送信", systemImage: "clock") { openSchedule() }
+            } label: {
+                icon
+            } primaryAction: {
+                send()
             }
-            Button("時刻指定して送信", systemImage: "clock") { openSchedule() }
-        } label: {
-            Image(systemName: "arrow.up.circle.fill")
-                .font(.system(size: 32))
-                .foregroundStyle(Color.brand)
-        } primaryAction: {
-            send()
+            .menuIndicator(.hidden)
+            .accessibilityLabel("送信")
         }
-        .menuIndicator(.hidden)
-        .accessibilityLabel("送信")
     }
 
-    private func openSchedule() {
-        scheduleDate = Calendar.current.date(byAdding: .hour, value: 1, to: .now) ?? .now
-        scheduling = true
+    private var editBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "pencil")
+                .foregroundStyle(theme.accent)
+            Text("メッセージを編集")
+                .font(.caption.bold())
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                withAnimation(.snappy) {
+                    editing = nil
+                    draft = ""
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+            }
+            .accessibilityLabel("編集をやめる")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     /// [icon] ○○へ返信 over one line of the message, joined to the top of the input field.
@@ -416,7 +604,7 @@ struct ToocRoomView: View {
         return HStack(spacing: 8) {
             ToocAvatar(user: sender, size: 26)
             VStack(alignment: .leading, spacing: 1) {
-                Text("\(sender.name)へ返信")
+                Text("\(sender.displayName)へ返信")
                     .font(.caption.bold())
                 Text(message.preview)
                     .font(.caption)
@@ -442,40 +630,57 @@ struct ToocRoomView: View {
 
 // MARK: - A message
 
+struct ToocMessageActions {
+    var reply: () -> Void
+    var edit: () -> Void
+    var select: () -> Void
+    var openPhoto: (UIImage, CGRect) -> Void
+    var openFile: (String) -> Void
+}
+
 struct ToocMessageRow: View {
     let message: ToocMessage
     let room: ToocRoom
     /// The first and last of a burst (same person, same minute): only the first has the tail, icon and name.
     let first: Bool
     let last: Bool
+    let joinedAbove: Bool
+    let joinedBelow: Bool
     var textSize: CGFloat = 17
     var highlighted = false
-    var onReply: () -> Void
-    var onBack: () -> Void
-    var onPhoto: (String) -> Void
+    let actions: ToocMessageActions
 
     @Environment(ToocStore.self) private var store
     @Environment(ToocRouter.self) private var router
+    @Environment(\.toocTheme) private var theme
     @State private var dragX: CGFloat = 0
-    @State private var armed = false
-    @State private var backArmed = false
 
     private static let replyDistance: CGFloat = 64
-    private static let backDistance: CGFloat = 90
+    private static let maxPull: CGFloat = 96
     private static let avatarSize: CGFloat = 36
 
     private var mine: Bool { message.senderID == store.me.id }
 
     var body: some View {
-        Group {
-            if mine { myRow } else { theirRow }
+        if message.isUnsent {
+            Text(mine ? "送信を取り消しました" : "\(store.displayName(message.senderID))が送信を取り消しました")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(theme.theirBubble, in: Capsule())
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+        } else {
+            Group {
+                if mine { myRow } else { theirRow }
+            }
+            .offset(x: dragX)
+            .background(alignment: .trailing) { replyIcon }
+            .contentShape(Rectangle())
+            // Only a leftward drag is taken; a rightward one is left to the back swipe.
+            .gesture(ToocLeftPan(onChange: pull, onEnd: release))
         }
-        .offset(x: dragX)
-        .background(alignment: .trailing) { replyIcon }
-        .contentShape(Rectangle())
-        .simultaneousGesture(swipe)
-        .sensoryFeedback(.impact(weight: .medium), trigger: armed) { _, new in new }
-        .sensoryFeedback(.impact(weight: .light), trigger: backArmed) { _, new in new }
     }
 
     private var theirRow: some View {
@@ -489,13 +694,13 @@ struct ToocMessageRow: View {
             }
             VStack(alignment: .leading, spacing: 3) {
                 if first, room.isGroup, let sender {
-                    Text(sender.name)
+                    Text(sender.displayName)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                        .padding(.leading, 6)
+                        .padding(.leading, ToocBubbleShape.tail + 4)
                 }
                 HStack(alignment: .bottom, spacing: 5) {
-                    bubble
+                    bubbleWithReactions
                     if last { meta(alignment: .leading) }
                 }
             }
@@ -507,21 +712,26 @@ struct ToocMessageRow: View {
         HStack(alignment: .bottom, spacing: 5) {
             Spacer(minLength: 40)
             if last || message.sending { meta(alignment: .trailing) }
-            bubble
+            bubbleWithReactions
         }
     }
 
-    /// Read count (groups) or 既読 (one-to-one, your own messages), above the time.
+    /// 既読 (with the mute mark beside it) above the time.
     private func meta(alignment: HorizontalAlignment) -> some View {
         VStack(alignment: alignment, spacing: 0) {
             if message.sending {
                 ProgressView().controlSize(.mini)
             } else {
-                if message.silent {
-                    Image(systemName: "bell.slash.fill")
-                        .accessibilityLabel("ミュートメッセージ")
+                if readLabel != nil || message.silent || message.edited {
+                    HStack(spacing: 3) {
+                        if message.edited { Text("編集済み") }
+                        if message.silent {
+                            Image(systemName: "bell.slash.fill")
+                                .accessibilityLabel("ミュートメッセージ")
+                        }
+                        if let read = readLabel { Text(read) }
+                    }
                 }
-                if let read = readLabel { Text(read) }
                 Text(ToocTime.clock(message.date)).monospacedDigit()
             }
         }
@@ -535,12 +745,47 @@ struct ToocMessageRow: View {
         return "既読"
     }
 
+    private var bubbleWithReactions: some View {
+        VStack(alignment: mine ? .trailing : .leading, spacing: -6) {
+            bubble
+            if !message.reactions.isEmpty {
+                reactions
+                    .padding(mine ? .trailing : .leading, ToocBubbleShape.tail + 8)
+                    .zIndex(1)
+            }
+        }
+    }
+
+    private var reactions: some View {
+        let counts = Dictionary(grouping: message.reactions.values, by: { $0 }).mapValues(\.count)
+        let order = ToocStore.emojis.filter { counts[$0] != nil } + counts.keys.filter { !ToocStore.emojis.contains($0) }.sorted()
+        return Button {
+            if message.reactions[store.me.id] != nil {
+                withAnimation(.snappy) { store.react(nil, to: message.id, in: room.id) }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                ForEach(order, id: \.self) { emoji in
+                    Text(emoji).font(.system(size: 13))
+                    if let count = counts[emoji], count > 1 {
+                        Text("\(count)").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(theme.fill, in: Capsule())
+            .overlay(Capsule().strokeBorder(message.reactions[store.me.id] != nil ? theme.accent : Color.secondary.opacity(0.25)))
+        }
+        .buttonStyle(.plain)
+    }
+
     @ViewBuilder
     private var bubble: some View {
         Group {
             switch message.kind {
             case .text(let text):
-                let shape = ToocBubbleShape(mine: mine, tail: first, joinedAbove: !first, joinedBelow: !last)
+                let shape = ToocBubbleShape(mine: mine, tail: first, joinedAbove: joinedAbove, joinedBelow: joinedBelow)
                 VStack(alignment: .leading, spacing: 6) {
                     if let quotedMessage = quoted { quote(quotedMessage) }
                     Text(text)
@@ -550,45 +795,29 @@ struct ToocMessageRow: View {
                 .padding(.horizontal, 13)
                 .padding(.vertical, 8)
                 .padding(mine ? .trailing : .leading, ToocBubbleShape.tail)
-                .background(shape.fill(mine ? Color.brand : Color(.secondarySystemBackground)))
+                .background(shape.fill(mine ? theme.myBubble : theme.theirBubble))
                 .clipShape(shape)
             case .photo(let file):
-                // A photo has no tail: just the picture with rounded corners.
-                photo(file)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                // A photo has no tail and never joins: just the picture with rounded corners.
+                ToocPhotoBubble(file: file, address: nil, open: actions.openPhoto)
                     .padding(mine ? .trailing : .leading, ToocBubbleShape.tail)
-                    .onTapGesture { if let file { onPhoto(file) } }
+            case .remotePhoto(let address):
+                ToocPhotoBubble(file: nil, address: address, open: actions.openPhoto)
+                    .padding(mine ? .trailing : .leading, ToocBubbleShape.tail)
+            default:
+                ToocCardBubble(message: message, room: room, mine: mine, openFile: actions.openFile)
+                    .padding(mine ? .trailing : .leading, ToocBubbleShape.tail)
             }
         }
         .overlay {
             if highlighted {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color.brand, lineWidth: 3)
+                    .stroke(theme.accent, lineWidth: 3)
                     .padding(mine ? .trailing : .leading, ToocBubbleShape.tail)
             }
         }
         .opacity(message.sending ? 0.6 : 1)
         .contextMenu { menu }
-    }
-
-    @ViewBuilder
-    private func photo(_ file: String?) -> some View {
-        if let file, let image = ToocPhotos.image(file) {
-            let ratio = image.size.height / max(1, image.size.width)
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 200, height: min(280, max(120, 200 * ratio)))
-                .clipped()
-        } else {
-            ZStack {
-                Color(.tertiarySystemFill)
-                Image(systemName: "photo.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(width: 180, height: 130)
-        }
     }
 
     private var quoted: ToocMessage? {
@@ -597,10 +826,10 @@ struct ToocMessageRow: View {
     }
 
     private func quote(_ quoted: ToocMessage) -> some View {
-        let name = store.user(quoted.senderID)?.name ?? ""
+        let name = store.displayName(quoted.senderID)
         return HStack(spacing: 6) {
             Capsule()
-                .fill(mine ? Color.white.opacity(0.7) : Color.brand)
+                .fill(mine ? Color.white.opacity(0.7) : theme.accent)
                 .frame(width: 3)
             VStack(alignment: .leading, spacing: 1) {
                 Text(name).font(.caption.bold())
@@ -613,70 +842,94 @@ struct ToocMessageRow: View {
 
     @ViewBuilder
     private var menu: some View {
-        Button("返信", systemImage: "arrowshape.turn.up.left", action: onReply)
+        ControlGroup {
+            ForEach(ToocStore.emojis, id: \.self) { emoji in
+                Button(emoji) {
+                    let current = message.reactions[store.me.id]
+                    withAnimation(.snappy) { store.react(current == emoji ? nil : emoji, to: message.id, in: room.id) }
+                }
+            }
+        }
+        .controlGroupStyle(.palette)
+        Button("返信", systemImage: "arrowshape.turn.up.left", action: actions.reply)
         if case .text(let text) = message.kind {
             Button("コピー", systemImage: "doc.on.doc") { UIPasteboard.general.string = text }
+            Button("選択", systemImage: "selection.pin.in.out", action: actions.select)
+            if mine {
+                Button("編集", systemImage: "pencil", action: actions.edit)
+            }
         }
+        Divider()
         if mine {
-            Button("送信取消", systemImage: "arrow.uturn.backward", role: .destructive) {
-                withAnimation(.snappy) { store.deleteMessage(message.id, in: room.id) }
+            Button("送信取消", systemImage: "arrow.uturn.backward") {
+                withAnimation(.snappy) { store.unsend(message.id, in: room.id) }
             }
-        } else {
-            Button("削除", systemImage: "trash", role: .destructive) {
-                withAnimation(.snappy) { store.deleteMessage(message.id, in: room.id) }
-            }
+        }
+        Button("削除", systemImage: "trash", role: .destructive) {
+            withAnimation(.snappy) { store.deleteMessage(message.id, in: room.id) }
         }
     }
 
-    // MARK: Swipes
+    // MARK: Reply swipe
 
-    /// Shown in the space the drag opens on the right: grows with the drag, then pops once letting go would reply.
+    /// Shown in the space the drag opens on the right: grows with the drag, and is full once letting go would reply.
     private var replyIcon: some View {
         let progress = min(1, max(0, -dragX / Self.replyDistance))
         return Image(systemName: "arrowshape.turn.up.left.fill")
             .font(.system(size: 18, weight: .semibold))
-            .foregroundStyle(.secondary)
-            .scaleEffect(armed ? 1.35 : 0.4 + 0.6 * progress)
+            .foregroundStyle(progress >= 1 ? theme.accent : Color.secondary)
+            .scaleEffect(0.4 + 0.6 * progress)
             .opacity(progress)
-            .animation(.spring(response: 0.25, dampingFraction: 0.5), value: armed)
             .padding(.trailing, 14)
             .frame(maxHeight: .infinity, alignment: .center)
     }
 
-    /// Left: reply (follows the finger, then resists past the reply point). Right: back to the list.
-    private var swipe: some Gesture {
-        DragGesture(minimumDistance: 16)
-            .onChanged { value in
-                let dx = value.translation.width
-                guard abs(dx) > abs(value.translation.height) else {
-                    if dragX != 0 { dragX = 0 }
-                    return
-                }
-                if dx < 0 {
-                    let pull = -dx
-                    dragX = -(pull < Self.replyDistance ? pull : Self.replyDistance + (pull - Self.replyDistance) * 0.3)
-                    let nowArmed = pull >= Self.replyDistance
-                    if nowArmed != armed { armed = nowArmed }
-                    if backArmed { backArmed = false }
-                } else {
-                    dragX = dx * 0.5
-                    let nowArmed = dx >= Self.backDistance
-                    if nowArmed != backArmed { backArmed = nowArmed }
-                    if armed { armed = false }
-                }
-            }
-            .onEnded { _ in
-                if armed { onReply() }
-                if backArmed { onBack() }
-                armed = false
-                backArmed = false
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) { dragX = 0 }
-            }
+    /// Follows the finger smoothly and eases off the further it goes (no catch, no click).
+    private func pull(_ x: CGFloat) {
+        let distance = max(0, -x)
+        dragX = -Self.maxPull * (1 - exp(-distance / Self.maxPull))
+    }
+
+    private func release(_ x: CGFloat) {
+        if -dragX >= Self.replyDistance { actions.reply() }
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) { dragX = 0 }
     }
 }
 
-/// A bubble: fully rounded, with a small tail at the top outer corner on the first of a burst. Bubbles of one burst
-/// keep their gaps but tighten the corners they share, so they read as one joined stack.
+/// A pan that only starts for a leftward, mostly sideways drag, so scrolling and the back swipe still work.
+struct ToocLeftPan: UIGestureRecognizerRepresentable {
+    var onChange: (CGFloat) -> Void
+    var onEnd: (CGFloat) -> Void
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+
+    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
+        let pan = UIPanGestureRecognizer()
+        pan.delegate = context.coordinator
+        return pan
+    }
+
+    func handleUIGestureRecognizerAction(_ pan: UIPanGestureRecognizer, context: Context) {
+        let x = pan.translation(in: pan.view).x
+        switch pan.state {
+        case .began, .changed: onChange(x)
+        case .ended, .cancelled, .failed: onEnd(x)
+        default: break
+        }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = recognizer as? UIPanGestureRecognizer else { return false }
+            let velocity = pan.velocity(in: pan.view)
+            return velocity.x < 0 && abs(velocity.x) > abs(velocity.y) * 1.2
+        }
+    }
+}
+
+/// A bubble: rounded, with a curved tail sweeping out from the top outer corner on the first of a burst. Text
+/// bubbles in a burst keep their gaps but tighten the corners they share.
 struct ToocBubbleShape: Shape {
     let mine: Bool
     let tail: Bool
@@ -684,7 +937,7 @@ struct ToocBubbleShape: Shape {
     let joinedBelow: Bool
 
     /// The room kept beside the bubble for the tail.
-    static let tail: CGFloat = 6
+    static let tail: CGFloat = 9
     private static let radius: CGFloat = 18
     private static let joined: CGFloat = 6
 
@@ -695,7 +948,7 @@ struct ToocBubbleShape: Shape {
             width: rect.width - Self.tail,
             height: rect.height
         )
-        let outerTop = tail ? 4 : (joinedAbove ? Self.joined : Self.radius)
+        let outerTop = joinedAbove && !tail ? Self.joined : Self.radius
         let outerBottom = joinedBelow ? Self.joined : Self.radius
         let radii = mine
             ? RectangleCornerRadii(topLeading: Self.radius, bottomLeading: Self.radius,
@@ -704,25 +957,147 @@ struct ToocBubbleShape: Shape {
                                    bottomTrailing: Self.radius, topTrailing: Self.radius)
         var path = UnevenRoundedRectangle(cornerRadii: radii, style: .continuous).path(in: body)
         if tail {
-            var point = Path()
-            if mine {
-                point.move(to: CGPoint(x: body.maxX - 10, y: body.minY))
-                point.addLine(to: CGPoint(x: body.maxX + Self.tail - 1, y: body.minY))
-                point.addQuadCurve(to: CGPoint(x: body.maxX, y: body.minY + 14),
-                                   control: CGPoint(x: body.maxX + 1, y: body.minY + 3))
-                point.addLine(to: CGPoint(x: body.maxX - 10, y: body.minY + 14))
-            } else {
-                point.move(to: CGPoint(x: body.minX + 10, y: body.minY))
-                point.addLine(to: CGPoint(x: body.minX - Self.tail + 1, y: body.minY))
-                point.addQuadCurve(to: CGPoint(x: body.minX, y: body.minY + 14),
-                                   control: CGPoint(x: body.minX - 1, y: body.minY + 3))
-                point.addLine(to: CGPoint(x: body.minX + 10, y: body.minY + 14))
-            }
-            point.closeSubpath()
+            // A horn: its top edge runs out from the bubble's top to a point, its lower edge curves back in.
+            let edge = mine ? body.maxX : body.minX
+            let out: CGFloat = mine ? 1 : -1
+            var horn = Path()
+            horn.move(to: CGPoint(x: edge - out * 16, y: body.minY))
+            horn.addQuadCurve(to: CGPoint(x: edge + out * Self.tail, y: body.minY + 1),
+                              control: CGPoint(x: edge + out * 1, y: body.minY - 0.5))
+            horn.addQuadCurve(to: CGPoint(x: edge - out * 0.5, y: body.minY + 20),
+                              control: CGPoint(x: edge + out * 2, y: body.minY + 6))
+            horn.addLine(to: CGPoint(x: edge - out * 16, y: body.minY + 20))
+            horn.closeSubpath()
             // A union, so the overlap never cancels out whichever way each part winds.
-            path = path.union(point)
+            path = path.union(horn)
         }
         return path
+    }
+}
+
+/// The other person typing: their icon and a bubble of three dots rising in turn.
+struct ToocTypingRow: View {
+    let user: ToocUser
+    @Environment(\.toocTheme) private var theme
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            ToocAvatar(user: user, size: 36)
+            TimelineView(.animation) { context in
+                let time = context.date.timeIntervalSinceReferenceDate
+                HStack(spacing: 4) {
+                    ForEach(0..<3) { index in
+                        let phase = (time * 2.4 - Double(index) * 0.35).truncatingRemainder(dividingBy: 2 * .pi)
+                        Circle()
+                            .fill(Color.secondary)
+                            .frame(width: 7, height: 7)
+                            .offset(y: -3 * max(0, sin(phase * 2)))
+                            .opacity(0.45 + 0.55 * max(0, sin(phase * 2)))
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .padding(.leading, ToocBubbleShape.tail)
+                .background(ToocBubbleShape(mine: false, tail: true, joinedAbove: false, joinedBelow: false)
+                    .fill(theme.theirBubble))
+            }
+            Spacer()
+        }
+        .accessibilityLabel("\(user.displayName)が入力中")
+    }
+}
+
+/// A photo in a talk, from a file or the web. Tap to open it full screen, grown from here.
+struct ToocPhotoBubble: View {
+    let file: String?
+    let address: String?
+    var open: (UIImage, CGRect) -> Void
+
+    @State private var image: UIImage?
+    @State private var frame: CGRect = .zero
+
+    var body: some View {
+        Group {
+            if let image {
+                let ratio = image.size.height / max(1, image.size.width)
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 200, height: min(280, max(120, 200 * ratio)))
+                    .clipped()
+            } else {
+                ZStack {
+                    Color(.tertiarySystemFill)
+                    if address != nil {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "photo.fill")
+                            .font(.system(size: 30))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: 200, height: 150)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame = $0 }
+        .onTapGesture { if let image { open(image, frame) } }
+        .task(id: (file ?? "") + (address ?? "")) {
+            if let file {
+                image = ToocFiles.image(file)
+            } else if let address {
+                image = await ToocFiles.remoteImage(address)
+            }
+        }
+    }
+}
+
+struct ToocPhotoZoomItem: Identifiable {
+    let id = UUID()
+    let image: UIImage
+    let source: CGRect
+}
+
+/// A photo grown out of its bubble to the full width, with 保存 at the bottom centre. Drag or pinch it to put it back.
+struct ToocPhotoZoom: View {
+    let item: ToocPhotoZoomItem
+    var onClose: () -> Void
+
+    @State private var progress: CGFloat = 0
+    @State private var saved = false
+
+    var body: some View {
+        ToocZoomLayer(
+            source: item.source,
+            aspect: item.image.size.height / max(1, item.image.size.width),
+            sourceRadius: 16,
+            progress: $progress,
+            onClosed: onClose
+        ) {
+            Image(uiImage: item.image)
+                .resizable()
+                .scaledToFill()
+        } backdrop: {
+            Color.black
+        } accessory: {
+            Button {
+                UIImageWriteToSavedPhotosAlbum(item.image, nil, nil, nil)
+                withAnimation(.snappy) { saved = true }
+            } label: {
+                Label(saved ? "保存しました" : "保存", systemImage: saved ? "checkmark" : "square.and.arrow.down")
+                    .font(.headline)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.glass)
+            .disabled(saved)
+            .environment(\.colorScheme, .dark)
+        }
+        .presentationBackground(.clear)
+        .sensoryFeedback(.success, trigger: saved)
+        .onAppear {
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.84)) { progress = 1 }
+        }
     }
 }
 
@@ -757,35 +1132,52 @@ struct ToocCameraPicker: UIViewControllerRepresentable {
     }
 }
 
-/// A sent photo on black, to look at or share.
-struct ToocPhotoViewer: View {
-    let file: String
+/// Part of a message's text, picked with the system's selection handles.
+struct ToocSelectText: Identifiable {
+    let text: String
+    var id: String { text }
+}
+
+struct ToocSelectTextView: View {
+    let text: String
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.black.ignoresSafeArea()
-                if let image = ToocPhotos.image(file) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
-                        .accessibilityLabel("閉じる")
-                }
-                if let image = ToocPhotos.image(file) {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        ShareLink(item: Image(uiImage: image), preview: SharePreview("写真", image: Image(uiImage: image))) {
-                            Image(systemName: "square.and.arrow.up")
-                        }
+            ToocSelectableText(text: text)
+                .padding(.horizontal, 12)
+                .navigationTitle("テキストを選択")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button { dismiss() } label: { Image(systemName: "xmark") }
+                            .accessibilityLabel("閉じる")
                     }
                 }
-            }
         }
-        .environment(\.colorScheme, .dark)
+        .presentationDetents([.medium, .large])
+    }
+}
+
+private struct ToocSelectableText: UIViewRepresentable {
+    let text: String
+
+    func makeUIView(context: Context) -> UITextView {
+        let view = UITextView()
+        view.isEditable = false
+        view.isSelectable = true
+        view.backgroundColor = .clear
+        view.font = .preferredFont(forTextStyle: .body)
+        view.adjustsFontForContentSizeCategory = true
+        view.text = text
+        DispatchQueue.main.async {
+            view.becomeFirstResponder()
+            view.selectedRange = NSRange(location: 0, length: (text as NSString).length)
+        }
+        return view
+    }
+
+    func updateUIView(_ view: UITextView, context: Context) {
+        if view.text != text { view.text = text }
     }
 }

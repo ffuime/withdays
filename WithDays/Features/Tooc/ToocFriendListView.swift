@@ -4,6 +4,7 @@ import SwiftUI
 struct ToocFriendListView: View {
     @Environment(ToocStore.self) private var store
     @Environment(ToocRouter.self) private var router
+    @Environment(\.toocTheme) private var theme
 
     var body: some View {
         @Bindable var router = router
@@ -17,6 +18,7 @@ struct ToocFriendListView: View {
                 .allowsHitTesting(!router.selecting)
                 .tag(friend.id)
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                .listRowBackground(Color.clear)
                 // A swipe right (a full one too) adds / removes the favourite.
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
                     Button {
@@ -27,17 +29,17 @@ struct ToocFriendListView: View {
                     .tint(.yellow)
                     .accessibilityLabel(friend.isFavorite ? "お気に入りから外す" : "お気に入り")
                 }
-                // A swipe left: hide, block. Never a full swipe.
+                // A swipe left: hide, block. Never a full swipe; both ask first.
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) {
-                        withAnimation { store.block(friend.id) }
+                    Button {
+                        router.confirm = .blockFriends([friend.id])
                     } label: {
                         Image(systemName: "nosign")
                     }
                     .tint(.red)
                     .accessibilityLabel("ブロック")
                     Button {
-                        withAnimation { store.hideFriend(friend.id) }
+                        router.confirm = .hideFriends([friend.id])
                     } label: {
                         Image(systemName: "eye.slash.fill")
                     }
@@ -47,6 +49,7 @@ struct ToocFriendListView: View {
             }
         }
         .listStyle(.plain)
+        .toocBackground(theme)
         .environment(\.editMode, .constant(router.selecting ? .active : .inactive))
         .overlay {
             if store.friends.isEmpty {
@@ -60,6 +63,7 @@ struct ToocFriendRow: View {
     let friend: ToocUser
     var onOpen: () -> Void
     var onTalk: () -> Void
+    @Environment(\.toocTheme) private var theme
 
     var body: some View {
         HStack(spacing: 12) {
@@ -67,7 +71,7 @@ struct ToocFriendRow: View {
                 HStack(spacing: 12) {
                     ToocAvatar(user: friend, badge: friend.isFavorite ? "star.fill" : nil)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(friend.name)
+                        Text(friend.displayName)
                             .font(.body.bold())
                             .lineLimit(1)
                         if !friend.bio.isEmpty {
@@ -86,7 +90,7 @@ struct ToocFriendRow: View {
             Button(action: onTalk) {
                 Image(systemName: "plus.message")
                     .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(Color.brand)
+                    .foregroundStyle(theme.accent)
                     .frame(width: 40, height: 40)
                     .contentShape(Rectangle())
             }

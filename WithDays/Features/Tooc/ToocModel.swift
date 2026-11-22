@@ -4,7 +4,7 @@ import SwiftUI
 import UIKit
 
 // tooc: a personal talk app. There is no server yet, so everything lives on this device: what you send stays here,
-// and the sample friends read it and answer after a moment.
+// and the sample friends read it, react, vote and answer after a moment.
 
 struct ToocUser: Identifiable, Hashable, Codable {
     /// The toocID.
@@ -13,10 +13,15 @@ struct ToocUser: Identifiable, Hashable, Codable {
     var bio: String
     /// The hue of the generated icon, when there is no photo.
     var hue: Double
-    /// A photo chosen for the icon (a file in tooc's photo folder).
+    /// A photo chosen for the icon (a file in tooc's photo folder, already cut square).
     var iconFile: String?
-    /// Whether a profile background is set (drawn from the icon).
+    /// A photo chosen for the profile background.
+    var backgroundFile: String?
+    /// Whether a profile background is drawn from the icon (when there's no background photo).
     var hasBackground = false
+    var birthday: Date?
+    /// The name you gave this friend, shown instead of theirs (only on this device).
+    var nickname: String?
     var addedAt: Date = .distantPast
     var profileUpdatedAt: Date = .distantPast
     var isFriend = true
@@ -24,6 +29,7 @@ struct ToocUser: Identifiable, Hashable, Codable {
     var isHidden = false
     var isBlocked = false
 
+    var displayName: String { nickname ?? name }
     var color: Color { Color(hue: hue, saturation: 0.55, brightness: 0.85) }
     var initial: String { String(name.prefix(1)) }
 
@@ -38,11 +44,103 @@ struct ToocUser: Identifiable, Hashable, Codable {
     }
 }
 
+// MARK: Messages
+
+struct ToocPoll: Hashable, Codable {
+    var question: String
+    var options: [String]
+    var multiple: Bool
+    /// Who chose which options.
+    var votes: [String: [Int]] = [:]
+
+    func count(_ option: Int) -> Int { votes.values.filter { $0.contains(option) }.count }
+}
+
+/// 日程調整: candidate dates, each answered ○ (2), △ (1) or × (0).
+struct ToocDatePoll: Hashable, Codable {
+    var title: String
+    var dates: [Date]
+    var answers: [String: [Int]] = [:]
+
+    func count(_ date: Int, _ answer: Int) -> Int {
+        answers.values.filter { date < $0.count && $0[date] == answer }.count
+    }
+}
+
+/// あみだくじ: entrants at the top, prizes at the bottom, rungs in between.
+struct ToocAmida: Hashable, Codable {
+    struct Rung: Hashable, Codable {
+        let level: Int
+        /// Joins this line and the next.
+        let column: Int
+    }
+
+    var title: String
+    var entrants: [String]
+    var prizes: [String]
+    var rungs: [Rung]
+    var revealed = false
+
+    static let levels = 9
+
+    init(title: String, entrants: [String], prizes: [String]) {
+        self.title = title
+        self.entrants = entrants
+        self.prizes = prizes
+        var rungs: [Rung] = []
+        for level in 0..<Self.levels {
+            var column = 0
+            while column < entrants.count - 1 {
+                if Bool.random() {
+                    rungs.append(Rung(level: level, column: column))
+                    column += 2
+                } else {
+                    column += 1
+                }
+            }
+        }
+        // At least one rung per pair of lines, so nobody walks straight down.
+        for column in 0..<max(0, entrants.count - 1) where !rungs.contains(where: { $0.column == column }) {
+            let level = Int.random(in: 0..<Self.levels)
+            if !rungs.contains(where: { $0.level == level && abs($0.column - column) <= 1 }) {
+                rungs.append(Rung(level: level, column: column))
+            }
+        }
+        self.rungs = rungs
+    }
+
+    /// The columns an entrant passes through, one per level (plus the start).
+    func walk(from start: Int) -> [Int] {
+        var column = start
+        var path = [column]
+        for level in 0..<Self.levels {
+            if rungs.contains(Rung(level: level, column: column)) {
+                column += 1
+            } else if rungs.contains(Rung(level: level, column: column - 1)) {
+                column -= 1
+            }
+            path.append(column)
+        }
+        return path
+    }
+
+    func result(for entrant: Int) -> Int { walk(from: entrant).last ?? entrant }
+}
+
 struct ToocMessage: Identifiable, Hashable, Codable {
     enum Kind: Hashable, Codable {
         case text(String)
-        /// A photo file in tooc's photo folder (nil: a sample with no picture).
+        /// A photo file in tooc's photo folder.
         case photo(String?)
+        /// A photo from the web (the sample friends' photos), saved once it arrives.
+        case remotePhoto(String)
+        case file(name: String, file: String, size: Int)
+        case location(latitude: Double, longitude: Double, title: String)
+        case poll(ToocPoll)
+        case datePoll(ToocDatePoll)
+        case amida(ToocAmida)
+        /// What's left after unsending.
+        case unsent
     }
 
     var id = UUID()
@@ -58,16 +156,42 @@ struct ToocMessage: Identifiable, Hashable, Codable {
     var silent = false
     /// Waiting to be sent at this time.
     var scheduledAt: Date?
+    /// Who reacted with what.
+    var reactions: [String: String] = [:]
+    var edited = false
 
     var preview: String {
         switch kind {
         case .text(let text): text
-        case .photo: "写真"
+        case .photo, .remotePhoto: "写真"
+        case .file(let name, _, _): "ファイル：\(name)"
+        case .location(_, _, let title): "位置情報：\(title)"
+        case .poll(let poll): "投票：\(poll.question)"
+        case .datePoll(let poll): "日程調整：\(poll.title)"
+        case .amida(let amida): "あみだくじ：\(amida.title)"
+        case .unsent: "送信が取り消されました"
         }
     }
 
-    var isPhoto: Bool {
-        if case .photo = kind { return true }
+    var symbol: String? {
+        switch kind {
+        case .photo, .remotePhoto: "photo.fill"
+        case .file: "doc.fill"
+        case .location: "mappin.circle.fill"
+        case .poll: "chart.bar.fill"
+        case .datePoll: "calendar"
+        case .amida: "line.3.horizontal"
+        case .text, .unsent: nil
+        }
+    }
+
+    var isText: Bool {
+        if case .text = kind { return true }
+        return false
+    }
+
+    var isUnsent: Bool {
+        if case .unsent = kind { return true }
         return false
     }
 }
@@ -109,6 +233,24 @@ enum ToocTalkSort: String, CaseIterable, Identifiable, Codable {
     }
 }
 
+enum ToocTalkFilter: String, CaseIterable, Identifiable {
+    case all, friends, groups
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .all: "すべて"
+        case .friends: "友だち"
+        case .groups: "グループ"
+        }
+    }
+}
+
+struct ToocScheduledEntry: Identifiable {
+    let room: ToocRoom
+    let message: ToocMessage
+    var id: UUID { message.id }
+}
+
 /// Something that happened: shown in お知らせ, and as a banner when notifications are on.
 struct ToocNotice: Identifiable, Hashable, Codable {
     var id = UUID()
@@ -124,7 +266,7 @@ struct ToocSettings: Hashable, Codable {
     var notifications = true
     var showContent = true
     var textSize: ToocTextSize = .standard
-    var background: ToocRoomBackground = .none
+    var theme: ToocTheme = .standard
     /// Return sends instead of starting a new line.
     var returnSends = false
 }
@@ -146,31 +288,6 @@ enum ToocTextSize: String, CaseIterable, Identifiable, Codable {
         case .standard: 17
         case .large: 20
         case .larger: 23
-        }
-    }
-}
-
-enum ToocRoomBackground: String, CaseIterable, Identifiable, Codable {
-    case none, sky, sakura, mint, sand, night
-    var id: String { rawValue }
-    var label: String {
-        switch self {
-        case .none: "なし"
-        case .sky: "空"
-        case .sakura: "さくら"
-        case .mint: "ミント"
-        case .sand: "すな"
-        case .night: "夜"
-        }
-    }
-    var color: Color? {
-        switch self {
-        case .none: nil
-        case .sky: Color(hue: 0.57, saturation: 0.18, brightness: 0.96)
-        case .sakura: Color(hue: 0.95, saturation: 0.12, brightness: 0.98)
-        case .mint: Color(hue: 0.42, saturation: 0.14, brightness: 0.95)
-        case .sand: Color(hue: 0.1, saturation: 0.14, brightness: 0.96)
-        case .night: Color(hue: 0.64, saturation: 0.45, brightness: 0.22)
         }
     }
 }
@@ -208,6 +325,8 @@ final class ToocStore {
     var openRoomID: String? = nil
     /// The newest notice to show as a banner.
     var banner: ToocNotice? = nil
+    /// Who is typing in which room (room ID → user ID).
+    var typing: [String: String] = [:]
 
     @ObservationIgnored private var loading = false
     @ObservationIgnored private var saveTask: Task<Void, Never>?
@@ -217,6 +336,8 @@ final class ToocStore {
         me = ToocUser(id: account ?? "me", name: account ?? "じぶん", bio: "", hue: 0.58)
         if let account { open(account) }
     }
+
+    var theme: ToocTheme { settings.theme }
 
     // MARK: Account (kept on this device until there is a server)
 
@@ -313,15 +434,19 @@ final class ToocStore {
         return users[id]
     }
 
+    func displayName(_ id: String) -> String { user(id)?.displayName ?? id }
+
     var unreadTotal: Int { rooms.filter { !$0.hidden && !$0.muted }.reduce(0) { $0 + $1.unread } }
     var unseenNotices: Int { notices.filter { !$0.seen }.count }
 
     func room(_ id: String) -> ToocRoom? { rooms.first { $0.id == id } }
 
+    var mynote: ToocRoom? { rooms.first(where: \.isMynote) }
+
     func name(of room: ToocRoom) -> String {
         if room.isMynote { return "Mynote" }
         if let title = room.title { return title }
-        return room.memberIDs.compactMap { user($0) }.first?.name ?? "トーク"
+        return room.memberIDs.compactMap { user($0) }.first?.displayName ?? "トーク"
     }
 
     /// The icon's owner: the other person, Mynote's own icon, or a group's generated one.
@@ -349,6 +474,14 @@ final class ToocStore {
         }
     }
 
+    func rooms(_ filter: ToocTalkFilter) -> [ToocRoom] {
+        switch filter {
+        case .all: visibleRooms
+        case .friends: visibleRooms.filter { !$0.isGroup && !$0.isMynote }
+        case .groups: visibleRooms.filter(\.isGroup)
+        }
+    }
+
     private func key(_ room: ToocRoom, _ sort: ToocTalkSort) -> Date {
         let members = room.memberIDs.compactMap { users[$0] }
         switch sort {
@@ -372,9 +505,18 @@ final class ToocStore {
         }
     }
 
-    var hiddenFriends: [ToocUser] { users.values.filter { $0.isFriend && $0.isHidden && !$0.isBlocked }.sorted { $0.name < $1.name } }
-    var blockedUsers: [ToocUser] { users.values.filter(\.isBlocked).sorted { $0.name < $1.name } }
+    var favorites: [ToocUser] { friends.filter(\.isFavorite) }
+    var hiddenFriends: [ToocUser] {
+        users.values.filter { $0.isFriend && $0.isHidden && !$0.isBlocked }.sorted { $0.displayName < $1.displayName }
+    }
+    var blockedUsers: [ToocUser] { users.values.filter(\.isBlocked).sorted { $0.displayName < $1.displayName } }
     var hiddenRooms: [ToocRoom] { rooms.filter(\.hidden) }
+
+    /// Every message waiting to be sent, soonest first.
+    var scheduledMessages: [ToocScheduledEntry] {
+        rooms.flatMap { room in room.waiting.map { ToocScheduledEntry(room: room, message: $0) } }
+            .sorted { ($0.message.scheduledAt ?? .now) < ($1.message.scheduledAt ?? .now) }
+    }
 
     // MARK: Changes
 
@@ -394,13 +536,13 @@ final class ToocStore {
 
     func delete(_ id: String) {
         guard let room = room(id), !room.isMynote else { return }
-        ToocPhotos.remove(room.messages)
+        ToocFiles.remove(room.messages)
         rooms.removeAll { $0.id == id }
     }
 
     func clearHistory(_ id: String) {
         guard let room = room(id) else { return }
-        ToocPhotos.remove(room.messages)
+        ToocFiles.remove(room.messages)
         update(id) {
             $0.messages.removeAll()
             $0.unread = 0
@@ -410,6 +552,11 @@ final class ToocStore {
     func toggleFavorite(_ id: String) { updateUser(id) { $0.isFavorite.toggle() } }
     func hideFriend(_ id: String) { updateUser(id) { $0.isHidden = true } }
     func showFriend(_ id: String) { updateUser(id) { $0.isHidden = false } }
+
+    func rename(_ id: String, to nickname: String?) {
+        let trimmed = nickname?.trimmingCharacters(in: .whitespacesAndNewlines)
+        updateUser(id) { $0.nickname = (trimmed?.isEmpty ?? true) ? nil : trimmed }
+    }
 
     func block(_ id: String) {
         updateUser(id) {
@@ -434,7 +581,7 @@ final class ToocStore {
         user.isBlocked = false
         user.addedAt = .now
         users[user.id] = user
-        notify(ToocNotice(title: "友だち追加", body: "\(user.name)を友だちに追加しました", userID: user.id))
+        notify(ToocNotice(title: "友だち追加", body: "\(user.displayName)を友だちに追加しました", userID: user.id))
     }
 
     /// The one-to-one room with a friend, made (empty) if there isn't one yet.
@@ -460,13 +607,17 @@ final class ToocStore {
         delete(room.id)
     }
 
-    func editProfile(name: String, bio: String, hue: Double, iconFile: String?, hasBackground: Bool) {
-        if me.iconFile != iconFile, let old = me.iconFile { ToocPhotos.delete(old) }
+    func editProfile(name: String, bio: String, hue: Double, iconFile: String?, backgroundFile: String?,
+                     hasBackground: Bool, birthday: Date?) {
+        if me.iconFile != iconFile, let old = me.iconFile { ToocFiles.delete(old) }
+        if me.backgroundFile != backgroundFile, let old = me.backgroundFile { ToocFiles.delete(old) }
         me.name = name
         me.bio = bio
         me.hue = hue
         me.iconFile = iconFile
+        me.backgroundFile = backgroundFile
         me.hasBackground = hasBackground
+        me.birthday = birthday
         me.profileUpdatedAt = .now
     }
 
@@ -484,16 +635,75 @@ final class ToocStore {
             $0.draft = ""
             $0.hidden = false
         }
-        if message.scheduledAt == nil { delivered(message.id, in: roomID) }
+        if message.scheduledAt == nil { delivered(message, in: roomID) }
     }
 
+    func edit(_ id: UUID, in roomID: String, text: String) {
+        setMessage(id, in: roomID) {
+            $0.kind = .text(text)
+            $0.edited = true
+        }
+    }
+
+    /// Removes a message from this device only.
     func deleteMessage(_ id: UUID, in roomID: String) {
         guard let message = room(roomID)?.messages.first(where: { $0.id == id }) else { return }
-        ToocPhotos.remove([message])
+        ToocFiles.remove([message])
         update(roomID) { $0.messages.removeAll { $0.id == id } }
     }
 
+    /// Takes your message back: everyone sees that it was unsent.
+    func unsend(_ id: UUID, in roomID: String) {
+        guard let message = room(roomID)?.messages.first(where: { $0.id == id }) else { return }
+        ToocFiles.remove([message])
+        setMessage(id, in: roomID) {
+            $0.kind = .unsent
+            $0.reactions = [:]
+            $0.replyTo = nil
+        }
+    }
+
+    func react(_ emoji: String?, to id: UUID, in roomID: String) {
+        let me = me.id
+        setMessage(id, in: roomID) { $0.reactions[me] = emoji }
+    }
+
+    func vote(_ option: Int, in id: UUID, roomID: String) {
+        let me = me.id
+        setMessage(id, in: roomID) { message in
+            guard case .poll(var poll) = message.kind else { return }
+            var mine = poll.votes[me] ?? []
+            if mine.contains(option) {
+                mine.removeAll { $0 == option }
+            } else {
+                mine = poll.multiple ? mine + [option] : [option]
+            }
+            poll.votes[me] = mine.isEmpty ? nil : mine
+            message.kind = .poll(poll)
+        }
+    }
+
+    func answer(_ date: Int, _ answer: Int, in id: UUID, roomID: String) {
+        let me = me.id
+        setMessage(id, in: roomID) { message in
+            guard case .datePoll(var poll) = message.kind else { return }
+            var mine = poll.answers[me] ?? Array(repeating: -1, count: poll.dates.count)
+            mine[date] = mine[date] == answer ? -1 : answer
+            poll.answers[me] = mine
+            message.kind = .datePoll(poll)
+        }
+    }
+
+    func reveal(_ id: UUID, roomID: String) {
+        setMessage(id, in: roomID) { message in
+            guard case .amida(var amida) = message.kind else { return }
+            amida.revealed = true
+            message.kind = .amida(amida)
+        }
+    }
+
     func sendNow(_ id: UUID, in roomID: String) {
+        var sent: ToocMessage?
         update(roomID) { room in
             guard let index = room.messages.firstIndex(where: { $0.id == id }) else { return }
             var message = room.messages.remove(at: index)
@@ -501,8 +711,9 @@ final class ToocStore {
             message.date = .now
             message.sending = true
             room.messages.append(message)
+            sent = message
         }
-        delivered(id, in: roomID)
+        if let sent { delivered(sent, in: roomID) }
     }
 
     /// Sends the scheduled messages whose time has come.
@@ -511,33 +722,66 @@ final class ToocStore {
         for room in rooms {
             for message in room.messages where (message.scheduledAt ?? .distantFuture) <= now {
                 let time = message.scheduledAt ?? now
+                var sent = message
+                sent.scheduledAt = nil
+                sent.date = time
+                sent.sending = true
                 update(room.id) { room in
-                    guard let index = room.messages.firstIndex(where: { $0.id == message.id }) else { return }
-                    var sent = room.messages.remove(at: index)
-                    sent.scheduledAt = nil
-                    sent.date = time
-                    sent.sending = true
+                    room.messages.removeAll { $0.id == message.id }
                     room.messages.append(sent)
                 }
-                delivered(message.id, in: room.id)
-                notify(ToocNotice(title: "予約したメッセージ", body: "\(name(of: room))へ送信しました", roomID: room.id))
+                delivered(sent, in: room.id)
             }
         }
     }
 
-    /// After a moment the message is "sent", then read; someone may answer.
-    private func delivered(_ id: UUID, in roomID: String) {
+    /// After a moment the message is "sent", then read; the others may react, vote, answer or reply.
+    private func delivered(_ message: ToocMessage, in roomID: String) {
+        let id = message.id
         Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(Int.random(in: 500...900)))
             self?.setMessage(id, in: roomID) { $0.sending = false }
-            guard let room = self?.room(roomID), !room.isMynote else { return }
-            let others = room.memberIDs.filter { self?.users[$0]?.isBlocked != true }
+            guard let self, let room = self.room(roomID), !room.isMynote else { return }
+            let others = room.memberIDs.filter { self.users[$0]?.isBlocked != true }
             guard !others.isEmpty else { return }
             try? await Task.sleep(for: .seconds(Double.random(in: 1.2...2.5)))
-            self?.setMessage(id, in: roomID) { $0.readCount = room.isGroup ? Int.random(in: 1...others.count) : 1 }
+            self.setMessage(id, in: roomID) { $0.readCount = room.isGroup ? Int.random(in: 1...others.count) : 1 }
+            switch message.kind {
+            case .poll, .datePoll:
+                for member in others {
+                    try? await Task.sleep(for: .seconds(Double.random(in: 0.8...2.5)))
+                    self.dummyAnswer(member, to: id, in: roomID)
+                }
+            case .text, .photo:
+                if Double.random(in: 0...1) < 0.25, let member = others.randomElement() {
+                    try? await Task.sleep(for: .seconds(Double.random(in: 0.6...1.5)))
+                    self.setMessage(id, in: roomID) { $0.reactions[member] = Self.emojis.randomElement() }
+                }
+            default:
+                break
+            }
             guard Double.random(in: 0...1) < (room.isGroup ? 0.6 : 0.85), let sender = others.randomElement() else { return }
-            try? await Task.sleep(for: .seconds(Double.random(in: 1.5...4)))
-            self?.receive(from: sender, in: roomID)
+            try? await Task.sleep(for: .seconds(Double.random(in: 0.8...2)))
+            self.typing[roomID] = sender
+            try? await Task.sleep(for: .seconds(Double.random(in: 1.5...3.5)))
+            self.typing[roomID] = nil
+            self.receive(from: sender, in: roomID)
+        }
+    }
+
+    private func dummyAnswer(_ member: String, to id: UUID, in roomID: String) {
+        setMessage(id, in: roomID) { message in
+            switch message.kind {
+            case .poll(var poll):
+                guard !poll.options.isEmpty else { return }
+                poll.votes[member] = [Int.random(in: 0..<poll.options.count)]
+                message.kind = .poll(poll)
+            case .datePoll(var poll):
+                poll.answers[member] = poll.dates.map { _ in [2, 2, 1, 0].randomElement()! }
+                message.kind = .datePoll(poll)
+            default:
+                break
+            }
         }
     }
 
@@ -548,6 +792,8 @@ final class ToocStore {
         }
     }
 
+    static let emojis = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🎉", "🔥"]
+
     private static let replies = [
         "了解！", "いいね👍", "ありがとう！", "なるほど", "それな", "あとで確認するね", "おっけー", "たしかに😂",
         "ちょうど同じこと考えてた", "まじか！", "了解です🙆", "また連絡するね", "ほんとに？", "楽しみ！",
@@ -555,7 +801,9 @@ final class ToocStore {
 
     private func receive(from sender: String, in roomID: String) {
         guard let room = room(roomID) else { return }
-        let kind: ToocMessage.Kind = Double.random(in: 0...1) < 0.08 ? .photo(nil) : .text(Self.replies.randomElement()!)
+        let kind: ToocMessage.Kind = Double.random(in: 0...1) < 0.12
+            ? .remotePhoto(ToocFiles.randomPhotoURL())
+            : .text(Self.replies.randomElement()!)
         let message = ToocMessage(senderID: sender, kind: kind, date: .now)
         let viewing = openRoomID == roomID
         update(roomID) {
@@ -564,7 +812,7 @@ final class ToocStore {
             if !viewing { $0.unread += 1 }
         }
         guard !viewing, !room.muted else { return }
-        let who = user(sender)?.name ?? ""
+        let who = displayName(sender)
         let title = room.isGroup ? "\(name(of: room))・\(who)" : who
         notify(ToocNotice(title: title, body: message.preview, userID: sender, roomID: roomID))
     }
@@ -600,9 +848,12 @@ final class ToocStore {
     private func loadSamples() {
         let now = Date.now
         func ago(_ minutes: Double) -> Date { now.addingTimeInterval(-minutes * 60) }
+        let calendar = Calendar.current
         let samples = [
             ToocUser(id: "haruka_m", name: "春香", bio: "カフェ巡りが好き☕️\n週末はだいたい写真を撮りに出かけています。",
-                     hue: 0.95, hasBackground: true, addedAt: ago(60 * 24 * 3), profileUpdatedAt: ago(30), isFavorite: true),
+                     hue: 0.95, hasBackground: true,
+                     birthday: calendar.date(from: DateComponents(year: 2008, month: 4, day: 12)),
+                     addedAt: ago(60 * 24 * 3), profileUpdatedAt: ago(30), isFavorite: true),
             ToocUser(id: "kenta.o", name: "大野 健太", bio: "サッカー部 ⚽️", hue: 0.33,
                      addedAt: ago(60 * 24 * 40), profileUpdatedAt: ago(60 * 24 * 2)),
             ToocUser(id: "yui_s", name: "Yui", bio: "", hue: 0.12, addedAt: ago(60 * 2), profileUpdatedAt: ago(60 * 2)),
@@ -620,18 +871,21 @@ final class ToocStore {
             ToocRoom(id: "dm-haruka_m", memberIDs: ["haruka_m"], messages: [
                 ToocMessage(senderID: "haruka_m", kind: .text("明日のお昼どうする？"), date: ago(12)),
                 ToocMessage(senderID: "haruka_m", kind: .text("駅前の新しいお店行ってみたい！"), date: ago(12)),
-                ToocMessage(senderID: "haruka_m", kind: .photo(nil), date: ago(11)),
+                ToocMessage(senderID: "haruka_m", kind: .remotePhoto(ToocFiles.randomPhotoURL()), date: ago(11)),
             ], unread: 3, pinned: true),
             ToocRoom(id: "g-club", title: "サッカー部 2年", memberIDs: ["kenta.o", "taku", "yui_s"], isGroup: true, messages: [
                 ToocMessage(senderID: "taku", kind: .text("来週の練習、グラウンド使えないらしい"), date: ago(60 * 3), readCount: 2),
                 ToocMessage(senderID: me, kind: .text("了解！体育館は？"), date: ago(60 * 2.5), readCount: 3),
                 ToocMessage(senderID: "kenta.o", kind: .text("体育館は空いてる！\n先生に確認しておくね。\nあと持ち物は\n・ボール\n・ビブス"),
-                            date: ago(60 * 2), readCount: 1),
+                            date: ago(60 * 2), readCount: 1, reactions: ["taku": "👍", "yui_s": "🙏"]),
+                ToocMessage(senderID: "yui_s", kind: .poll(ToocPoll(question: "打ち上げどこにする？", options: ["焼肉", "カラオケ", "ファミレス"],
+                                                                     multiple: false, votes: ["taku": [0], "kenta.o": [1]])),
+                            date: ago(60 * 1.5)),
             ], unread: 12, draft: "じゃあ"),
             ToocRoom(id: "dm-kenta.o", memberIDs: ["kenta.o"], messages: [
                 ToocMessage(senderID: "kenta.o", kind: .text("ノート見せてくれてありがとう"), date: ago(60 * 24 + 30)),
                 ToocMessage(senderID: me, kind: .text("いいよー"), date: ago(60 * 24 + 20), readCount: 1),
-                ToocMessage(senderID: me, kind: .photo(nil), date: ago(1), sending: true),
+                ToocMessage(senderID: me, kind: .remotePhoto(ToocFiles.randomPhotoURL()), date: ago(1), sending: true),
             ]),
             ToocRoom(id: "dm-mom", memberIDs: ["mom"], messages: [
                 ToocMessage(senderID: "mom", kind: .text("今日は何時に帰る？"), date: ago(60 * 24 * 5)),
@@ -663,7 +917,7 @@ private enum ToocStorage {
         return url
     }
 
-    static func file(_ account: String) -> URL { folder.appending(path: "\(account).json") }
+    static func file(_ account: String) -> URL { folder.appending(path: "\(account).v2.json") }
 
     static func load(_ account: String) -> ToocData? {
         guard let data = try? Data(contentsOf: file(account)) else { return nil }
@@ -677,24 +931,32 @@ private enum ToocStorage {
 
     static func remove(_ account: String) {
         if let data = load(account) {
-            for room in data.rooms { ToocPhotos.remove(room.messages) }
-            if let icon = data.me.iconFile { ToocPhotos.delete(icon) }
+            for room in data.rooms { ToocFiles.remove(room.messages) }
+            if let icon = data.me.iconFile { ToocFiles.delete(icon) }
+            if let background = data.me.backgroundFile { ToocFiles.delete(background) }
         }
         try? FileManager.default.removeItem(at: file(account))
     }
 }
 
-/// Photos sent in talks and chosen for the icon, as JPEG files.
-enum ToocPhotos {
+/// Photos and files sent in talks, and the profile's icon and background.
+enum ToocFiles {
     private static let cache = NSCache<NSString, UIImage>()
 
-    private static var folder: URL {
-        let url = URL.applicationSupportDirectory.appending(path: "tooc/photos", directoryHint: .isDirectory)
+    static var folder: URL {
+        let url = URL.applicationSupportDirectory.appending(path: "tooc/files", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }
 
-    /// Saves a photo (scaled down to 2048 at most) and returns its file name.
+    static func url(_ name: String) -> URL { folder.appending(path: name) }
+
+    /// A random photo for the sample friends: picsum.photos/width/height.
+    static func randomPhotoURL() -> String {
+        "https://picsum.photos/\(Int.random(in: 300...900))/\(Int.random(in: 300...900))"
+    }
+
+    /// Saves a photo (scaled down to `side` at most) and returns its file name.
     static func save(_ image: UIImage, side: CGFloat = 2048) -> String? {
         let scale = min(1, side / max(image.size.width, image.size.height))
         let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
@@ -704,7 +966,7 @@ enum ToocPhotos {
         guard let data = resized.jpegData(compressionQuality: 0.85) else { return nil }
         let name = "\(UUID().uuidString).jpg"
         do {
-            try data.write(to: folder.appending(path: name), options: .atomic)
+            try data.write(to: url(name), options: .atomic)
         } catch {
             return nil
         }
@@ -712,21 +974,62 @@ enum ToocPhotos {
         return name
     }
 
+    /// Copies a picked file in and returns its stored name.
+    static func copy(_ source: URL) -> (name: String, file: String, size: Int)? {
+        let scoped = source.startAccessingSecurityScopedResource()
+        defer { if scoped { source.stopAccessingSecurityScopedResource() } }
+        let folder = url(UUID().uuidString)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let target = folder.appending(path: source.lastPathComponent)
+        do {
+            try FileManager.default.copyItem(at: source, to: target)
+        } catch {
+            return nil
+        }
+        let attributes = try? FileManager.default.attributesOfItem(atPath: target.path)
+        let size = (attributes?[.size] as? NSNumber)?.intValue ?? 0
+        return (source.lastPathComponent, "\(folder.lastPathComponent)/\(source.lastPathComponent)", size)
+    }
+
     static func image(_ name: String) -> UIImage? {
         if let image = cache.object(forKey: name as NSString) { return image }
-        guard let image = UIImage(contentsOfFile: folder.appending(path: name).path) else { return nil }
+        guard let image = UIImage(contentsOfFile: url(name).path) else { return nil }
+        cache.setObject(image, forKey: name as NSString)
+        return image
+    }
+
+    /// A web photo, kept once fetched so it never changes.
+    static func remoteName(_ address: String) -> String {
+        "web-" + String(address.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) ? Character($0) : "_" }) + ".jpg"
+    }
+
+    static func remoteImage(_ address: String) async -> UIImage? {
+        let name = remoteName(address)
+        if let image = image(name) { return image }
+        guard let url = URL(string: address),
+              let (data, _) = try? await URLSession.shared.data(from: url),
+              let image = UIImage(data: data) else { return nil }
+        try? data.write(to: Self.url(name), options: .atomic)
         cache.setObject(image, forKey: name as NSString)
         return image
     }
 
     static func delete(_ name: String) {
         cache.removeObject(forKey: name as NSString)
-        try? FileManager.default.removeItem(at: folder.appending(path: name))
+        try? FileManager.default.removeItem(at: url(name))
+        // A copied file lives in its own folder.
+        if name.contains("/") {
+            try? FileManager.default.removeItem(at: url(String(name.split(separator: "/").first ?? "")))
+        }
     }
 
     static func remove(_ messages: [ToocMessage]) {
         for message in messages {
-            if case .photo(let name?) = message.kind { delete(name) }
+            switch message.kind {
+            case .photo(let name?): delete(name)
+            case .file(_, let file, _): delete(file)
+            default: break
+            }
         }
     }
 }
@@ -794,6 +1097,18 @@ enum ToocTime {
     static func scheduled(_ date: Date) -> String {
         Calendar.current.isDateInToday(date) ? "今日 \(clock(date))" : format(date, "M/d HH:mm")
     }
+
+    /// A day in a talk: 今日, 昨日, 11月20日(木), 2025年3月1日(土).
+    static func day(_ date: Date, now: Date = .now) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) { return "今日" }
+        if calendar.isDateInYesterday(date) { return "昨日" }
+        return format(date, calendar.isDate(date, equalTo: now, toGranularity: .year) ? "M月d日(E)" : "yyyy年M月d日(E)")
+    }
+
+    static func birthday(_ date: Date) -> String { format(date, "M月d日") }
+
+    static func candidate(_ date: Date) -> String { format(date, "M/d(E) HH:mm") }
 
     private static func format(_ date: Date, _ pattern: String) -> String {
         let formatter = DateFormatter()
