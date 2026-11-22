@@ -49,7 +49,13 @@ struct ToocRoomView: View {
         Group {
             if let room {
                 messages(room)
-                    .safeAreaInset(edge: .bottom, spacing: 0) { inputBar(room) }
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        if let stranger = notFriend(room) {
+                            notFriendBar(stranger)
+                        } else {
+                            inputBar(room)
+                        }
+                    }
                     .toolbar { toolbar(room) }
                     .background(theme.fill.ignoresSafeArea())
             } else {
@@ -556,6 +562,33 @@ struct ToocRoomView: View {
 
     private static let barHeight: CGFloat = 48
 
+    /// In a one-to-one talk, the other person if you haven't added them: until then you can't write.
+    private func notFriend(_ room: ToocRoom) -> ToocUser? {
+        guard !room.isGroup, !room.isMynote, let other = room.memberIDs.first else { return nil }
+        let user = store.lookUp(other)
+        return user.isFriend ? nil : user
+    }
+
+    private func notFriendBar(_ user: ToocUser) -> some View {
+        HStack(spacing: 12) {
+            Text("友だちになるまでメッセージは送れません")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button("友だちになる") {
+                withAnimation(.snappy) { store.addFriend(user) }
+            }
+            .font(.subheadline.weight(.semibold))
+            .buttonStyle(.glassProminent)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: Self.barHeight / 2, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
+    }
+
     private func inputBar(_ room: ToocRoom) -> some View {
         HStack(alignment: .bottom, spacing: 8) {
             HStack(spacing: 2) {
@@ -721,6 +754,10 @@ struct ToocRoomView: View {
 // MARK: - A message
 
 struct ToocMessageActions {
+    /// Nothing happens (a preview).
+    static let none = ToocMessageActions(moreReactions: {}, reply: {}, edit: {}, select: {}, openPhoto: { _, _ in },
+                                         openFile: { _ in })
+
     var moreReactions: () -> Void
     var reply: () -> Void
     var edit: () -> Void

@@ -92,6 +92,7 @@ enum ToocServer {
     static var db: Firestore { Firestore.firestore() }
     static func user(_ id: String) -> DocumentReference { db.collection("users").document(id) }
     static func friends(_ id: String) -> CollectionReference { user(id).collection("friends") }
+    static func requests(_ id: String) -> CollectionReference { user(id).collection("requests") }
     static func room(_ id: String) -> DocumentReference { db.collection("rooms").document(id) }
     static func messages(_ id: String) -> CollectionReference { room(id).collection("messages") }
 
@@ -141,6 +142,73 @@ enum ToocServer {
     }
 }
 
+/// Accounts used on this device, so you can switch without typing the password again. Passwords stay in the
+/// keychain; names and icons are remembered for the account list.
+enum ToocAccounts {
+    struct Saved: Codable, Identifiable, Hashable {
+        let id: String
+        var name: String
+        var hue: Double
+        var iconURL: String?
+    }
+
+    private static let service = "com.ffuime.withdays.tooc"
+    private static let listKey = "toocSavedAccounts"
+    private static let previousKey = "toocPreviousAccount"
+
+    static var saved: [Saved] {
+        get {
+            guard let data = UserDefaults.standard.data(forKey: listKey),
+                  let list = try? JSONDecoder().decode([Saved].self, from: data) else { return [] }
+            return list
+        }
+        set { UserDefaults.standard.set(try? JSONEncoder().encode(newValue), forKey: listKey) }
+    }
+
+    /// The account used before the current one (a double tap on じぶん goes back to it).
+    static var previous: String? {
+        get { UserDefaults.standard.string(forKey: previousKey) }
+        set { UserDefaults.standard.set(newValue, forKey: previousKey) }
+    }
+
+    static func remember(_ user: ToocUser) {
+        var list = saved
+        let entry = Saved(id: user.id, name: user.name, hue: user.hue, iconURL: user.iconURL)
+        if let index = list.firstIndex(where: { $0.id == user.id }) { list[index] = entry } else { list.append(entry) }
+        saved = list
+    }
+
+    private static func query(_ id: String) -> [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: id]
+    }
+
+    static func store(_ id: String, password: String) {
+        SecItemDelete(query(id) as CFDictionary)
+        var item = query(id)
+        item[kSecValueData as String] = Data(password.utf8)
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        SecItemAdd(item as CFDictionary, nil)
+        if !saved.contains(where: { $0.id == id }) {
+            saved.append(Saved(id: id, name: id, hue: ToocUser.hue(for: id)))
+        }
+    }
+
+    static func password(_ id: String) -> String? {
+        var item = query(id)
+        item[kSecReturnData as String] = true
+        item[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: AnyObject?
+        guard SecItemCopyMatching(item as CFDictionary, &result) == errSecSuccess, let data = result as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func forget(_ id: String) {
+        SecItemDelete(query(id) as CFDictionary)
+        saved.removeAll { $0.id == id }
+        if previous == id { previous = nil }
+    }
+}
+
 /// Everything tooc shows: the server's profiles, friends, talks and messages, joined with what this device keeps.
 @MainActor
 @Observable
@@ -167,6 +235,11 @@ final class ToocStore {
     var banner: ToocNotice? = nil
     /// Who is typing in which room (room ID → toocID).
     private(set) var typing: [String: String] = [:]
+    /// People who added you and you haven't added back.
+    private(set) var requests: [ToocUser] = []
+    /// The accounts on this device, for switching.
+    private(set) var savedAccounts: [ToocAccounts.Saved] = ToocAccounts.saved
+    @ObservationIgnored private var requestIDs: [String: Date] = [:]
 
     @ObservationIgnored private var local = ToocLocal()
     @ObservationIgnored private var profiles: [String: ToocUser] = [:]
@@ -233,8 +306,7 @@ final class ToocStore {
             try? await result.user.delete()
             throw ToocError(ToocServer.describe(error))
         }
-        UserDefaults.standard.set(id, forKey: Self.accountKey)
-        start(id)
+        signedIn(as: id, password: password)
     }
 
     func logIn(id: String, password: String) async throws {
@@ -244,14 +316,48 @@ final class ToocStore {
         } catch {
             throw ToocError(ToocServer.describe(error))
         }
+        signedIn(as: id, password: password)
+    }
+
+    private func signedIn(as id: String, password: String) {
+        if let account, account != id { ToocAccounts.previous = account }
+        ToocAccounts.store(id, password: password)
+        savedAccounts = ToocAccounts.saved
         UserDefaults.standard.set(id, forKey: Self.accountKey)
         start(id)
     }
 
+    /// Signs out; the account stays on this device's list for switching back.
     func logOut() {
         flush()
+        if let account { ToocAccounts.previous = account }
         try? Auth.auth().signOut()
+        UserDefaults.standard.removeObject(forKey: Self.accountKey)
         stop()
+    }
+
+    /// Changes to another account saved on this device.
+    func switchAccount(to id: String) async throws {
+        guard id != account else { return }
+        guard let password = ToocAccounts.password(id) else {
+            throw ToocError("このアカウントのパスワードが保存されていません。ログインし直してください。")
+        }
+        flush()
+        try await logIn(id: id, password: password)
+    }
+
+    /// Back to the account used before this one.
+    func switchToPrevious() async throws {
+        guard let previous = ToocAccounts.previous, previous != account,
+              ToocAccounts.saved.contains(where: { $0.id == previous }) else {
+            throw ToocError("前に使ったアカウントがありません。")
+        }
+        try await switchAccount(to: previous)
+    }
+
+    func forgetAccount(_ id: String) {
+        ToocAccounts.forget(id)
+        savedAccounts = ToocAccounts.saved
     }
 
     func changePassword(current: String, new: String) async throws {
@@ -278,6 +384,7 @@ final class ToocStore {
         }
         try? FileManager.default.removeItem(at: ToocLocal.file(account))
         UserDefaults.standard.removeObject(forKey: Self.accountKey)
+        forgetAccount(account)
         stop()
     }
 
@@ -317,6 +424,7 @@ final class ToocStore {
         account = id
         listenToMe(id)
         listenToFriends(id)
+        listenToRequests(id)
         listenToRooms()
     }
 
@@ -334,6 +442,8 @@ final class ToocStore {
         users = [:]
         rooms = []
         typing = [:]
+        requestIDs = [:]
+        requests = []
         account = nil
         openRoomID = nil
         banner = nil
@@ -346,6 +456,8 @@ final class ToocStore {
             Task { @MainActor in
                 guard let self, let snapshot, let data = snapshot.data() else { return }
                 self.me = Self.profile(id, data, keeping: self.me)
+                ToocAccounts.remember(self.me)
+                self.savedAccounts = ToocAccounts.saved
             }
         }
     }
@@ -361,6 +473,45 @@ final class ToocStore {
                 self.friendIDs = ids
                 ids.keys.forEach(self.watchUser)
                 self.rebuildUsers()
+            }
+        }
+    }
+
+    /// Friend requests: people who added you. A new one is announced.
+    private func listenToRequests(_ id: String) {
+        listeners["requests"] = ToocServer.requests(id).addSnapshotListener { [weak self] snapshot, _ in
+            Task { @MainActor in
+                guard let self, let snapshot else { return }
+                let first = self.requestIDs.isEmpty && !self.loadedRooms.contains("requests")
+                self.loadedRooms.insert("requests")
+                var ids: [String: Date] = [:]
+                for doc in snapshot.documents {
+                    ids[doc.documentID] = (doc.data()["at"] as? Timestamp)?.dateValue() ?? .now
+                }
+                let fresh = ids.keys.filter { self.requestIDs[$0] == nil && self.friendIDs[$0] == nil }
+                self.requestIDs = ids
+                ids.keys.forEach(self.watchUser)
+                self.rebuildUsers()
+                guard !first else { return }
+                for from in fresh {
+                    let user = await self.fetchUser(from)
+                    self.announce(ToocNotice(title: "友だち申請", body: "\(user?.name ?? from)さんがあなたを友だちに追加しました",
+                                             userID: from))
+                }
+            }
+        }
+    }
+
+    /// A notice: tooc's banner when in front, the system's notification otherwise.
+    private func announce(_ notice: ToocNotice) {
+        if UIApplication.shared.applicationState == .active {
+            notify(notice)
+        } else {
+            notices.insert(notice, at: 0)
+            if settings.notifications {
+                ToocNotifications.schedule(id: "tooc-\(notice.id.uuidString)", title: notice.title,
+                                           body: settings.showContent ? notice.body : "新しいお知らせがあります",
+                                           roomID: notice.roomID ?? "", at: .now)
             }
         }
     }
@@ -505,7 +656,7 @@ final class ToocStore {
 
     private func rebuildUsers() {
         var next: [String: ToocUser] = [:]
-        let ids = Set(profiles.keys).union(friendIDs.keys)
+        let ids = Set(profiles.keys).union(friendIDs.keys).union(requestIDs.keys)
         for id in ids {
             var user = profiles[id] ?? ToocUser(id: id, name: id, bio: "", hue: ToocUser.hue(for: id))
             let prefs = local.friends[id] ?? .init()
@@ -518,6 +669,9 @@ final class ToocStore {
             next[id] = user
         }
         users = next
+        requests = requestIDs.keys.filter { friendIDs[$0] == nil && local.friends[$0]?.blocked != true }
+            .compactMap { next[$0] ?? profiles[$0] }
+            .sorted { (requestIDs[$0.id] ?? .now) > (requestIDs[$1.id] ?? .now) }
     }
 
     private func rebuildRooms() {
@@ -557,17 +711,7 @@ final class ToocStore {
               local.friends[message.senderID]?.blocked != true else { return }
         let who = displayName(message.senderID)
         let title = room.isGroup ? "\(name(of: room))・\(who)" : who
-        let notice = ToocNotice(title: title, body: message.preview, userID: message.senderID, roomID: roomID)
-        if UIApplication.shared.applicationState == .active {
-            notify(notice)
-        } else {
-            notices.insert(notice, at: 0)
-            if settings.notifications {
-                ToocNotifications.schedule(id: "tooc-\(message.id.uuidString)", title: title,
-                                           body: settings.showContent ? message.preview : "新しいメッセージがあります",
-                                           roomID: roomID, at: .now)
-            }
-        }
+        announce(ToocNotice(title: title, body: message.preview, userID: message.senderID, roomID: roomID))
     }
 
     private func save() {
@@ -782,8 +926,23 @@ final class ToocStore {
         friendIDs[found.id] = .now
         friendPrefs(found.id) { $0.hidden = false; $0.blocked = false }
         watchUser(found.id)
-        Task { try? await ToocServer.friends(account).document(found.id).setData(["addedAt": Timestamp(date: .now)]) }
+        requestIDs[found.id] = nil
+        rebuildUsers()
+        Task {
+            try? await ToocServer.friends(account).document(found.id).setData(["addedAt": Timestamp(date: .now)])
+            // They see a request, unless it was theirs we just answered.
+            try? await ToocServer.requests(account).document(found.id).delete()
+            try? await ToocServer.requests(found.id).document(account).setData(["at": Timestamp(date: .now)])
+        }
         notices.insert(ToocNotice(title: "友だち追加", body: "\(found.displayName)を友だちに追加しました", userID: found.id), at: 0)
+    }
+
+    /// Turns down a request (they aren't told).
+    func decline(_ id: String) {
+        guard let account else { return }
+        requestIDs[id] = nil
+        rebuildUsers()
+        Task { try? await ToocServer.requests(account).document(id).delete() }
     }
 
     /// The one-to-one room with someone; made on the server the first time.

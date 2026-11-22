@@ -9,6 +9,18 @@ struct ToocFriendListView: View {
     var body: some View {
         @Bindable var router = router
         List(selection: $router.selection) {
+            if !store.requests.isEmpty {
+                Section {
+                    ForEach(store.requests) { user in
+                        ToocRequestRow(user: user)
+                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                            .listRowBackground(Color.clear)
+                            .selectionDisabled()
+                    }
+                } header: {
+                    Text("友だち申請")
+                }
+            }
             ForEach(store.friends) { friend in
                 ToocFriendRow(
                     friend: friend,
@@ -52,7 +64,7 @@ struct ToocFriendListView: View {
         .toocBackground(theme)
         .environment(\.editMode, .constant(router.selecting ? .active : .inactive))
         .overlay {
-            if store.friends.isEmpty {
+            if store.friends.isEmpty && store.requests.isEmpty {
                 ContentUnavailableView("友だちはまだいません", systemImage: "person.2")
             }
         }
@@ -96,6 +108,52 @@ struct ToocFriendRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("トークを始める")
+        }
+        .frame(height: ToocTalkRow.height)
+    }
+}
+
+/// Someone who added you: their icon and name (tap for the profile), 友だちになる, and ✕ to turn it down.
+struct ToocRequestRow: View {
+    let user: ToocUser
+    @Environment(ToocStore.self) private var store
+    @Environment(ToocRouter.self) private var router
+    @Environment(\.toocTheme) private var theme
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button { router.sheet = .profile(user.id) } label: {
+                HStack(spacing: 12) {
+                    ToocAvatar(user: user)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(user.displayName)
+                            .font(.body.bold())
+                            .lineLimit(1)
+                        Text("@\(user.id)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Button("友だちになる") {
+                withAnimation(.snappy) { store.addFriend(user) }
+            }
+            .font(.subheadline.weight(.semibold))
+            .buttonStyle(.glassProminent)
+            Button {
+                withAnimation(.snappy) { store.decline(user.id) }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("申請を削除")
         }
         .frame(height: ToocTalkRow.height)
     }

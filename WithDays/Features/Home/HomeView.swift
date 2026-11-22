@@ -586,8 +586,12 @@ struct HomeView: View {
         if url.host == "tooc" {
             // From a tooc notification: open tooc, then the talk.
             mode = HomeMode.tooc.rawValue
-            if let room = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "room" })?.value {
+            let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            if let room = items.first(where: { $0.name == "room" })?.value {
                 ToocNotifications.open(room)
+            }
+            if let id = items.first(where: { $0.name == "add" })?.value {
+                ToocNotifications.find(id)
             }
             return
         }

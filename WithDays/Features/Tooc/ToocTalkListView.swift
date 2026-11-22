@@ -15,20 +15,29 @@ struct ToocTalkListView: View {
                     // Hidden, so the row opens the room without a chevron.
                     NavigationLink(value: ToocRoute.room(room.id)) { EmptyView() }
                         .opacity(0)
-                    ToocTalkRow(room: room)
+                    // The row with the system's long-press menu; its preview shows the talk and opens it on a tap.
+                    ToocContextMenuHost(
+                        enabled: !router.selecting,
+                        items: menuItems(room),
+                        onOpen: { router.open(room: room.id) },
+                        preview: {
+                            ToocRoomPreview(room: room)
+                                .environment(store)
+                                .environment(router)
+                                .environment(\.toocTheme, theme)
+                        },
+                        content: ToocTalkRow(room: room)
+                            .environment(store)
+                            .environment(router)
+                            .environment(\.toocTheme, theme)
+                    )
+                    .frame(height: ToocTalkRow.height)
                 }
                 .tag(room.id)
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                 .listRowBackground(Color.clear)
                 .swipeActions(edge: .leading, allowsFullSwipe: room.unread > 0) { leadingActions(room) }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) { trailingActions(room) }
-                .contextMenu {
-                    menu(room)
-                } preview: {
-                    ToocRoomPreview(room: room)
-                        .environment(store)
-                        .environment(\.toocTheme, theme)
-                }
             }
         }
         .listStyle(.plain)
@@ -117,23 +126,24 @@ struct ToocTalkListView: View {
         .accessibilityLabel("非表示")
     }
 
-    @ViewBuilder
-    private func menu(_ room: ToocRoom) -> some View {
-        Button("開く", systemImage: "message") { router.open(room: room.id) }
+    private func menuItems(_ room: ToocRoom) -> [ToocMenuItem] {
+        var items = [ToocMenuItem(title: "開く", symbol: "message") { router.open(room: room.id) }]
         if room.unread > 0 {
-            Button("既読にする", systemImage: "checkmark.message") { withAnimation(.snappy) { store.markRead(room.id) } }
+            items.append(ToocMenuItem(title: "既読にする", symbol: "checkmark.message") { store.markRead(room.id) })
         }
-        Button(room.pinned ? "ピン留めを外す" : "ピン留め", systemImage: room.pinned ? "pin.slash" : "pin") { pin(room) }
+        items.append(ToocMenuItem(title: room.pinned ? "ピン留めを外す" : "ピン留め", symbol: room.pinned ? "pin.slash" : "pin") {
+            pin(room)
+        })
         if !room.isMynote {
-            Button(room.muted ? "通知をオン" : "通知をオフ", systemImage: room.muted ? "bell" : "bell.slash") {
+            items.append(ToocMenuItem(title: room.muted ? "通知をオン" : "通知をオフ", symbol: room.muted ? "bell" : "bell.slash") {
                 store.update(room.id) { $0.muted.toggle() }
-            }
+            })
         }
-        Divider()
-        Button("非表示", systemImage: "eye.slash") { router.confirm = .hideRooms([room.id]) }
+        items.append(ToocMenuItem(title: "非表示", symbol: "eye.slash") { router.confirm = .hideRooms([room.id]) })
         if !room.isMynote {
-            Button("削除", systemImage: "trash", role: .destructive) { router.confirm = .deleteRooms([room.id]) }
+            items.append(ToocMenuItem(title: "削除", symbol: "trash", destructive: true) { router.confirm = .deleteRooms([room.id]) })
         }
+        return items
     }
 }
 
@@ -239,53 +249,6 @@ struct ToocTalkRow: View {
             return Text("\(icon) \(Image(systemName: symbol))\(message.preview)")
         }
         return Text("\(icon) \(message.preview)")
-    }
-}
-
-/// A peek at a room's latest messages (from a long press), without marking them read.
-struct ToocRoomPreview: View {
-    let room: ToocRoom
-    @Environment(ToocStore.self) private var store
-    @Environment(\.toocTheme) private var theme
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                ToocAvatar(user: store.iconUser(of: room), size: 32)
-                Text(store.name(of: room))
-                    .font(.headline)
-                    .lineLimit(1)
-            }
-            .padding(14)
-            Divider()
-            VStack(spacing: 6) {
-                if room.sent.isEmpty {
-                    Text("メッセージはまだありません")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                Spacer(minLength: 0)
-                ForEach(room.sent.suffix(8)) { message in
-                    let mine = message.senderID == store.me.id
-                    HStack {
-                        if mine { Spacer(minLength: 40) }
-                        Text(message.preview)
-                            .font(.subheadline)
-                            .lineLimit(3)
-                            .foregroundStyle(mine ? Color.white : Color.primary)
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 7)
-                            .background(mine ? theme.myBubble : theme.theirBubble,
-                                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        if !mine { Spacer(minLength: 40) }
-                    }
-                }
-            }
-            .padding(12)
-        }
-        .frame(width: 320, height: 420)
-        .background(theme.fill)
     }
 }
 

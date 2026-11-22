@@ -42,6 +42,21 @@ enum ToocNotifications {
         defer { pendingRoom = nil }
         return pendingRoom
     }
+
+    @MainActor private static var pendingFriend: String?
+
+    /// From a link (ffui.me/tooc/@ID): open tooc's search with that ID.
+    @MainActor
+    static func find(_ id: String) {
+        pendingFriend = id
+        NotificationCenter.default.post(name: openRoom, object: nil)
+    }
+
+    @MainActor
+    static func takePendingFriend() -> String? {
+        defer { pendingFriend = nil }
+        return pendingFriend
+    }
 }
 
 /// Lets tooc's own banner speak while the app is in front, and opens the talk when a notification is tapped.

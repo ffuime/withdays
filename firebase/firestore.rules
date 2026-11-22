@@ -27,6 +27,12 @@ service cloud.firestore {
       match /friends/{friendID} {
         allow read, write: if owns(toocID);
       }
+
+      // Friend requests: written by the one who added, read and cleared by the one added.
+      match /requests/{fromID} {
+        allow read, delete: if owns(toocID) || owns(fromID);
+        allow create, update: if owns(fromID);
+      }
     }
 
     match /rooms/{roomID} {

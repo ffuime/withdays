@@ -23,6 +23,11 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.16.0", date: "2026.11.22", notes: [
+            "tooc：友だち申請（追加すると相手に申請と通知）、友だちになるまで送信できない",
+            "tooc：アカウントの切り替え（じぶんタブ長押しで選択、ダブルタップで前のアカウント）",
+            "tooc：長押しプレビューにトークをそのまま表示しタップで開く、QR は ffui.me のリンク",
+        ]),
         Release(version: "1.15.0", date: "2026.11.22", notes: [
             "tooc：サーバー（Firebase）につながるように。アカウント・友だち・トーク・写真・ファイルが同期されます",
             "tooc：ダミーの友だちとトークはなくなりました",

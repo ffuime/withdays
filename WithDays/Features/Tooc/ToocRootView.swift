@@ -22,6 +22,7 @@ enum ToocSheet: Identifiable, Hashable {
     case find(String)
     case profile(String)
     case editProfile
+    case accounts
 
     var id: String {
         switch self {
@@ -31,6 +32,7 @@ enum ToocSheet: Identifiable, Hashable {
         case .find(let id): "find-\(id)"
         case .profile(let id): "profile-\(id)"
         case .editProfile: "editProfile"
+        case .accounts: "accounts"
         }
     }
 }
@@ -159,9 +161,11 @@ struct ToocRootView: View {
         .onAppear {
             if store.settings.notifications { ToocNotifications.requestAuthorization() }
             if let room = ToocNotifications.takePendingRoom(), store.signedIn { router.open(room: room) }
+            if let id = ToocNotifications.takePendingFriend(), store.signedIn { router.sheet = .find(id) }
         }
         .onReceive(NotificationCenter.default.publisher(for: ToocNotifications.openRoom)) { _ in
             if let room = ToocNotifications.takePendingRoom(), store.signedIn { router.open(room: room) }
+            if let id = ToocNotifications.takePendingFriend(), store.signedIn { router.sheet = .find(id) }
         }
         .task {
             // Scheduled messages go out when their time comes.
@@ -198,6 +202,11 @@ struct ToocRootView: View {
             if !confirm.message.isEmpty { Text(confirm.message) }
         }
         .overlay(alignment: .top) { ToocBanner() }
+        .alert("切り替えられませんでした", isPresented: Binding(get: { switchError != nil }, set: { if !$0 { switchError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(switchError ?? "")
+        }
     }
 
     private var tabs: some View {
@@ -205,6 +214,14 @@ struct ToocRootView: View {
         return TabView(selection: selection) {
             Tab(value: ToocTab.talk) {
                 ToocTalkListView()
+                    // じぶん: hold for the accounts, double-tap for the one used before.
+                    .background(
+                        ToocTabBarHook(
+                            onLongPress: { index in if index == 2 { router.sheet = .accounts } },
+                            onDoubleTap: { index in if index == 2 { switchBack() } }
+                        )
+                        .frame(width: 0, height: 0)
+                    )
             } label: {
                 tabLabel("トーク", "message", .talk)
             }
@@ -224,6 +241,18 @@ struct ToocRootView: View {
         }
         // Outlined everywhere; only the chosen tab names its filled symbol.
         .environment(\.symbolVariants, .none)
+    }
+
+    @State private var switchError: String?
+
+    private func switchBack() {
+        Task {
+            do {
+                try await store.switchToPrevious()
+            } catch {
+                switchError = error.localizedDescription
+            }
+        }
     }
 
     private func tabLabel(_ title: String, _ symbol: String, _ tab: ToocTab) -> some View {
@@ -372,6 +401,7 @@ private struct ToocSheetView: View {
         case .find(let id): ToocFindView(initialID: id)
         case .profile(let id): ToocProfileSheet(userID: id)
         case .editProfile: ToocEditProfileView()
+        case .accounts: ToocAccountsView()
         }
     }
 }

@@ -25,8 +25,8 @@ struct ToocQRView: View {
     @State private var invalid: String?
     @State private var copied = false
 
-    /// Your profile's link (a stand-in address until tooc has its own site).
-    private var link: URL { URL(string: "https://example.com/tooc/\(store.me.id)")! }
+    /// Your profile's page on the web (opens tooc to add you, or the web version).
+    private var link: URL { URL(string: "https://ffui.me/tooc/@\(store.me.id)")! }
 
     var body: some View {
         NavigationStack(path: $path) {

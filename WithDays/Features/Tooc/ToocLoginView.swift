@@ -82,6 +82,8 @@ struct ToocLoginView: View {
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets())
                 }
+
+                ToocSavedAccountsSection()
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
