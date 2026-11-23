@@ -1,5 +1,6 @@
 import DeviceActivity
 import Foundation
+import SwiftUI
 
 /// Shared by the app and its Screen Time report: the report can't send numbers back to the app,
 /// so the app leaves each subscription's monthly price where the report can read it.
