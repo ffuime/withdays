@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Cal's ＋. A tap adds an event. Holding it dims and blurs the screen and tooc / Slides / Notes / Td / Go / Mo split out of it as liquid glass;
+/// Cal's ＋. A tap adds an event. Holding it dims and blurs the screen and tooc / Slides / Notes / ToDo / Go / Planner / Subscribes split out of it as liquid glass;
 /// slide onto one and let go to open it, or let go on ＋ to add an event.
 /// It keeps the finger's state to itself, so following the finger doesn't redraw the calendar.
 struct CalFab: View {
@@ -34,12 +34,13 @@ struct CalFab: View {
 
     /// Top to bottom; Cal's new event is ＋ itself.
     private static let items = [
-        Item(mode: .tooc, name: "tooc", logo: "bubble.left.and.bubble.right", symbol: true),
+        Item(mode: .tooc, name: "tooc", logo: "message", symbol: true),
         Item(mode: .slides, name: "Slides", logo: "rectangle.on.rectangle.angled", symbol: true),
         Item(mode: .notes, name: "Notes", logo: "pencil.and.scribble", symbol: true),
-        Item(mode: .todo, name: "Td", logo: "TdLogo"),
+        Item(mode: .todo, name: "ToDo", logo: "checklist", symbol: true),
         Item(mode: .go, name: "Go", logo: "GoLogo"),
-        Item(mode: .mo, name: "Mo", logo: "MoLogo"),
+        Item(mode: .mo, name: "Planner", logo: "yensign.circle", symbol: true),
+        Item(mode: .subs, name: "Subscribes", logo: "creditcard", symbol: true),
     ]
     private static let circle: CGFloat = 52
     private static let spacing: CGFloat = 26

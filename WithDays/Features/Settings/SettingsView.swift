@@ -42,7 +42,7 @@ struct SettingsView: View {
             }
 
             if todos.access == .granted {
-                Section("Td") {
+                Section("ToDo") {
                     NavigationLink("カテゴリ") { TodoCategorySettingsView() }
                     Picker("ウィジェットにするカテゴリ", selection: widgetListBinding) {
                         ForEach(todos.sortedLists, id: \.calendarIdentifier) { list in
@@ -57,7 +57,7 @@ struct SettingsView: View {
                     ForEach(1...28, id: \.self) { Text("毎月\($0)日").tag($0) }
                 }
             } header: {
-                Text("Mo")
+                Text("Planner")
             } footer: {
                 Text("統計の「今月」がこの日から始まります。カレンダーは変わりません。")
             }

@@ -13,8 +13,11 @@ enum AppGroup {
         }
         candidates.append(baseIdentifier)
         if let bundleID = Bundle.main.bundleIdentifier {
-            // The widget's bundle ID is the app's plus ".widget".
-            let appID = bundleID.hasSuffix(".widget") ? String(bundleID.dropLast(".widget".count)) : bundleID
+            // The extensions' bundle IDs are the app's plus ".widget" / ".subsreport".
+            var appID = bundleID
+            for suffix in [".widget", ".subsreport"] where appID.hasSuffix(suffix) {
+                appID = String(appID.dropLast(suffix.count))
+            }
             candidates.append("group." + appID)
         }
         return candidates.first { FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: $0) != nil }

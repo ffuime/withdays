@@ -23,6 +23,13 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.19.0", date: "2026.11.23", notes: [
+            "Subscribes：サブスク管理（リスト・更新日カレンダー・解約シミュ・過去の記録）",
+            "Subscribes：人気サービスから追加、スクリーンタイム連携で今月の利用時間と¥/h",
+            "Mo は Planner、Td は ToDo に。アイコンを SF Symbols に",
+            "ショートカットアプリから各アプリを直接開けるように",
+            "カレンダー上部の ToDo ボタンをなくしました",
+        ]),
         Release(version: "1.18.0", date: "2026.11.22", notes: [
             "tooc：ノート（いいね・コメント）とアルバム、写真から作るスタンプ",
             "tooc：転送、グループでのメンション（ミュート中でも通知）、送れなかったメッセージの再送",

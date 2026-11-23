@@ -7,7 +7,7 @@ enum HomeRoute: Hashable {
 }
 
 enum HomeMode: String {
-    case calendar, todo, go, mo, notes, slides, tooc
+    case calendar, todo, go, mo, notes, slides, tooc, subs
 }
 
 struct HomeView: View {
@@ -62,8 +62,10 @@ struct HomeView: View {
     private var isSlides: Bool { mode == HomeMode.slides.rawValue }
     /// tooc brings its own tab bar and navigation, so it's laid over the calendar's like Slides.
     private var isTooc: Bool { mode == HomeMode.tooc.rawValue }
-    /// Go, Mo and Notes bring their own bars; the calendar's toolbar and buttons stay out of them.
-    private var isOwnScreen: Bool { isGo || isMo || isNotes || isSlides || isTooc }
+    /// Subscribes brings its own tabs and navigation too.
+    private var isSubs: Bool { mode == HomeMode.subs.rawValue }
+    /// Go, Planner and Notes bring their own bars; the calendar's toolbar and buttons stay out of them.
+    private var isOwnScreen: Bool { isGo || isMo || isNotes || isSlides || isTooc || isSubs }
 
     private var displayedMonth: Date {
         let id = page ?? 0
@@ -73,7 +75,7 @@ struct HomeView: View {
     /// The screen for the current mode; split out so the body type-checks in reasonable time.
     private var modeContent: some View {
         ZStack {
-            if isSlides || isTooc {
+            if isSlides || isTooc || isSubs {
                 Color(uiColor: .systemBackground)
             } else if isNotes {
                 NotesView {
@@ -152,6 +154,16 @@ struct HomeView: View {
                 }
             }
             .animation(.snappy(duration: 0.35), value: isTooc)
+            .overlay {
+                if isSubs {
+                    SubsView {
+                        withAnimation(.snappy) { mode = HomeMode.calendar.rawValue }
+                    }
+                    .background(Color(uiColor: .systemBackground))
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.snappy(duration: 0.35), value: isSubs)
             .overlay(alignment: .bottom) { trayLayer }
             .overlay(alignment: .bottom) { calendarBar }
             .overlay(alignment: .bottom) { toastLayer }
@@ -199,6 +211,17 @@ struct HomeView: View {
             .spanDialog($spanRequest)
             .errorAlert($errorMessage)
             .onOpenURL(perform: open)
+            // ショートカット: open one of the apps straight away.
+            .onReceive(NotificationCenter.default.publisher(for: HomeModeRequest.notification)) { note in
+                guard let raw = note.object as? String, HomeMode(rawValue: raw) != nil else { return }
+                path.removeAll()
+                editor = nil
+                detail = nil
+                showMonthPicker = false
+                closeTray()
+                relocation = nil
+                withAnimation(.snappy(duration: 0.35)) { mode = raw }
+            }
     }
 
     // MARK: Calendar
@@ -273,7 +296,7 @@ struct HomeView: View {
         ToolbarItem(placement: .topBarLeading) {
             // Go keeps a clean screen; its calendar button is in the presets sheet.
             if isTodo {
-                Text("Td")
+                Text("ToDo")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(Color.brand)
                     .fixedSize()
@@ -301,15 +324,13 @@ struct HomeView: View {
         ToolbarItemGroup(placement: .topBarTrailing) {
             // Go keeps a clean screen; Mo's tabs and Notes bring their own buttons.
             if !isOwnScreen {
-                Button {
-                    withAnimation(.snappy) {
-                        closeTray()
-                        relocation = nil
-                        mode = isTodo ? HomeMode.calendar.rawValue : HomeMode.todo.rawValue
+                // Only ToDo has this: back to the calendar. ToDo itself opens from ＋'s menu.
+                if isTodo {
+                    Button {
+                        withAnimation(.snappy) { mode = HomeMode.calendar.rawValue }
+                    } label: {
+                        Image(systemName: "calendar")
                     }
-                } label: {
-                    Image(systemName: isTodo ? "calendar" : "checkmark.circle")
-                        .contentTransition(.symbolEffect(.replace))
                 }
                 if !isTodo {
                     NavigationLink(value: HomeRoute.search) {
@@ -447,7 +468,7 @@ struct HomeView: View {
     @ViewBuilder
     private var toastLayer: some View {
         // Mo shows the toast above its own tab bar.
-        if let toast = toasts.current, !isMo, !isNotes, !isSlides, !isTooc {
+        if let toast = toasts.current, !isMo, !isNotes, !isSlides, !isTooc, !isSubs {
             UndoToastView(toast: toast) { toasts.performUndo() }
                 .padding(.horizontal, isTodo ? 20 : 20 + 56 + 10)
                 .padding(.bottom, isTodo ? 20 + 56 + 12 : 20)

@@ -7,7 +7,7 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "1.18.0"
+    MARKETING_VERSION: "1.19.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
 
@@ -64,6 +64,7 @@ targets:
               - withdays
     dependencies:
       - target: WithDaysWidget
+      - target: SubsReport
       - package: SlidesFeature
       - package: Firebase
         product: FirebaseCore
@@ -111,6 +112,36 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.ffuime.withdays.widget
         PRODUCT_NAME: WithDaysWidget
         CODE_SIGN_ENTITLEMENTS: Entitlements/WithDaysWidget.entitlements
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        CODE_SIGN_STYLE: Automatic
+
+  # Subscribes' Screen Time report: this month's time in a subscription's app.
+  SubsReport:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: SubsReport
+      - path: WithDays/Support/SubsShared.swift
+      - path: WithDays/Support/Formatting.swift
+      - path: WithDays/Support/Theme.swift
+      - path: WithDays/Support/AppGroup.swift
+      - path: WithDays/Support/TodoMeta.swift
+    info:
+      path: SubsReport/Info.plist
+      properties:
+        CFBundleDisplayName: WithDays
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDevelopmentRegion: ja
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.deviceactivityui.report-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ffuime.withdays.subsreport
+        PRODUCT_NAME: SubsReport
+        CODE_SIGN_ENTITLEMENTS: Entitlements/SubsReport.entitlements
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: NO
         SKIP_INSTALL: YES
