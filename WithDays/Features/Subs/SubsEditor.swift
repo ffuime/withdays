@@ -19,6 +19,7 @@ struct SubsEditor: View {
     @State private var photo: PhotosPickerItem?
     @State private var choosingPhoto = false
     @State private var fetchingIcon = false
+    @State private var choosingApp = false
     @State private var picking = false
     @State private var selection = FamilyActivitySelection(includeEntireCategory: false)
     @State private var problem: String?
@@ -66,6 +67,9 @@ struct SubsEditor: View {
             .onChange(of: sub.startDate) { _, _ in followRenewal() }
             .sheet(isPresented: $choosingSymbol) {
                 SubsSymbolPicker(symbol: $sub.symbol, tint: $sub.tint) { sub.image = nil }
+            }
+            .sheet(isPresented: $choosingApp) {
+                SubsAppIconPicker(initial: sub.name) { sub.image = $0 }
             }
             .photosPicker(isPresented: $choosingPhoto, selection: $photo, matching: .images)
             .onChange(of: photo) { _, item in
@@ -117,8 +121,7 @@ struct SubsEditor: View {
                 Menu {
                     Button("記号と色を選ぶ", systemImage: "square.grid.2x2") { choosingSymbol = true }
                     Button("写真を選ぶ", systemImage: "photo") { choosingPhoto = true }
-                    Button("App Storeのアイコン", systemImage: "app.badge") { fetchIcon() }
-                        .disabled(sub.name.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button("App Storeから選ぶ", systemImage: "app.badge") { choosingApp = true }
                     if sub.image != nil {
                         Button("画像を外す", systemImage: "xmark.circle", role: .destructive) { sub.image = nil }
                     }
@@ -258,14 +261,11 @@ struct SubsEditor: View {
         sub.tint = preset.tint
         sub.image = nil
         followRenewal()
-        fetchIcon(term: preset.search ?? preset.name)
-    }
-
-    private func fetchIcon(term: String? = nil) {
-        let name = term ?? sub.name
         fetchingIcon = true
         Task {
-            if let data = await SubsImages.appStoreIcon(for: name) { sub.image = data }
+            if let id = preset.appID, let data = await SubsAppStore.icon(id: id) {
+                sub.image = data
+            }
             fetchingIcon = false
         }
     }
@@ -306,29 +306,6 @@ enum SubsImages {
             image.draw(in: CGRect(x: (side - size.width) / 2, y: (side - size.height) / 2, width: size.width, height: size.height))
         }
         return rendered.pngData()
-    }
-
-    /// The first App Store (Japan) app found under that name, its icon.
-    static func appStoreIcon(for name: String) async -> Data? {
-        var components = URLComponents(string: "https://itunes.apple.com/search")!
-        components.queryItems = [
-            URLQueryItem(name: "term", value: name),
-            URLQueryItem(name: "country", value: "jp"),
-            URLQueryItem(name: "entity", value: "software"),
-            URLQueryItem(name: "limit", value: "1"),
-        ]
-        struct Results: Decodable {
-            struct App: Decodable { let artworkUrl512: String?; let artworkUrl100: String? }
-            let results: [App]
-        }
-        guard let url = components.url,
-              let search = try? await URLSession.shared.data(from: url),
-              let found = try? JSONDecoder().decode(Results.self, from: search.0).results.first,
-              let link = found.artworkUrl512 ?? found.artworkUrl100,
-              let imageURL = URL(string: link),
-              let image = try? await URLSession.shared.data(from: imageURL)
-        else { return nil }
-        return small(image.0)
     }
 }
 

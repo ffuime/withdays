@@ -28,14 +28,17 @@ struct SubsRenewalsView: View {
                         withAnimation(.snappy) { offset = 0 }
                     } label: {
                         Image(systemName: "arrow.uturn.left")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(Color.brand)
                             .frame(width: 36, height: 36)
+                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .transition(.scale.combined(with: .opacity))
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("今月に戻る")
+                    .transition(.opacity)
                 }
             }
+            .animation(.easeInOut(duration: 0.25), value: offset != 0)
             .frame(height: 40)
             .padding(.horizontal, 16)
 

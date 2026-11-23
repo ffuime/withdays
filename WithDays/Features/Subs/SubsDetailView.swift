@@ -68,15 +68,15 @@ struct SubsDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { router.edit(sub) } label: { Image(systemName: "pencil") }
+                SubsPill(symbol: "pencil") { router.edit(sub) }
                     .accessibilityLabel("編集")
             }
-            ToolbarSpacer(.fixed, placement: .topBarTrailing)
+            .sharedBackgroundVisibility(.hidden)
             ToolbarItem(placement: .topBarTrailing) {
-                Button { router.deleting = sub } label: { Image(systemName: "trash") }
-                    .tint(.red)
+                SubsPill(symbol: "trash") { router.deleting = sub }
                     .accessibilityLabel("削除")
             }
+            .sharedBackgroundVisibility(.hidden)
         }
     }
 

@@ -5,9 +5,6 @@ struct SubsListView: View {
     @Environment(SubsStore.self) private var store
     @Environment(SubsRouter.self) private var router
 
-    /// The card's color is drawn behind the list, from the screen's top to the card's bottom,
-    /// so it reaches under the bar and stretches when pulled down.
-    @State private var offset: CGFloat = 0
     @State private var cardHeight: CGFloat = 0
 
     static let cardColors = [Color(uiColor: UIColor(hex: 0x0B3A5C)), Color(uiColor: UIColor(hex: 0x14679A))]
@@ -47,14 +44,7 @@ struct SubsListView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, y in offset = y }
-        .background(alignment: .top) {
-            UnevenRoundedRectangle(bottomLeadingRadius: 32, bottomTrailingRadius: 32, style: .continuous)
-                .fill(LinearGradient(colors: Self.cardColors, startPoint: .top, endPoint: .bottom))
-                .frame(height: max(cardHeight - offset, 0))
-                .frame(maxWidth: .infinity)
-                .ignoresSafeArea()
-        }
+        .modifier(SubsTopCard(cardHeight: cardHeight))
         .overlay(alignment: .bottomTrailing) {
             Button(action: router.add) {
                 Image(systemName: "plus")
@@ -77,14 +67,14 @@ struct SubsListView: View {
                 .font(.system(size: 15, weight: .medium))
                 .opacity(0.9)
             Text(SubsFormat.yen(total))
-                .font(SubsFormat.number(64, .regular))
+                .font(SubsFormat.number(64, .bold))
                 .monospacedDigit()
                 .contentTransition(.numericText(value: total))
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
             HStack(alignment: .firstTextBaseline, spacing: 1) {
                 Text(SubsFormat.yen(total * 12))
-                    .font(SubsFormat.number(19, .medium))
+                    .font(SubsFormat.number(19, .bold))
                     .monospacedDigit()
                     .contentTransition(.numericText(value: total * 12))
                 Text("/年")

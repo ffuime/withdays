@@ -5,6 +5,7 @@ import SwiftUI
 struct SubsSimView: View {
     @Environment(SubsStore.self) private var store
     @State private var picked: Set<String> = []
+    @State private var cardHeight: CGFloat = 0
 
     private var chosen: [Sub] { store.subs.filter { picked.contains($0.id) } }
     private var monthly: Double { chosen.filter { !$0.inTrial }.reduce(0) { $0 + $1.monthly } }
@@ -13,7 +14,8 @@ struct SubsSimView: View {
         let sub: Sub
         let reason: String
         let symbol: String
-        var id: String { sub.id }
+        /// Apart from the same subscription's row in すべて, so the list keeps each row where it is.
+        var id: String { "hint-" + sub.id }
     }
 
     /// One reason per subscription, the most pressing first.
@@ -54,7 +56,8 @@ struct SubsSimView: View {
     var body: some View {
         List {
             summary
-                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { cardHeight = $0 }
+                .listRowInsets(EdgeInsets())
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
 
@@ -68,12 +71,15 @@ struct SubsSimView: View {
             }
 
             Section("すべてのサブスク") {
-                ForEach(store.subs.sorted { $0.monthly > $1.monthly }) { sub in
+                // Highest first; ties by name, so nothing moves when a row is checked.
+                ForEach(store.subs.sorted { ($0.monthly, $1.name) > ($1.monthly, $0.name) }) { sub in
                     pickRow(sub, reason: nil, symbol: nil)
                 }
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .modifier(SubsTopCard(cardHeight: cardHeight))
         .overlay {
             if store.subs.isEmpty {
                 ContentUnavailableView("サブスクがありません", systemImage: "scissors",
@@ -84,15 +90,16 @@ struct SubsSimView: View {
         .onChange(of: store.subs.map(\.id)) { _, ids in picked.formIntersection(ids) }
     }
 
+    /// Always the same height, whatever is picked.
     private var summary: some View {
-        let soonest = chosen.filter { !$0.inTrial }.min { $0.nextRenewal < $1.nextRenewal }
-        return VStack(spacing: 6) {
+        VStack(spacing: 4) {
             Text(picked.isEmpty ? "解約したいサブスクを選んでください" : "\(picked.count)件を解約すると")
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: 15, weight: .medium))
+                .lineLimit(1)
                 .opacity(0.9)
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(SubsFormat.yen(monthly))
-                    .font(SubsFormat.number(52, .regular))
+                    .font(SubsFormat.number(64, .bold))
                     .monospacedDigit()
                     .contentTransition(.numericText(value: monthly))
                     .lineLimit(1)
@@ -100,26 +107,16 @@ struct SubsSimView: View {
                 Text("/月")
                     .font(.system(size: 16, weight: .medium))
             }
-            HStack(spacing: 24) {
+            HStack(spacing: 28) {
                 total("1年で", monthly * 12)
                 total("5年で", monthly * 60)
-            }
-            if let soonest {
-                Text("\(SubsFormat.day(soonest.nextRenewal))までに「\(soonest.name)」を解約すれば、次の\(SubsFormat.yen(soonest.price))は払わずに済みます")
-                    .font(.system(size: 12, weight: .medium))
-                    .multilineTextAlignment(.center)
-                    .opacity(0.85)
-                    .padding(.top, 4)
             }
         }
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 22)
+        .padding(.top, 16)
+        .padding(.bottom, 30)
         .padding(.horizontal, 16)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(LinearGradient(colors: SubsListView.cardColors, startPoint: .top, endPoint: .bottom))
-        )
         .animation(.snappy, value: monthly)
     }
 
@@ -129,7 +126,7 @@ struct SubsSimView: View {
                 .font(.system(size: 11, weight: .medium))
                 .opacity(0.8)
             Text(SubsFormat.yen(amount))
-                .font(SubsFormat.number(19, .semibold))
+                .font(SubsFormat.number(19, .bold))
                 .monospacedDigit()
                 .contentTransition(.numericText(value: amount))
         }

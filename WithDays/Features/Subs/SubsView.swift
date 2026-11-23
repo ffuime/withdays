@@ -41,23 +41,14 @@ struct SubsView: View {
         @Bindable var router = router
         return NavigationStack(path: $router.path) {
             TabView(selection: $tab) {
-                Tab(value: SubsTab.list) {
+                Tab("リスト", systemImage: "list.bullet.indent", value: SubsTab.list) {
                     SubsListView()
-                } label: {
-                    Image(systemName: "list.bullet.indent")
-                        .accessibilityLabel("リスト")
                 }
-                Tab(value: SubsTab.renewals) {
+                Tab("更新日", systemImage: "arrow.trianglehead.clockwise.rotate.90", value: SubsTab.renewals) {
                     SubsRenewalsView()
-                } label: {
-                    Image(systemName: "arrow.trianglehead.clockwise.rotate.90")
-                        .accessibilityLabel("更新日")
                 }
-                Tab(value: SubsTab.simulate) {
+                Tab("解約シミュ", systemImage: "scissors", value: SubsTab.simulate) {
                     SubsSimView()
-                } label: {
-                    Image(systemName: "scissors")
-                        .accessibilityLabel("解約シミュ")
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -97,27 +88,62 @@ struct SubsView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
+        // On the dark cards of リスト and 解約シミュ the pills are tinted and their symbols white.
         ToolbarItem(placement: .topBarLeading) {
-            Button(action: onCalendar) {
-                Image(systemName: "chevron.left")
-            }
-            .accessibilityLabel("カレンダーに戻る")
+            SubsPill(symbol: "chevron.left", onCard: tab != .renewals, action: onCalendar)
+                .accessibilityLabel("カレンダーに戻る")
         }
+        .sharedBackgroundVisibility(.hidden)
         if tab == .list {
-            ToolbarSpacer(.fixed, placement: .topBarLeading)
             ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    router.path.append(.history)
-                } label: {
-                    Image(systemName: "backward")
-                }
-                .accessibilityLabel("過去の記録")
+                SubsPill(symbol: "backward", onCard: true) { router.path.append(.history) }
+                    .accessibilityLabel("過去の記録")
             }
+            .sharedBackgroundVisibility(.hidden)
         }
     }
 }
 
 // MARK: Shared parts
+
+/// A glass pill in the top bar.
+struct SubsPill: View {
+    let symbol: String
+    var onCard = false
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(onCard ? Color.white : Color.primary)
+                .frame(width: 52, height: 38)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .glassEffect(onCard ? .regular.tint(SubsListView.cardColors[0].opacity(0.55)).interactive() : .regular.interactive(), in: .capsule)
+        .animation(.snappy, value: onCard)
+    }
+}
+
+/// The dark card stuck to the top of a list (今月の合計支出, 解約シミュ): its color is drawn behind the list,
+/// from the screen's top to the card's bottom, so it reaches under the bar and stretches when pulled down.
+struct SubsTopCard: ViewModifier {
+    let cardHeight: CGFloat
+    @State private var offset: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, y in offset = y }
+            .background(alignment: .top) {
+                UnevenRoundedRectangle(bottomLeadingRadius: 32, bottomTrailingRadius: 32, style: .continuous)
+                    .fill(LinearGradient(colors: SubsListView.cardColors, startPoint: .top, endPoint: .bottom))
+                    .frame(height: max(cardHeight - offset, 0))
+                    .frame(maxWidth: .infinity)
+                    .ignoresSafeArea()
+            }
+    }
+}
 
 /// A subscription's icon: the app's (Screen Time), its own picture, or a symbol on its color.
 struct SubsIconView: View {
@@ -209,30 +235,31 @@ struct SubsRow: View {
     }
 }
 
-/// Delete to the right, edit to the left; both go all the way.
+/// Swipe right to edit, left to delete (asks first).
 struct SubsSwipes: ViewModifier {
     let sub: Sub
     @Environment(SubsRouter.self) private var router
 
     func body(content: Content) -> some View {
         content
+            // Swiped all the way, the symbol follows the finger (the system's full swipe).
             .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                Button {
-                    router.deleting = sub
-                } label: {
-                    Image(systemName: "minus.circle")
-                }
-                .tint(.red)
-                .accessibilityLabel("削除")
-            }
-            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                 Button {
                     router.edit(sub)
                 } label: {
-                    Image(systemName: "pencil.circle")
+                    Label("編集", systemImage: "pencil.circle")
+                        .labelStyle(.iconOnly)
                 }
                 .tint(.blue)
-                .accessibilityLabel("編集")
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                Button(role: .destructive) {
+                    router.deleting = sub
+                } label: {
+                    Label("削除", systemImage: "minus.circle")
+                        .labelStyle(.iconOnly)
+                }
+                .tint(.red)
             }
     }
 }
