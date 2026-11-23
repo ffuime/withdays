@@ -322,13 +322,13 @@ enum SubsImages {
             let results: [App]
         }
         guard let url = components.url,
-              let (data, _) = try? await URLSession.shared.data(from: url),
-              let found = try? JSONDecoder().decode(Results.self, from: data).results.first,
+              let search = try? await URLSession.shared.data(from: url),
+              let found = try? JSONDecoder().decode(Results.self, from: search.0).results.first,
               let link = found.artworkUrl512 ?? found.artworkUrl100,
               let imageURL = URL(string: link),
-              let (image, _) = try? await URLSession.shared.data(from: imageURL)
+              let image = try? await URLSession.shared.data(from: imageURL)
         else { return nil }
-        return small(image)
+        return small(image.0)
     }
 }
 

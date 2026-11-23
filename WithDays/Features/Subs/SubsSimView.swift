@@ -58,10 +58,10 @@ struct SubsSimView: View {
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
 
-            let hints = hints
-            if !hints.isEmpty {
+            let found = hints
+            if !found.isEmpty {
                 Section("見直し候補") {
-                    ForEach(hints) { hint in
+                    ForEach(found) { hint in
                         pickRow(hint.sub, reason: hint.reason, symbol: hint.symbol)
                     }
                 }
