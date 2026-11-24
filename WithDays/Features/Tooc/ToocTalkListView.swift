@@ -173,7 +173,7 @@ struct ToocTalkRow: View {
             ZStack {
                 if let last = room.last {
                     Text(ToocTime.listLabel(last.date))
-                        .font(.system(size: 12))
+                        .toocFont(.system(size: 12))
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                         .padding(.top, 3)
@@ -203,14 +203,14 @@ struct ToocTalkRow: View {
     private var nameLine: some View {
         HStack(spacing: 5) {
             Text(store.name(of: room))
-                .font(.body.bold())
+                .toocFont(.body.bold())
                 .lineLimit(1)
             if room.isGroup {
                 ToocCountBadge(count: room.memberIDs.count + 1)
             }
             if room.mentioned {
                 Image(systemName: "at.circle.fill")
-                    .font(.system(size: 13, weight: .bold))
+                    .toocFont(.system(size: 13, weight: .bold))
                     .foregroundStyle(theme.accent)
                     .accessibilityLabel("メンションがあります")
             }
@@ -219,7 +219,7 @@ struct ToocTalkRow: View {
                 if room.muted { Image(systemName: "speaker.slash.fill") }
                 if room.scheduled { Image(systemName: "clock.fill") }
             }
-            .font(.system(size: 12))
+            .toocFont(.system(size: 12))
             .foregroundStyle(.secondary)
         }
     }
@@ -230,7 +230,7 @@ struct ToocTalkRow: View {
             HStack(alignment: .top, spacing: 4) {
                 if last.failed {
                     Image(systemName: "exclamationmark.circle.fill")
-                        .font(.system(size: 12))
+                        .toocFont(.system(size: 12))
                         .foregroundStyle(.red)
                         .frame(height: Self.previewLine)
                 } else if last.sending {
@@ -240,7 +240,7 @@ struct ToocTalkRow: View {
                         .frame(height: Self.previewLine)
                 }
                 previewText(last)
-                    .font(.system(size: Self.previewSize))
+                    .toocFont(.system(size: Self.previewSize))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -273,7 +273,7 @@ struct ToocStartTalkText: View {
 
     var body: some View {
         Text("トークを始めよう")
-            .font(.system(size: size, weight: .semibold))
+            .toocFont(.system(size: size, weight: .semibold))
             .foregroundStyle(theme.accent)
             .overlay {
                 LinearGradient(
@@ -288,7 +288,7 @@ struct ToocStartTalkText: View {
                 .offset(x: phase * 120)
                 .blendMode(.plusLighter)
                 .mask {
-                    Text("トークを始めよう").font(.system(size: size, weight: .semibold))
+                    Text("トークを始めよう").toocFont(.system(size: size, weight: .semibold))
                 }
                 .allowsHitTesting(false)
             }

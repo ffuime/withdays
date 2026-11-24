@@ -256,7 +256,7 @@ struct ToocLocationPicker: View {
             }
             .overlay {
                 Image(systemName: "mappin")
-                    .font(.system(size: 34, weight: .semibold))
+                    .toocFont(.system(size: 34, weight: .semibold))
                     .foregroundStyle(.red)
                     .shadow(radius: 3)
                     .offset(y: -17)
@@ -264,7 +264,7 @@ struct ToocLocationPicker: View {
             }
             .safeAreaInset(edge: .bottom) {
                 Text(title.isEmpty ? "地図を動かして場所を選ぶ" : title)
-                    .font(.subheadline.weight(.semibold))
+                    .toocFont(.subheadline.weight(.semibold))
                     .lineLimit(2)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 12)
@@ -357,16 +357,16 @@ struct ToocCardBubble: View {
             Button(action: open) {
                 HStack(spacing: 10) {
                     Image(systemName: "doc.fill")
-                        .font(.system(size: 18))
+                        .toocFont(.system(size: 18))
                         .foregroundStyle(.white)
                         .frame(width: 40, height: 40)
                         .background(Circle().fill(theme.accent))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(name)
-                            .font(.subheadline.weight(.semibold))
+                            .toocFont(.subheadline.weight(.semibold))
                             .lineLimit(2)
                         Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
-                            .font(.caption)
+                            .toocFont(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -391,7 +391,7 @@ struct ToocCardBubble: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .allowsHitTesting(false)
                     Label(title, systemImage: "mappin.circle.fill")
-                        .font(.subheadline.weight(.semibold))
+                        .toocFont(.subheadline.weight(.semibold))
                         .lineLimit(2)
                 }
                 .contentShape(Rectangle())
@@ -401,7 +401,7 @@ struct ToocCardBubble: View {
 
     private func header(_ title: String, _ symbol: String) -> some View {
         Label(title, systemImage: symbol)
-            .font(.caption.weight(.semibold))
+            .toocFont(.caption.weight(.semibold))
             .foregroundStyle(theme.accent)
     }
 
@@ -411,7 +411,7 @@ struct ToocCardBubble: View {
         if let date {
             let closed = date <= .now
             Label(closed ? "締め切りました" : "締め切り \(ToocTime.candidate(date))", systemImage: closed ? "lock.fill" : "clock")
-                .font(.caption)
+                .toocFont(.caption)
                 .foregroundStyle(closed ? Color.red : Color.secondary)
         }
     }
@@ -422,7 +422,7 @@ struct ToocCardBubble: View {
         return VStack(alignment: .leading, spacing: 8) {
             header(poll.multiple ? "投票（複数選択）" : "投票", "chart.bar.fill")
             Text(poll.question)
-                .font(.headline)
+                .toocFont(.headline)
             deadline(poll.deadline)
             ForEach(poll.options.indices, id: \.self) { index in
                 let count = poll.count(index)
@@ -434,11 +434,11 @@ struct ToocCardBubble: View {
                         Image(systemName: chosen ? "checkmark.circle.fill" : "circle")
                             .foregroundStyle(chosen ? theme.accent : Color.secondary)
                         Text(poll.options[index])
-                            .font(.subheadline)
+                            .toocFont(.subheadline)
                             .lineLimit(2)
                         Spacer(minLength: 4)
                         Text("\(count)")
-                            .font(.subheadline.weight(.semibold))
+                            .toocFont(.subheadline.weight(.semibold))
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
@@ -458,7 +458,7 @@ struct ToocCardBubble: View {
                 .disabled(poll.closed)
             }
             Text("\(poll.votes.count)人が投票")
-                .font(.caption)
+                .toocFont(.caption)
                 .foregroundStyle(.secondary)
         }
     }
@@ -469,17 +469,17 @@ struct ToocCardBubble: View {
         return VStack(alignment: .leading, spacing: 8) {
             header("日程調整", "calendar")
             Text(poll.title)
-                .font(.headline)
+                .toocFont(.headline)
             deadline(poll.deadline)
             ForEach(poll.dates.indices, id: \.self) { index in
                 let answer = index < mineAnswers.count ? mineAnswers[index] : -1
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(ToocTime.candidate(poll.dates[index]))
-                            .font(.subheadline.weight(index == best && poll.count(index, 2) > 0 ? .bold : .regular))
+                            .toocFont(.subheadline.weight(index == best && poll.count(index, 2) > 0 ? .bold : .regular))
                         Spacer()
                         Text("○\(poll.count(index, 2)) △\(poll.count(index, 1)) ×\(poll.count(index, 0))")
-                            .font(.caption)
+                            .toocFont(.caption)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
@@ -489,7 +489,7 @@ struct ToocCardBubble: View {
                                 withAnimation(.snappy) { store.answer(index, value, in: message.id, roomID: room.id) }
                             } label: {
                                 Text(value == 2 ? "○" : value == 1 ? "△" : "×")
-                                    .font(.subheadline.weight(.bold))
+                                    .toocFont(.subheadline.weight(.bold))
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 5)
                                     .foregroundStyle(answer == value ? Color.white : Color.primary)
@@ -504,7 +504,7 @@ struct ToocCardBubble: View {
                 .padding(.vertical, 2)
             }
             Text("\(poll.answers.count)人が回答")
-                .font(.caption)
+                .toocFont(.caption)
                 .foregroundStyle(.secondary)
         }
     }
@@ -513,25 +513,25 @@ struct ToocCardBubble: View {
         VStack(alignment: .leading, spacing: 8) {
             header("あみだくじ", "line.3.horizontal")
             Text(amida.title)
-                .font(.headline)
+                .toocFont(.headline)
             deadline(amida.deadline)
             if amida.revealed {
                 ForEach(amida.entrants.indices, id: \.self) { index in
                     HStack {
-                        Text(amida.entrants[index]).font(.subheadline)
+                        Text(amida.entrants[index]).toocFont(.subheadline)
                         Spacer()
                         Text(amida.prizes[amida.result(for: index)])
-                            .font(.subheadline.weight(.semibold))
+                            .toocFont(.subheadline.weight(.semibold))
                             .foregroundStyle(theme.accent)
                     }
                 }
             } else {
                 Text("\(amida.entrants.count)人が参加")
-                    .font(.subheadline)
+                    .toocFont(.subheadline)
                     .foregroundStyle(.secondary)
             }
             Button(amida.revealed ? "もう一度見る" : "結果を見る") { showAmida = true }
-                .font(.subheadline.weight(.semibold))
+                .toocFont(.subheadline.weight(.semibold))
                 .foregroundStyle(theme.accent)
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
@@ -576,7 +576,7 @@ struct ToocAmidaSheet: View {
                                 Spacer()
                                 Text(amida.prizes[amida.result(for: index)]).bold()
                             }
-                            .font(.subheadline)
+                            .toocFont(.subheadline)
                         }
                     }
                     .padding(14)
@@ -589,7 +589,7 @@ struct ToocAmidaSheet: View {
                         withAnimation(.easeInOut(duration: 2.6)) { progress = 1 } completion: { onReveal() }
                     } label: {
                         Text("スタート")
-                            .font(.headline)
+                            .toocFont(.headline)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 6)
                     }
@@ -641,7 +641,7 @@ struct ToocAmidaSheet: View {
         HStack(spacing: 0) {
             ForEach(texts.indices, id: \.self) { index in
                 Text(texts[index])
-                    .font(.caption.weight(.semibold))
+                    .toocFont(.caption.weight(.semibold))
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(colored ? color(index) : Color.primary)

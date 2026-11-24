@@ -28,10 +28,10 @@ struct ToocAccountsView: View {
                                 ToocAvatar(user: saved.id == store.me.id ? store.me : saved.user, size: 44)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(saved.id == store.me.id ? store.me.name : saved.name)
-                                        .font(.body.weight(.semibold))
+                                        .toocFont(.body.weight(.semibold))
                                         .foregroundStyle(.primary)
                                     Text("@\(saved.id)")
-                                        .font(.footnote)
+                                        .toocFont(.footnote)
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
@@ -39,7 +39,7 @@ struct ToocAccountsView: View {
                                     ProgressView()
                                 } else if saved.id == store.me.id {
                                     Image(systemName: "checkmark.circle.fill")
-                                        .font(.title3)
+                                        .toocFont(.title3)
                                         .foregroundStyle(theme.accent)
                                 }
                             }
@@ -114,7 +114,7 @@ struct ToocSavedAccountsSection: View {
                             ToocAvatar(user: saved.user, size: 36)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(saved.name).foregroundStyle(.primary)
-                                Text("@\(saved.id)").font(.caption).foregroundStyle(.secondary)
+                                Text("@\(saved.id)").toocFont(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
                             if working == saved.id { ProgressView() }

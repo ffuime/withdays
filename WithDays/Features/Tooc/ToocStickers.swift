@@ -54,9 +54,9 @@ struct ToocStickerPanel: View {
                 Button { making = true } label: {
                     VStack(spacing: 4) {
                         Image(systemName: "plus")
-                            .font(.system(size: 22, weight: .semibold))
+                            .toocFont(.system(size: 22, weight: .semibold))
                         Text("作る")
-                            .font(.caption2.weight(.semibold))
+                            .toocFont(.caption2.weight(.semibold))
                     }
                     .foregroundStyle(theme.accent)
                     .frame(maxWidth: .infinity)
@@ -84,7 +84,7 @@ struct ToocStickerPanel: View {
             .padding(12)
             if store.stickers.isEmpty {
                 Text("写真から自分だけのスタンプを作れます。")
-                    .font(.footnote)
+                    .toocFont(.footnote)
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 12)
             }
@@ -137,7 +137,7 @@ struct ToocStickerMaker: View {
                         } else {
                             PhotosPicker(selection: $item, matching: .images) {
                                 Label("写真を選ぶ", systemImage: "photo.on.rectangle")
-                                    .font(.headline)
+                                    .toocFont(.headline)
                             }
                         }
                         if lifting { ProgressView().controlSize(.large) }
@@ -296,7 +296,7 @@ struct ToocForwardView: View {
                             .lineLimit(1)
                         Spacer()
                         Image(systemName: chosen.contains(room.id) ? "checkmark.circle.fill" : "circle")
-                            .font(.title3)
+                            .toocFont(.title3)
                             .foregroundStyle(chosen.contains(room.id) ? theme.accent : Color.secondary.opacity(0.5))
                             .contentTransition(.symbolEffect(.replace))
                     }
@@ -312,7 +312,7 @@ struct ToocForwardView: View {
                         .foregroundStyle(theme.accent)
                     Text(message.preview)
                         .lineLimit(2)
-                        .font(.subheadline)
+                        .toocFont(.subheadline)
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                 }
@@ -361,7 +361,7 @@ struct ToocMentionStrip: View {
                         HStack(spacing: 6) {
                             ToocAvatar(user: user, size: 26)
                             Text(user.displayName)
-                                .font(.subheadline.weight(.semibold))
+                                .toocFont(.subheadline.weight(.semibold))
                                 .lineLimit(1)
                         }
                         .padding(.leading, 4)
@@ -442,10 +442,10 @@ struct ToocSwitchOverlay: View {
                 .scaleEffect(stage == 0 ? 0.82 : 1)
                 VStack(spacing: 3) {
                     Text(stage >= 1 ? to.name : from.name)
-                        .font(.title3.bold())
+                        .toocFont(.title3.bold())
                         .contentTransition(.opacity)
                     Text("@\(stage >= 1 ? to.id : from.id)")
-                        .font(.subheadline)
+                        .toocFont(.subheadline)
                         .foregroundStyle(.secondary)
                         .contentTransition(.opacity)
                 }

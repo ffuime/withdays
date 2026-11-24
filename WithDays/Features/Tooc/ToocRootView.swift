@@ -15,6 +15,10 @@ enum ToocRoute: Hashable {
     case settingsTalk
     case settingsEmail
     case settingsPhone
+    case settingsFont
+    case settingsAbout
+    case settingsChangelog
+    case settingsCredits
 }
 
 enum ToocSheet: Identifiable, Hashable {
@@ -154,6 +158,8 @@ struct ToocRootView: View {
         .environment(store)
         .environment(router)
         .environment(\.toocTheme, theme)
+        .toocFont(.body)
+        .environment(\.toocFontFamily, ToocFontLibrary.shared.family(store.settings.font))
         .tint(theme.accent)
         .environment(\.colorScheme, theme.dark ? .dark : colorScheme)
         .scaleEffect(switching ? 0.93 : 1)
@@ -397,7 +403,7 @@ struct ToocBarIcon: View {
 
     var body: some View {
         Image(systemName: name)
-            .font(.system(size: 15, weight: .semibold))
+            .toocFont(.system(size: 15, weight: .semibold))
             .foregroundStyle(theme.accent)
     }
 }
@@ -420,6 +426,10 @@ private struct ToocDestination: View {
         case .settingsTalk: ToocTalkSettingsView()
         case .settingsEmail: ToocEmailSettingsView()
         case .settingsPhone: ToocPhoneSettingsView()
+        case .settingsFont: ToocFontSettingsView()
+        case .settingsAbout: ToocAboutView()
+        case .settingsChangelog: ToocChangelogView()
+        case .settingsCredits: ToocCreditsView()
         }
     }
 }
@@ -539,10 +549,10 @@ private struct ToocBanner: View {
                         }
                         VStack(alignment: .leading, spacing: 1) {
                             Text(notice.title)
-                                .font(.subheadline.bold())
+                                .toocFont(.subheadline.bold())
                                 .lineLimit(1)
                             Text(store.settings.showContent ? notice.body : "新しいお知らせがあります")
-                                .font(.subheadline)
+                                .toocFont(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
                         }

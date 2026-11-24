@@ -16,7 +16,7 @@ struct ToocIconImage: View {
                         startPoint: .topLeading, endPoint: .bottomTrailing
                     )
                     Image(systemName: "note.text")
-                        .font(.system(size: side * 0.44, weight: .semibold))
+                        .toocFont(.system(size: side * 0.44, weight: .semibold))
                         .foregroundStyle(.white)
                 }
             } else if let file = user.iconFile, let photo = ToocFiles.image(file) {
@@ -32,7 +32,7 @@ struct ToocIconImage: View {
                         startPoint: .topLeading, endPoint: .bottomTrailing
                     )
                     Text(user.initial)
-                        .font(.system(size: side * 0.44, weight: .semibold, design: .rounded))
+                        .toocFont(.system(size: side * 0.44, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white)
                     // The photo on the server, over the generated icon once it's here.
                     if let address = user.iconURL {
@@ -74,7 +74,7 @@ struct ToocAvatar: View {
                 if let badge {
                     let side = size * 0.4
                     Image(systemName: badge)
-                        .font(.system(size: side * 0.5, weight: .bold))
+                        .toocFont(.system(size: side * 0.5, weight: .bold))
                         .rotationEffect(.degrees(badge.hasPrefix("pin") ? 45 : 0))
                         .foregroundStyle(.white)
                         .frame(width: side, height: side)
@@ -97,7 +97,7 @@ struct ToocCountBadge: View {
 
     var body: some View {
         Text(count > 999 ? "999+" : "\(count)")
-            .font(.system(size: prominent ? 13 : 10, weight: .bold))
+            .toocFont(.system(size: prominent ? 13 : 10, weight: .bold))
             .monospacedDigit()
             .foregroundStyle(prominent ? Color.white : Color.secondary)
             .padding(.horizontal, prominent ? 6 : 4)

@@ -38,13 +38,13 @@ struct ToocQRView: View {
                     .background(.white, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
                     .shadow(color: .black.opacity(0.08), radius: 16, y: 6)
                 Text("@\(store.me.id)")
-                    .font(.headline)
+                    .toocFont(.headline)
                     .foregroundStyle(.secondary)
                 Button {
                     path = [.scan]
                 } label: {
                     Label("スキャン", systemImage: "qrcode.viewfinder")
-                        .font(.headline)
+                        .toocFont(.headline)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 4)
                 }
@@ -168,14 +168,14 @@ struct ToocQRView: View {
                         .frame(width: 52, height: 52)
                 case .symbol(let symbol, let background):
                     Image(systemName: symbol)
-                        .font(.system(size: 20, weight: .semibold))
+                        .toocFont(.system(size: 20, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 52, height: 52)
                         .background(background, in: Circle())
                 }
             }
             Text(name)
-                .font(.caption2)
+                .toocFont(.caption2)
                 .foregroundStyle(.secondary)
         }
     }

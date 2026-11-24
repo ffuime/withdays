@@ -27,7 +27,7 @@ struct ToocRoomView: View {
     @State private var usingCamera = false
     @State private var pickingFile = false
     @State private var quickLook: URL?
-    @State private var zoom: ToocPhotoZoomItem?
+    @State private var viewing: ToocPhotoViewerItem?
     @State private var composer: ToocComposer?
     @State private var selecting: String?
     @State private var searching = false
@@ -152,12 +152,8 @@ struct ToocRoomView: View {
             }
                 .ignoresSafeArea()
         }
-        .fullScreenCover(item: $zoom) { item in
-            ToocPhotoZoom(item: item) {
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) { zoom = nil }
-            }
+        .fullScreenCover(item: $viewing) { item in
+            ToocPhotoViewer(item: item) { viewing = nil }
         }
         .sheet(isPresented: $editingGroup) { ToocGroupEditView(roomID: roomID) }
         .alert("トーク履歴を削除しますか？", isPresented: $confirmClear) {
@@ -326,7 +322,7 @@ struct ToocRoomView: View {
     /// The day: plain text, no background.
     private func dayLabel(_ date: Date) -> some View {
         Text(ToocTime.day(date))
-            .font(.caption.weight(.semibold))
+            .toocFont(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
@@ -358,9 +354,20 @@ struct ToocRoomView: View {
             },
             select: { if case .text(let text) = message.kind { selecting = text } },
             openPhoto: { image, frame in
+                // Every photo in the talk, oldest first, so a swipe goes to the one before or after.
+                let photos = (room?.messages ?? []).filter { photo in
+                    switch photo.kind {
+                    case .photo(let file): file != nil
+                    case .remotePhoto: true
+                    default: false
+                    }
+                }
                 var transaction = Transaction()
                 transaction.disablesAnimations = true
-                withTransaction(transaction) { zoom = ToocPhotoZoomItem(image: image, source: frame) }
+                withTransaction(transaction) {
+                    viewing = ToocPhotoViewerItem(photos: photos.isEmpty ? [message] : photos, start: message.id,
+                                                  image: image, source: frame)
+                }
             },
             openFile: { file in
                 guard file.hasPrefix("http"), let url = URL(string: file) else {
@@ -385,7 +392,7 @@ struct ToocRoomView: View {
             HStack {
                 Rectangle().fill(.quaternary).frame(height: 1)
                 Label("送信予約", systemImage: "clock")
-                    .font(.caption2.weight(.semibold))
+                    .toocFont(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .fixedSize()
                 Rectangle().fill(.quaternary).frame(height: 1)
@@ -395,10 +402,10 @@ struct ToocRoomView: View {
                 HStack(alignment: .bottom, spacing: 5) {
                     Spacer(minLength: 40)
                     Text(ToocTime.scheduled(message.scheduledAt ?? .now))
-                        .font(.system(size: 10))
+                        .toocFont(.system(size: 10))
                         .foregroundStyle(.secondary)
                     Text(message.preview)
-                        .font(.system(size: size))
+                        .toocFont(.system(size: size))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 13)
                         .padding(.vertical, 8)
@@ -511,7 +518,7 @@ struct ToocRoomView: View {
                                 withAnimation(.snappy) { attachments.removeAll { $0.id == photo.id } }
                             } label: {
                                 Image(systemName: "xmark")
-                                    .font(.system(size: 10, weight: .bold))
+                                    .toocFont(.system(size: 10, weight: .bold))
                                     .foregroundStyle(.white)
                                     .frame(width: 22, height: 22)
                                     .background(Circle().fill(.black.opacity(0.6)))
@@ -566,11 +573,11 @@ struct ToocRoomView: View {
         ToolbarItem(placement: .topBarLeading) {
             HStack(spacing: 4) {
                 Text(store.name(of: room))
-                    .font(.headline)
+                    .toocFont(.headline)
                     .lineLimit(1)
                 if room.isGroup {
                     Text("(\(room.memberIDs.count + 1))")
-                        .font(.headline)
+                        .toocFont(.headline)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -635,13 +642,13 @@ struct ToocRoomView: View {
     private func notFriendBar(_ user: ToocUser) -> some View {
         HStack(spacing: 12) {
             Text("友だちになるまでメッセージは送れません")
-                .font(.subheadline)
+                .toocFont(.subheadline)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button("友だちになる") {
                 withAnimation(.snappy) { store.addFriend(user) }
             }
-            .font(.subheadline.weight(.semibold))
+            .toocFont(.subheadline.weight(.semibold))
             .buttonStyle(.glassProminent)
         }
         .padding(.horizontal, 16)
@@ -680,7 +687,7 @@ struct ToocRoomView: View {
                 }
                 .accessibilityLabel("写真")
             }
-            .font(.system(size: 19, weight: .medium))
+            .toocFont(.system(size: 19, weight: .medium))
             .foregroundStyle(theme.accent)
             .padding(.horizontal, 2)
             .glassEffect(.regular.interactive(), in: .capsule)
@@ -726,7 +733,7 @@ struct ToocRoomView: View {
                             }
                         } label: {
                             Image(systemName: showStickers ? "keyboard" : "face.smiling")
-                                .font(.system(size: 21, weight: .medium))
+                                .toocFont(.system(size: 21, weight: .medium))
                                 .foregroundStyle(showStickers ? theme.accent : Color.secondary)
                                 .contentTransition(.symbolEffect(.replace))
                                 .frame(width: 36, height: Self.barHeight)
@@ -750,7 +757,7 @@ struct ToocRoomView: View {
     @ViewBuilder
     private func sendButton(_ room: ToocRoom) -> some View {
         let icon = Image(systemName: editing == nil ? "arrow.up.circle.fill" : "checkmark.circle.fill")
-            .font(.system(size: 32))
+            .toocFont(.system(size: 32))
             .foregroundStyle(theme.accent)
         if editing != nil {
             Button { send() } label: { icon }
@@ -779,7 +786,7 @@ struct ToocRoomView: View {
             Image(systemName: "pencil")
                 .foregroundStyle(theme.accent)
             Text("メッセージを編集")
-                .font(.caption.bold())
+                .toocFont(.caption.bold())
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 withAnimation(.snappy) {
@@ -788,7 +795,7 @@ struct ToocRoomView: View {
                 }
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .semibold))
+                    .toocFont(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 28, height: 28)
             }
@@ -806,9 +813,9 @@ struct ToocRoomView: View {
             ToocAvatar(user: sender, size: 26)
             VStack(alignment: .leading, spacing: 1) {
                 Text("\(sender.displayName)へ返信")
-                    .font(.caption.bold())
+                    .toocFont(.caption.bold())
                 Text(message.preview)
-                    .font(.caption)
+                    .toocFont(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -817,7 +824,7 @@ struct ToocRoomView: View {
                 withAnimation(.snappy) { replyTo = nil }
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .semibold))
+                    .toocFont(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 28, height: 28)
             }
@@ -875,7 +882,7 @@ struct ToocMessageRow: View {
     var body: some View {
         if message.isUnsent {
             Text(mine ? "送信を取り消しました" : "\(store.displayName(message.senderID))が送信を取り消しました")
-                .font(.caption)
+                .toocFont(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 5)
@@ -908,7 +915,7 @@ struct ToocMessageRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 if first, room.isGroup, let sender {
                     Text(sender.displayName)
-                        .font(.caption2)
+                        .toocFont(.caption2)
                         .foregroundStyle(.secondary)
                         .padding(.leading, ToocBubbleShape.tail + 4)
                 }
@@ -944,7 +951,7 @@ struct ToocMessageRow: View {
             }
         } label: {
             Image(systemName: "exclamationmark.circle.fill")
-                .font(.system(size: 20))
+                .toocFont(.system(size: 20))
                 .foregroundStyle(.red)
                 .frame(width: 28, height: 28)
         }
@@ -971,7 +978,7 @@ struct ToocMessageRow: View {
                 Text(ToocTime.clock(message.date)).monospacedDigit()
             }
         }
-        .font(.system(size: 10))
+        .toocFont(.system(size: 10))
         .foregroundStyle(.secondary)
     }
 
@@ -1002,9 +1009,9 @@ struct ToocMessageRow: View {
         } label: {
             HStack(spacing: 3) {
                 ForEach(order, id: \.self) { emoji in
-                    Text(emoji).font(.system(size: 13))
+                    Text(emoji).toocFont(.system(size: 13))
                     if let count = counts[emoji], count > 1 {
-                        Text("\(count)").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                        Text("\(count)").toocFont(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
                     }
                 }
             }
@@ -1107,7 +1114,7 @@ struct ToocMessageRow: View {
         let color = mine ? Color.white : Color.primary
         return VStack(alignment: .leading, spacing: 6) {
             Text(ToocLinks.attributed(text, mentions: mentionNames, color: mine ? nil : theme.accent))
-                .font(.system(size: textSize))
+                .toocFont(.system(size: textSize))
                 .foregroundStyle(color)
                 .tint(mine ? Color.white : theme.accent)
                 .lineLimit(14)
@@ -1115,14 +1122,14 @@ struct ToocMessageRow: View {
                 // The whole text at the same width, unseen, to tell whether anything was cut.
                 .background(alignment: .topLeading) {
                     Text(text)
-                        .font(.system(size: textSize))
+                        .toocFont(.system(size: textSize))
                         .fixedSize(horizontal: false, vertical: true)
                         .hidden()
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fullHeight = $0 }
                 }
             if fullHeight > shownHeight + 1 {
                 Button("すべてを表示") { showFull = true }
-                    .font(.system(size: textSize * 0.88, weight: .semibold))
+                    .toocFont(.system(size: textSize * 0.88, weight: .semibold))
                     .foregroundStyle(mine ? Color.white : theme.accent)
                     .buttonStyle(.plain)
             }
@@ -1131,7 +1138,7 @@ struct ToocMessageRow: View {
             NavigationStack {
                 ScrollView {
                     Text(text)
-                        .font(.system(size: textSize))
+                        .toocFont(.system(size: textSize))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(20)
@@ -1168,8 +1175,8 @@ struct ToocMessageRow: View {
                 .fill(mine ? Color.white.opacity(0.7) : theme.accent)
                 .frame(width: 3)
             VStack(alignment: .leading, spacing: 1) {
-                Text(name).font(.caption.bold())
-                Text(quoted.preview).font(.caption).lineLimit(1)
+                Text(name).toocFont(.caption.bold())
+                Text(quoted.preview).toocFont(.caption).lineLimit(1)
             }
             .foregroundStyle(mine ? Color.white.opacity(0.85) : Color.secondary)
         }
@@ -1182,7 +1189,7 @@ struct ToocMessageRow: View {
     private var replyIcon: some View {
         let progress = min(1, max(0, -dragX / Self.replyDistance))
         return Image(systemName: "arrowshape.turn.up.left.fill")
-            .font(.system(size: 18, weight: .semibold))
+            .toocFont(.system(size: 18, weight: .semibold))
             .foregroundStyle(progress >= 1 ? theme.accent : Color.secondary)
             .scaleEffect(0.4 + 0.6 * progress)
             .opacity(progress)
@@ -1359,7 +1366,7 @@ struct ToocPhotoBubble: View {
                         ProgressView()
                     } else {
                         Image(systemName: "photo.fill")
-                            .font(.system(size: 30))
+                            .toocFont(.system(size: 30))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -1413,7 +1420,7 @@ struct ToocPhotoZoom: View {
                 withAnimation(.snappy) { saved = true }
             } label: {
                 Label(saved ? "保存しました" : "保存", systemImage: saved ? "checkmark" : "square.and.arrow.down")
-                    .font(.headline)
+                    .toocFont(.headline)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 6)
             }

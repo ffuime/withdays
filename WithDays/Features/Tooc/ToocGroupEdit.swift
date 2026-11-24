@@ -71,7 +71,7 @@ struct ToocGroupEditView: View {
                                 Text(user.displayName).foregroundStyle(.primary)
                                 Spacer()
                                 Image(systemName: members.contains(user.id) ? "checkmark.circle.fill" : "circle")
-                                    .font(.title3)
+                                    .toocFont(.title3)
                                     .foregroundStyle(members.contains(user.id) ? theme.accent : Color.secondary)
                             }
                             .contentShape(Rectangle())
@@ -129,7 +129,7 @@ struct ToocGroupEditView: View {
                 .overlay(Color.black.opacity(0.12))
                 .overlay(alignment: .topTrailing) {
                     Image(systemName: "photo.badge.plus")
-                        .font(.system(size: 15, weight: .semibold))
+                        .toocFont(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
                         .padding(8)
                         .background(.black.opacity(0.35), in: Circle())
@@ -144,7 +144,7 @@ struct ToocGroupEditView: View {
                 .overlay(Circle().strokeBorder(.white, lineWidth: 3))
                 .overlay(alignment: .bottomTrailing) {
                     Image(systemName: "camera.fill")
-                        .font(.system(size: 12, weight: .bold))
+                        .toocFont(.system(size: 12, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(width: 28, height: 28)
                         .background(Circle().fill(.black.opacity(0.55)))
@@ -203,7 +203,7 @@ struct ToocWelcomeView: View {
                     .blur(radius: stage >= 1 ? 0 : 14)
                     .opacity(stage >= 1 ? 1 : 0)
                 Text("ようこそ、\(name)")
-                    .font(.headline)
+                    .toocFont(.headline)
                     .opacity(stage >= 2 ? 1 : 0)
                     .offset(y: stage >= 2 ? 0 : 12)
             }

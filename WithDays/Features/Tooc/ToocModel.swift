@@ -343,6 +343,8 @@ struct ToocSettings: Hashable, Codable {
     var returnSends = false
     /// The five reactions at the top of a message's long-press menu.
     var favoriteReactions = ["👍", "❤️", "😂", "😮", "🙏"]
+    /// The Google font tooc is drawn in (its id); nil for the system font.
+    var font: String?
 
     init() {}
 
@@ -356,6 +358,7 @@ struct ToocSettings: Hashable, Codable {
         theme = try container.decodeIfPresent(ToocTheme.self, forKey: .theme) ?? defaults.theme
         returnSends = try container.decodeIfPresent(Bool.self, forKey: .returnSends) ?? defaults.returnSends
         favoriteReactions = try container.decodeIfPresent([String].self, forKey: .favoriteReactions) ?? defaults.favoriteReactions
+        font = try container.decodeIfPresent(String.self, forKey: .font)
     }
 }
 

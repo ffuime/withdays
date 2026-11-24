@@ -70,7 +70,7 @@ struct ToocNewTalkView: View {
                                 Spacer()
                                 if group {
                                     Image(systemName: chosen.contains(friend.id) ? "checkmark.circle.fill" : "circle")
-                                        .font(.title3)
+                                        .toocFont(.title3)
                                         .foregroundStyle(chosen.contains(friend.id) ? theme.accent : Color.secondary)
                                 }
                             }
@@ -168,7 +168,7 @@ struct ToocFindView: View {
                 // As tall as the field.
                 Button(action: search) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 16, weight: .semibold))
+                        .toocFont(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: Self.fieldHeight, height: Self.fieldHeight)
                         .background(Circle().fill(text.isEmpty ? Color.secondary.opacity(0.4) : theme.accent))
@@ -179,7 +179,7 @@ struct ToocFindView: View {
             }
             if let error {
                 Text(error)
-                    .font(.footnote)
+                    .toocFont(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
@@ -203,20 +203,20 @@ struct ToocFindView: View {
         return VStack(spacing: 12) {
             ToocAvatar(user: current, size: 84)
             Text(current.displayName)
-                .font(.title3.bold())
+                .toocFont(.title3.bold())
             Text("@\(current.id)")
-                .font(.subheadline)
+                .toocFont(.subheadline)
                 .foregroundStyle(.secondary)
             if current.id == store.me.id {
                 Text("あなたのtoocIDです")
-                    .font(.footnote)
+                    .toocFont(.footnote)
                     .foregroundStyle(.secondary)
             } else if current.isFriend && !current.isBlocked && !current.isHidden {
                 Button {
                     router.open(room: store.room(with: current.id).id)
                 } label: {
                     Label("トーク", systemImage: "message")
-                        .font(.headline)
+                        .toocFont(.headline)
                         .padding(.horizontal, 18)
                         .padding(.vertical, 4)
                 }
@@ -226,7 +226,7 @@ struct ToocFindView: View {
                     withAnimation(.snappy) { store.addFriend(current) }
                 } label: {
                     Label("友だちに追加", systemImage: "person.badge.plus")
-                        .font(.headline)
+                        .toocFont(.headline)
                         .padding(.horizontal, 18)
                         .padding(.vertical, 4)
                 }
@@ -378,7 +378,7 @@ struct ToocEditProfileView: View {
                 .overlay(Color.black.opacity(preview.backgroundFile == nil && !hasBackground ? 0.6 : 0.12))
                 .overlay(alignment: .topTrailing) {
                     Image(systemName: "photo.badge.plus")
-                        .font(.system(size: 15, weight: .semibold))
+                        .toocFont(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
                         .padding(8)
                         .background(.black.opacity(0.35), in: Circle())
@@ -397,7 +397,7 @@ struct ToocEditProfileView: View {
                 .overlay(Circle().strokeBorder(.white, lineWidth: 3))
                 .overlay(alignment: .bottomTrailing) {
                     Image(systemName: "camera.fill")
-                        .font(.system(size: 12, weight: .bold))
+                        .toocFont(.system(size: 12, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(width: 28, height: 28)
                         .background(Circle().fill(.black.opacity(0.55)))
@@ -481,7 +481,7 @@ struct ToocSearchView: View {
                                 ToocAvatar(user: friend, size: 40)
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(friend.displayName).foregroundStyle(.primary)
-                                    Text("@\(friend.id)").font(.caption).foregroundStyle(.secondary)
+                                    Text("@\(friend.id)").toocFont(.caption).foregroundStyle(.secondary)
                                 }
                             }
                         }
@@ -497,12 +497,12 @@ struct ToocSearchView: View {
                                 ToocAvatar(user: store.iconUser(of: hit.room), size: 40)
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack {
-                                        Text(store.name(of: hit.room)).font(.subheadline.bold())
+                                        Text(store.name(of: hit.room)).toocFont(.subheadline.bold())
                                         Spacer()
-                                        Text(ToocTime.listLabel(hit.message.date)).font(.caption).foregroundStyle(.secondary)
+                                        Text(ToocTime.listLabel(hit.message.date)).toocFont(.caption).foregroundStyle(.secondary)
                                     }
                                     Text(hit.message.preview)
-                                        .font(.subheadline)
+                                        .toocFont(.subheadline)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(2)
                                 }
@@ -564,7 +564,7 @@ struct ToocRoomSearchView: View {
                         ToocAvatar(user: store.user(message.senderID) ?? store.me, size: 32)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(ToocTime.listLabel(message.date) + " " + ToocTime.clock(message.date))
-                                .font(.caption)
+                                .toocFont(.caption)
                                 .foregroundStyle(.secondary)
                             Text(message.preview)
                                 .foregroundStyle(.primary)
@@ -654,12 +654,12 @@ struct ToocNoticesView: View {
                         }
                         VStack(alignment: .leading, spacing: 2) {
                             HStack {
-                                Text(notice.title).font(.subheadline.bold()).lineLimit(1)
+                                Text(notice.title).toocFont(.subheadline.bold()).lineLimit(1)
                                 Spacer()
-                                Text(ToocTime.listLabel(notice.date)).font(.caption).foregroundStyle(.secondary)
+                                Text(ToocTime.listLabel(notice.date)).toocFont(.caption).foregroundStyle(.secondary)
                             }
                             Text(store.settings.showContent ? notice.body : "新しいお知らせがあります")
-                                .font(.subheadline)
+                                .toocFont(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
                         }
@@ -706,14 +706,14 @@ struct ToocScheduledView: View {
                         ToocAvatar(user: store.iconUser(of: entry.room), size: 40)
                         VStack(alignment: .leading, spacing: 3) {
                             HStack {
-                                Text(store.name(of: entry.room)).font(.subheadline.bold()).lineLimit(1)
+                                Text(store.name(of: entry.room)).toocFont(.subheadline.bold()).lineLimit(1)
                                 Spacer()
                                 Label(ToocTime.scheduled(entry.message.scheduledAt ?? .now), systemImage: "clock")
-                                    .font(.caption)
+                                    .toocFont(.caption)
                                     .foregroundStyle(theme.accent)
                             }
                             Text(entry.message.preview)
-                                .font(.subheadline)
+                                .toocFont(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
                         }

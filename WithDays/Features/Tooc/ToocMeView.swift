@@ -28,13 +28,13 @@ struct ToocMeView: View {
                 ToocAvatar(user: me, size: 76)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(me.name)
-                        .font(.title2.bold())
+                        .toocFont(.title2.bold())
                         .lineLimit(1)
                     Button {
                         withAnimation(.snappy) { showID.toggle() }
                     } label: {
                         Text(showID ? "@\(me.id)" : "@••••••")
-                            .font(.subheadline)
+                            .toocFont(.subheadline)
                             .foregroundStyle(.secondary)
                             .contentTransition(.opacity)
                     }
@@ -45,7 +45,7 @@ struct ToocMeView: View {
             }
             if !me.bio.isEmpty {
                 Text(me.bio)
-                    .font(.subheadline)
+                    .toocFont(.subheadline)
                     .foregroundStyle(Color.primary.opacity(0.8))
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -69,7 +69,7 @@ struct ToocMeView: View {
     private var addFriend: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("友だち追加")
-                .font(.headline)
+                .toocFont(.headline)
                 .padding(.leading, 4)
             HStack(spacing: 0) {
                 addButton("QRコード", "qrcode") { router.sheet = .qr(.show) }
@@ -85,10 +85,10 @@ struct ToocMeView: View {
         Button(action: action) {
             VStack(spacing: 6) {
                 Image(systemName: symbol)
-                    .font(.system(size: 22, weight: .medium))
+                    .toocFont(.system(size: 22, weight: .medium))
                     .foregroundStyle(theme.accent)
                 Text(title)
-                    .font(.footnote.weight(.semibold))
+                    .toocFont(.footnote.weight(.semibold))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
@@ -112,7 +112,7 @@ struct ToocMeView: View {
             shortcut(
                 icon: AnyView(
                     Image(systemName: "clock.fill")
-                        .font(.system(size: 17))
+                        .toocFont(.system(size: 17))
                         .foregroundStyle(.white)
                         .frame(width: 40, height: 40)
                         .background(Circle().fill(theme.accent))
@@ -133,15 +133,15 @@ struct ToocMeView: View {
                 icon
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.body.weight(.semibold))
+                        .toocFont(.body.weight(.semibold))
                     Text(detail)
-                        .font(.footnote)
+                        .toocFont(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
+                    .toocFont(.footnote.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
             .padding(.vertical, 10)
@@ -158,18 +158,18 @@ struct ToocMeView: View {
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "person.2.fill")
-                        .font(.system(size: 20))
+                        .toocFont(.system(size: 20))
                         .foregroundStyle(theme.accent)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("友だち")
-                            .font(.headline)
+                            .toocFont(.headline)
                         Text("\(store.friends.count)人の友だち")
-                            .font(.footnote)
+                            .toocFont(.footnote)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
+                        .toocFont(.footnote.weight(.semibold))
                         .foregroundStyle(.tertiary)
                 }
                 .padding(16)
@@ -180,7 +180,7 @@ struct ToocMeView: View {
                 Divider().padding(.leading, 16)
                 VStack(alignment: .leading, spacing: 10) {
                     Label("お気に入り", systemImage: "star.fill")
-                        .font(.caption.weight(.semibold))
+                        .toocFont(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     ScrollView(.horizontal) {
                         HStack(spacing: 14) {
@@ -191,7 +191,7 @@ struct ToocMeView: View {
                                     VStack(spacing: 5) {
                                         ToocAvatar(user: friend, size: 52)
                                         Text(friend.displayName)
-                                            .font(.caption2)
+                                            .toocFont(.caption2)
                                             .lineLimit(1)
                                             .frame(width: 60)
                                     }

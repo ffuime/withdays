@@ -313,7 +313,7 @@ struct ToocPhotoMosaic: View {
                                 ZStack {
                                     Color.black.opacity(0.45)
                                     Text("+\(urls.count - shown.count)")
-                                        .font(.title2.bold())
+                                        .toocFont(.title2.bold())
                                         .foregroundStyle(.white)
                                 }
                                 .allowsHitTesting(false)
@@ -417,9 +417,9 @@ struct ToocNoteCard: View {
                     .onTapGesture { router.sheet = .profile(author.id) }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(author.displayName)
-                        .font(.subheadline.bold())
+                        .toocFont(.subheadline.bold())
                     Text("\(ToocTime.listLabel(note.date)) \(ToocTime.clock(note.date))")
-                        .font(.caption)
+                        .toocFont(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -436,7 +436,7 @@ struct ToocNoteCard: View {
             }
             if !note.text.isEmpty {
                 Text(ToocLinks.attributed(note.text))
-                    .font(.body)
+                    .toocFont(.body)
                     .lineLimit(full ? nil : 6)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -455,7 +455,7 @@ struct ToocNoteCard: View {
                     .foregroundStyle(.secondary)
                 Spacer()
             }
-            .font(.subheadline)
+            .toocFont(.subheadline)
             .buttonStyle(.plain)
         }
         .padding(14)
@@ -529,11 +529,11 @@ struct ToocNoteDetail: View {
             ToocAvatar(user: author, size: 32)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(author.displayName).font(.subheadline.bold())
-                    Text(ToocTime.listLabel(comment.date)).font(.caption).foregroundStyle(.secondary)
+                    Text(author.displayName).toocFont(.subheadline.bold())
+                    Text(ToocTime.listLabel(comment.date)).toocFont(.caption).foregroundStyle(.secondary)
                 }
                 Text(ToocLinks.attributed(comment.text))
-                    .font(.subheadline)
+                    .toocFont(.subheadline)
                     .textSelection(.enabled)
             }
             Spacer(minLength: 0)
@@ -562,7 +562,7 @@ struct ToocNoteDetail: View {
                     board.comment(text, on: noteID, me: store.me.id)
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 32))
+                        .toocFont(.system(size: 32))
                         .foregroundStyle(theme.accent)
                 }
                 .padding(.bottom, 6)
@@ -678,7 +678,7 @@ struct ToocPickedPhotos: View {
                                     withAnimation(.snappy) { images.removeAll { $0.id == photo.id } }
                                 } label: {
                                     Image(systemName: "xmark")
-                                        .font(.system(size: 10, weight: .bold))
+                                        .toocFont(.system(size: 10, weight: .bold))
                                         .foregroundStyle(.white)
                                         .frame(width: 22, height: 22)
                                         .background(Circle().fill(.black.opacity(0.6)))
@@ -777,7 +777,7 @@ struct ToocAlbumsView: View {
                     Color(.tertiarySystemFill)
                         .overlay {
                             Image(systemName: "photo")
-                                .font(.title)
+                                .toocFont(.title)
                                 .foregroundStyle(.secondary)
                         }
                 }
@@ -785,10 +785,10 @@ struct ToocAlbumsView: View {
             .aspectRatio(1, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             Text(album.title)
-                .font(.subheadline.bold())
+                .toocFont(.subheadline.bold())
                 .lineLimit(1)
             Text("\(album.photos.count)枚")
-                .font(.caption)
+                .toocFont(.caption)
                 .foregroundStyle(.secondary)
         }
         .contentShape(Rectangle())
@@ -846,7 +846,7 @@ struct ToocAlbumDetail: View {
         .overlay(alignment: .bottom) {
             if uploading {
                 Label("アップロード中…", systemImage: "arrow.up.circle")
-                    .font(.subheadline.weight(.semibold))
+                    .toocFont(.subheadline.weight(.semibold))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
                     .glassEffect(.regular, in: .capsule)
@@ -1038,28 +1038,28 @@ struct ToocBoardCard: View {
                 switch message.kind {
                 case .note(_, let text):
                     Label("ノート", systemImage: "note.text")
-                        .font(.caption.weight(.semibold))
+                        .toocFont(.caption.weight(.semibold))
                         .foregroundStyle(theme.accent)
                     Text(text)
-                        .font(.subheadline)
+                        .toocFont(.subheadline)
                         .lineLimit(4)
                         .multilineTextAlignment(.leading)
                 case .album(_, let title, let count):
                     Label("アルバム", systemImage: "photo.stack")
-                        .font(.caption.weight(.semibold))
+                        .toocFont(.caption.weight(.semibold))
                         .foregroundStyle(theme.accent)
                     Text(title)
-                        .font(.headline)
+                        .toocFont(.headline)
                         .lineLimit(1)
                     Text("写真を\(count)枚追加しました")
-                        .font(.subheadline)
+                        .toocFont(.subheadline)
                         .foregroundStyle(.secondary)
                 default:
                     EmptyView()
                 }
                 Divider()
                 Text("開く")
-                    .font(.subheadline.weight(.semibold))
+                    .toocFont(.subheadline.weight(.semibold))
                     .foregroundStyle(theme.accent)
                     .frame(maxWidth: .infinity)
             }

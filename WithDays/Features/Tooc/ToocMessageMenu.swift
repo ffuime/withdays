@@ -23,13 +23,13 @@ struct ToocEmojiPicker: View {
                     ForEach(ToocEmoji.groups, id: \.title) { group in
                         VStack(alignment: .leading, spacing: 8) {
                             Text(group.title)
-                                .font(.caption.weight(.semibold))
+                                .toocFont(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                             LazyVGrid(columns: Self.columns, spacing: 4) {
                                 ForEach(group.emoji, id: \.self) { emoji in
                                     Button { pick(emoji) } label: {
                                         Text(emoji)
-                                            .font(.system(size: 30))
+                                            .toocFont(.system(size: 30))
                                             .frame(maxWidth: .infinity, minHeight: 44)
                                     }
                                     .buttonStyle(.plain)
@@ -59,7 +59,7 @@ struct ToocEmojiPicker: View {
     private var favoritesRow: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(editing ? "入れ替える場所を選んで、下の絵文字をタップ" : "よく使う")
-                .font(.caption.weight(.semibold))
+                .toocFont(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             HStack(spacing: 8) {
                 ForEach(Array(store.settings.favoriteReactions.enumerated()), id: \.offset) { index, emoji in
@@ -67,7 +67,7 @@ struct ToocEmojiPicker: View {
                         if editing { slot = index } else { pick(emoji) }
                     } label: {
                         Text(emoji)
-                            .font(.system(size: 32))
+                            .toocFont(.system(size: 32))
                             .frame(maxWidth: .infinity, minHeight: 52)
                             .background(theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .overlay {

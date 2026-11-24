@@ -99,7 +99,7 @@ struct ToocRoomPreview: View {
             HStack(spacing: 10) {
                 ToocAvatar(user: store.iconUser(of: room), size: 32)
                 Text(store.name(of: room))
-                    .font(.headline)
+                    .toocFont(.headline)
                     .lineLimit(1)
             }
             .padding(14)

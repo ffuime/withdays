@@ -376,6 +376,8 @@ struct GalleryZoomableImage: UIViewRepresentable {
     var zoomEnabled = true
     var onTap: (() -> Void)?
     var onLongPress: (() -> Void)?
+    /// Told when the photo starts or stops being zoomed in.
+    var onZoom: ((Bool) -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -412,6 +414,7 @@ struct GalleryZoomableImage: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.onTap = onTap
         coordinator.onLongPress = onLongPress
+        coordinator.onZoom = onZoom
         scroll.maximumZoomScale = zoomEnabled ? 5 : 1
         scroll.pinchGestureRecognizer?.isEnabled = zoomEnabled
         coordinator.double?.isEnabled = zoomEnabled
@@ -429,6 +432,8 @@ struct GalleryZoomableImage: UIViewRepresentable {
         weak var double: UITapGestureRecognizer?
         var onTap: (() -> Void)?
         var onLongPress: (() -> Void)?
+        var onZoom: ((Bool) -> Void)?
+        private var zoomed = false
         private var lastSize: CGSize = .zero
 
         func boundsChanged() {
@@ -463,7 +468,14 @@ struct GalleryZoomableImage: UIViewRepresentable {
 
         func viewForZooming(in scrollView: UIScrollView) -> UIView? { imageView }
 
-        func scrollViewDidZoom(_ scrollView: UIScrollView) { center() }
+        func scrollViewDidZoom(_ scrollView: UIScrollView) {
+            center()
+            let now = scrollView.zoomScale > 1.01
+            if now != zoomed {
+                zoomed = now
+                onZoom?(now)
+            }
+        }
 
         @objc func tap() { onTap?() }
 

@@ -12,11 +12,11 @@ struct ToocSettingsView: View {
                     HStack(spacing: 14) {
                         ToocAvatar(user: store.me, size: 56)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(store.me.name).font(.headline).foregroundStyle(.primary)
-                            Text("@\(store.me.id)").font(.subheadline).foregroundStyle(.secondary)
+                            Text(store.me.name).toocFont(.headline).foregroundStyle(.primary)
+                            Text("@\(store.me.id)").toocFont(.subheadline).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Text("編集").font(.subheadline).foregroundStyle(store.theme.accent)
+                        Text("編集").toocFont(.subheadline).foregroundStyle(store.theme.accent)
                     }
                 }
             }
@@ -32,6 +32,11 @@ struct ToocSettingsView: View {
                 Text("プライバシー")
             } footer: {
                 Text("オフのあいだは、toocIDを入力して検索されても見つかりません。QRコードとリンクからは追加できます。")
+            }
+            Section {
+                link("tooc について", "info.circle", .settingsAbout)
+                link("更新履歴", "clock.arrow.circlepath", .settingsChangelog)
+                link("権利表示", "c.circle", .settingsCredits)
             }
         }
         .navigationTitle("設定")
@@ -211,7 +216,7 @@ struct ToocHiddenSettingsView: View {
             Spacer()
             Button(action) { withAnimation(.snappy) { perform() } }
                 .buttonStyle(.bordered)
-                .font(.subheadline)
+                .toocFont(.subheadline)
         }
     }
 }
@@ -228,12 +233,17 @@ struct ToocTalkSettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 Text("こんにちは！tooc の文字はこの大きさです。")
-                    .font(.system(size: store.settings.textSize.points))
+                    .toocFont(.system(size: store.settings.textSize.points))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 13)
                     .padding(.vertical, 8)
                     .background(store.theme.myBubble, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            Section {
+                NavigationLink(value: ToocRoute.settingsFont) {
+                    LabeledContent("フォント", value: ToocFontChoice.find(store.settings.font)?.label ?? "システム標準")
+                }
             }
             Section {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 12) {
@@ -257,7 +267,7 @@ struct ToocTalkSettingsView: View {
                                                       lineWidth: store.settings.theme == option ? 2.5 : 1)
                                 }
                                 Text(option.label)
-                                    .font(.caption.weight(store.settings.theme == option ? .bold : .regular))
+                                    .toocFont(.caption.weight(store.settings.theme == option ? .bold : .regular))
                                     .foregroundStyle(store.settings.theme == option ? option.accent : Color.secondary)
                             }
                         }
@@ -274,5 +284,134 @@ struct ToocTalkSettingsView: View {
         }
         .navigationTitle("トーク")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - About tooc
+
+/// tooc について: the logo, what it is, and the version.
+struct ToocAboutView: View {
+    static let summary = "tooc は WithDays の中で使えるトークアプリです。友だちやグループと、メッセージ・写真・ファイル・スタンプをやり取りできます。"
+
+    var body: some View {
+        List {
+            Section {
+                VStack(spacing: 12) {
+                    Image("ToocLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 56)
+                        .foregroundStyle(Color.brand)
+                        .accessibilityLabel("tooc")
+                    Text(Self.summary)
+                        .toocFont(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            }
+            Section {
+                LabeledContent("バージョン", value: "\(AppInfo.version) (\(AppInfo.build))")
+                NavigationLink("更新履歴", value: ToocRoute.settingsChangelog)
+                NavigationLink("権利表示", value: ToocRoute.settingsCredits)
+            } footer: {
+                Text("tooc は WithDays と一緒に更新されます。バージョンは WithDays と同じです。")
+            }
+        }
+        .navigationTitle("tooc について")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// 更新履歴: only tooc's lines from WithDays' releases.
+struct ToocChangelogView: View {
+    private static let prefix = "tooc："
+
+    private struct Entry: Identifiable {
+        let release: AppInfo.Release
+        let notes: [String]
+        var id: String { release.id }
+    }
+
+    private var entries: [Entry] {
+        AppInfo.changelog.compactMap { release in
+            let notes = release.notes.filter { $0.hasPrefix(Self.prefix) }.map { String($0.dropFirst(Self.prefix.count)) }
+            return notes.isEmpty ? nil : Entry(release: release, notes: notes)
+        }
+    }
+
+    var body: some View {
+        List(entries) { entry in
+            Section {
+                ForEach(entry.notes, id: \.self) { Text($0).toocFont(.system(size: 14)) }
+            } header: {
+                HStack {
+                    Text(entry.release.version)
+                    Spacer()
+                    Text(entry.release.date)
+                }
+            }
+        }
+        .navigationTitle("更新履歴")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// 権利表示: the services tooc runs on, the fonts, and the other companies' marks it shows.
+struct ToocCreditsView: View {
+    private struct Credit: Identifiable {
+        let name: String
+        let detail: String
+        var id: String { name }
+    }
+
+    private let services: [Credit] = [
+        Credit(name: "Firebase", detail: "Authentication・Cloud Firestore・Cloud Storage（Google LLC）。Firebase Apple SDK は Apache License 2.0 で提供されています。"),
+        Credit(name: "Google Fonts", detail: "フォントのダウンロードに使用しています。各フォントは SIL Open Font License 1.1 で提供されています。"),
+        Credit(name: "Apple マップ", detail: "位置情報の送信と表示に MapKit を使用しています。地図データの権利は Apple および各提供元に帰属します。"),
+    ]
+
+    private let marks: [Credit] = [
+        Credit(name: "Instagram", detail: "Instagram および Instagram のロゴは Meta Platforms, Inc. の商標です。"),
+        Credit(name: "Facebook", detail: "Facebook および Facebook のロゴは Meta Platforms, Inc. の商標です。"),
+        Credit(name: "X", detail: "X および X のロゴは X Corp. の商標です。"),
+        Credit(name: "LINE", detail: "LINE および LINE のロゴは LINEヤフー株式会社の商標または登録商標です。"),
+    ]
+
+    var body: some View {
+        List {
+            Section("サービス・API") {
+                ForEach(services) { row($0) }
+            }
+            Section {
+                ForEach(ToocFontChoice.all) { font in
+                    Text(font.label)
+                }
+            } header: {
+                Text("フォント")
+            } footer: {
+                Text("いずれも Google Fonts から配布され、SIL Open Font License 1.1 のもとで使用しています。")
+            }
+            Section {
+                ForEach(marks) { row($0) }
+            } header: {
+                Text("ロゴ・商標")
+            } footer: {
+                Text("共有ボタンに各社のロゴを使用しています。各社のロゴは、各社のブランドガイドラインに沿って表示しています。")
+            }
+        }
+        .navigationTitle("権利表示")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func row(_ credit: Credit) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(credit.name).toocFont(.headline)
+            Text(credit.detail)
+                .toocFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
     }
 }

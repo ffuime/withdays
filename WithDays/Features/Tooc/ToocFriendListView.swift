@@ -86,11 +86,11 @@ struct ToocFriendRow: View {
                     ToocAvatar(user: friend, badge: friend.isFavorite ? "star.fill" : nil)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(friend.displayName)
-                            .font(.body.bold())
+                            .toocFont(.body.bold())
                             .lineLimit(1)
                         if !friend.bio.isEmpty {
                             Text(friend.bio)
-                                .font(.system(size: ToocTalkRow.previewSize))
+                                .toocFont(.system(size: ToocTalkRow.previewSize))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
@@ -103,7 +103,7 @@ struct ToocFriendRow: View {
             .buttonStyle(.plain)
             Button(action: onTalk) {
                 Image(systemName: "plus.message")
-                    .font(.system(size: 20, weight: .medium))
+                    .toocFont(.system(size: 20, weight: .medium))
                     .foregroundStyle(theme.accent)
                     .frame(width: 40, height: 40)
                     .contentShape(Rectangle())
@@ -129,10 +129,10 @@ struct ToocRequestRow: View {
                     ToocAvatar(user: user)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(user.displayName)
-                            .font(.body.bold())
+                            .toocFont(.body.bold())
                             .lineLimit(1)
                         Text("@\(user.id)")
-                            .font(.footnote)
+                            .toocFont(.footnote)
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -143,13 +143,13 @@ struct ToocRequestRow: View {
             Button("友だちになる") {
                 withAnimation(.snappy) { store.addFriend(user) }
             }
-            .font(.subheadline.weight(.semibold))
+            .toocFont(.subheadline.weight(.semibold))
             .buttonStyle(.glassProminent)
             Button {
                 withAnimation(.snappy) { store.decline(user.id) }
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .bold))
+                    .toocFont(.system(size: 13, weight: .bold))
                     .foregroundStyle(.secondary)
                     .frame(width: 32, height: 32)
                     .contentShape(Rectangle())

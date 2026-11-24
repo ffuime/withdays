@@ -28,7 +28,7 @@ struct ToocLoginView: View {
                             .foregroundStyle(Color.brand)
                             .accessibilityLabel("tooc")
                         Text(creating ? "toocIDとパスワードを決めるだけではじめられます" : "toocID（またはメールアドレス）とパスワードでログイン")
-                            .font(.footnote)
+                            .toocFont(.footnote)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                     }
@@ -77,7 +77,7 @@ struct ToocLoginView: View {
                                 .opacity(working ? 0 : 1)
                             if working { ProgressView().tint(.white) }
                         }
-                        .font(.headline)
+                        .toocFont(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                     }

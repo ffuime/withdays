@@ -86,11 +86,11 @@ struct ToocProfileSheet: View {
                     Button { path.append(.name) } label: {
                         HStack(spacing: 6) {
                             Text(user.displayName)
-                                .font(.title2.bold())
+                                .toocFont(.title2.bold())
                                 .lineLimit(1)
                             if user.nickname != nil {
                                 Image(systemName: "pencil")
-                                    .font(.subheadline.weight(.semibold))
+                                    .toocFont(.subheadline.weight(.semibold))
                                     .foregroundStyle(.white.opacity(0.7))
                                     .accessibilityLabel("表示名を変更済み")
                             }
@@ -101,7 +101,7 @@ struct ToocProfileSheet: View {
                     if !user.bio.isEmpty {
                         Button { path.append(.bio) } label: {
                             Text(user.bio)
-                                .font(.subheadline)
+                                .toocFont(.subheadline)
                                 .foregroundStyle(.white.opacity(0.8))
                                 .lineLimit(1)
                         }
@@ -109,7 +109,7 @@ struct ToocProfileSheet: View {
                     }
                     if let birthday = user.birthday {
                         Label(ToocTime.birthday(birthday), systemImage: "birthday.cake")
-                            .font(.footnote)
+                            .toocFont(.footnote)
                             .foregroundStyle(.white.opacity(0.7))
                     }
                 }
@@ -169,30 +169,30 @@ struct ToocProfileSheet: View {
                 switch page {
                 case .bio:
                     Text(user.bio)
-                        .font(.body)
+                        .toocFont(.body)
                         .foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
                 case .name:
                     if renaming {
                         // The name itself becomes the field; empty goes back to their own name.
                         TextField(user.name, text: $nickname)
-                            .font(.largeTitle.bold())
+                            .toocFont(.largeTitle.bold())
                             .foregroundStyle(.white)
                             .focused($nameFocused)
                             .submitLabel(.done)
                             .onSubmit(finishRename)
                     } else {
                         Text(user.displayName)
-                            .font(.largeTitle.bold())
+                            .toocFont(.largeTitle.bold())
                             .foregroundStyle(.white)
                     }
                     if user.nickname != nil {
                         Text("本人の名前：\(user.name)")
-                            .font(.subheadline)
+                            .toocFont(.subheadline)
                             .foregroundStyle(.white.opacity(0.7))
                     }
                     Text("@\(user.id)")
-                        .font(.subheadline)
+                        .toocFont(.subheadline)
                         .foregroundStyle(.white.opacity(0.6))
                 }
             }

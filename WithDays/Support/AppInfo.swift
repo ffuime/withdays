@@ -23,6 +23,11 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.21.0", date: "2026.11.24", notes: [
+            "tooc：トークの写真を横にスワイプして前後の写真へ。タップでボタンを隠せ、×・保存・転送ボタンを表示",
+            "tooc：Google Fonts の日本語フォント（10書体）を選べるように。選ぶとダウンロードされ端末に残ります",
+            "tooc：設定に「tooc について」「更新履歴」「権利表示」",
+        ]),
         Release(version: "1.20.0", date: "2026.11.24", notes: [
             "Gallery：写真とビデオをアプリの中だけに保存するギャラリー（iCloudや写真アプリとは別）",
             "Gallery：アルバム（Face IDか4桁のパスコードでロック）、お気に入り、切り抜き、最近削除した項目",
