@@ -727,6 +727,8 @@ final class ToocStore {
         message.edited = data["edited"] as? Bool ?? false
         message.reactions = data["reactions"] as? [String: String] ?? [:]
         message.mentions = data["mentions"] as? [String] ?? []
+        message.laterBy = data["laterBy"] as? [String] ?? []
+        message.urgency = (data["urgency"] as? Int).flatMap(ToocUrgency.init(rawValue:))
         return message
     }
 
@@ -1114,12 +1116,25 @@ final class ToocStore {
     func isLater(_ id: UUID) -> Bool { laters.contains { $0.messageID == id } }
     func hasLater(_ roomID: String) -> Bool { laters.contains { $0.roomID == roomID } }
 
+    /// Marks or unmarks it, here (for the list) and on the server (so the others in the talk see it).
     func toggleLater(_ message: ToocMessage, in roomID: String) {
-        if isLater(message.id) {
+        guard message.senderID != me.id else { return }
+        let marked = isLater(message.id) || message.laterBy.contains(me.id)
+        if marked {
             laters.removeAll { $0.messageID == message.id }
         } else {
             laters.insert(ToocLater(roomID: roomID, messageID: message.id, marked: .now), at: 0)
         }
+        change(message.id, in: roomID, ["laterBy": marked ? FieldValue.arrayRemove([me.id]) : FieldValue.arrayUnion([me.id])])
+    }
+
+    /// Everything you put off in the talk, cleared once you say something there.
+    private func clearLaters(in roomID: String) {
+        var ids = Set(laters.filter { $0.roomID == roomID }.map(\.messageID))
+        for message in room(roomID)?.messages ?? [] where message.laterBy.contains(me.id) { ids.insert(message.id) }
+        guard !ids.isEmpty else { return }
+        laters.removeAll { $0.roomID == roomID }
+        for id in ids { change(id, in: roomID, ["laterBy": FieldValue.arrayRemove([me.id])]) }
     }
 
     /// The marked messages still there, with their talks.
@@ -1189,22 +1204,22 @@ final class ToocStore {
 
     // MARK: Sending
 
+    @discardableResult
     func send(_ kind: ToocMessage.Kind, in roomID: String, replyTo: UUID? = nil, silent: Bool = false, at time: Date? = nil,
-              mentions: [String] = []) {
-        // Saying something in the talk answers what was put off there.
-        if time == nil || time! <= .now, laters.contains(where: { $0.roomID == roomID }) {
-            laters.removeAll { $0.roomID == roomID }
-        }
+              mentions: [String] = [], urgency: ToocUrgency? = nil) -> UUID {
         var message = ToocMessage(senderID: me.id, kind: kind, date: time ?? .now, sending: true, replyTo: replyTo,
                                   silent: silent, scheduledAt: time)
         message.mentions = mentions
+        message.urgency = urgency
         if let time, time > .now {
             message.sending = false
             local.scheduled[roomID, default: []].append(message)
             save()
             rebuildRooms()
-            return
+            return message.id
         }
+        // Saying something in the talk answers what was put off there.
+        clearLaters(in: roomID)
         message.scheduledAt = nil
         pending[roomID, default: []].append(message)
         if var prefs = local.rooms[roomID] {
@@ -1214,6 +1229,7 @@ final class ToocStore {
         }
         rebuildRooms()
         upload(message, in: roomID)
+        return message.id
     }
 
     private func upload(_ message: ToocMessage, in roomID: String) {
@@ -1250,6 +1266,7 @@ final class ToocStore {
             ]
             if let reply = message.replyTo { fields["replyTo"] = reply.uuidString }
             if !message.mentions.isEmpty { fields["mentions"] = message.mentions }
+            if let urgency = message.urgency { fields["urgency"] = urgency.rawValue }
             do {
                 try await ToocServer.messages(roomID).document(message.id.uuidString).setData(fields)
                 // On the server: no longer "sending", even before the talk's listener hears of it.

@@ -28,6 +28,11 @@ struct ToocRoomView: View {
     @State private var pickingFile = false
     @State private var quickLook: URL?
     @State private var viewing: ToocPhotoViewerItem?
+    /// The text just sent, flying from the input field into its bubble.
+    @State private var flight: ToocFlight?
+    @State private var flightProgress: CGFloat = 0
+    @State private var inputFrame: CGRect = .zero
+    @State private var choosingUrgency = false
     @State private var composer: ToocComposer?
     @State private var selecting: String?
     @State private var searching = false
@@ -82,6 +87,13 @@ struct ToocRoomView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .overlay { flightLayer }
+        .sheet(isPresented: $choosingUrgency) {
+            ToocUrgencySheet(text: trimmed) { urgency in
+                choosingUrgency = false
+                send(urgency: urgency)
+            }
+        }
         .onAppear {
             draft = room?.draft ?? ""
             store.openRoomID = roomID
@@ -244,6 +256,8 @@ struct ToocRoomView: View {
                                     joinedBelow: item.joinedBelow,
                                     textSize: size,
                                     highlighted: highlight == item.message.id,
+                                    arriving: flight?.id == item.message.id,
+                                    onArrivingFrame: { frame in landFlight(item.message.id, at: frame) },
                                     actions: actions(for: item.message)
                                 )
                                 .padding(.top, item.first && item.message.id != day.items.first?.message.id ? 10 : 0)
@@ -363,6 +377,10 @@ struct ToocRoomView: View {
                     try? data.write(to: target, options: .atomic)
                     quickLook = target
                 }
+            },
+            showOriginal: { id in
+                highlight = nil
+                Task { @MainActor in highlight = id }
             }
         )
     }
@@ -417,9 +435,10 @@ struct ToocRoomView: View {
     /// Something to send: text, or photos (text is optional with photos).
     private var canSend: Bool { !trimmed.isEmpty || (!attachments.isEmpty && editing == nil) }
 
-    private func send(silent: Bool = false) {
+    private func send(silent: Bool = false, urgency: ToocUrgency? = nil) {
         let text = trimmed
         guard canSend else { return }
+        var flying: UUID?
         withAnimation(.snappy) {
             if let editing {
                 if !text.isEmpty { store.edit(editing.id, in: roomID, text: text) }
@@ -432,14 +451,51 @@ struct ToocRoomView: View {
                     }
                 }
                 if !text.isEmpty {
-                    store.send(.text(text), in: roomID, replyTo: attachments.isEmpty ? replyTo?.id : nil, silent: silent,
-                               mentions: mentions(in: text))
+                    flying = store.send(.text(text), in: roomID, replyTo: attachments.isEmpty ? replyTo?.id : nil,
+                                        silent: silent, mentions: mentions(in: text), urgency: urgency)
                 }
                 attachments = []
                 replyTo = nil
                 mentionPicks = [:]
             }
             draft = ""
+        }
+        if let flying, inputFrame != .zero {
+            flightProgress = 0
+            flight = ToocFlight(id: flying, text: text, from: inputFrame)
+            // If its bubble never shows up (scrolled away), give up.
+            Task {
+                try? await Task.sleep(for: .seconds(1.5))
+                if flight?.id == flying { flight = nil }
+            }
+        }
+    }
+
+    /// The new bubble has its place: fly there with a soft, stretchy spring, then show the real one.
+    private func landFlight(_ id: UUID, at frame: CGRect) {
+        guard var current = flight, current.id == id else { return }
+        let first = current.to == nil
+        current.to = frame
+        flight = current
+        guard first else { return }
+        withAnimation(.spring(response: 0.48, dampingFraction: 0.66)) {
+            flightProgress = 1
+        } completion: {
+            if flight?.id == id { flight = nil }
+            flightProgress = 0
+        }
+    }
+
+    @ViewBuilder
+    private var flightLayer: some View {
+        if let flight, let to = flight.to {
+            GeometryReader { proxy in
+                ToocFlyingBubble(text: flight.text, from: flight.from, to: to,
+                                 origin: proxy.frame(in: .global).origin, size: CGFloat(store.settings.textPoints),
+                                 fill: theme.myBubble, progress: flightProgress)
+            }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
         }
     }
 
@@ -689,6 +745,7 @@ struct ToocRoomView: View {
                 HStack(alignment: .bottom, spacing: 6) {
                     TextField("\(store.name(of: room))へ送信", text: $draft, axis: .vertical)
                         .lineLimit(1...6)
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { inputFrame = $0 }
                         .focused($focused)
                         .submitLabel(store.settings.returnSends ? .send : .return)
                         .padding(.vertical, 13)
@@ -751,6 +808,10 @@ struct ToocRoomView: View {
                 }
                 if attachments.isEmpty {
                     Button("時刻指定して送信", systemImage: "clock") { openSchedule() }
+                }
+                if !room.isMynote, !trimmed.isEmpty {
+                    Divider()
+                    Button("温度感を伝える", systemImage: "thermometer.medium") { choosingUrgency = true }
                 }
             } label: {
                 icon
@@ -822,7 +883,7 @@ struct ToocRoomView: View {
 struct ToocMessageActions {
     /// Nothing happens (a preview).
     static let none = ToocMessageActions(moreReactions: {}, forward: {}, reply: {}, edit: {}, select: {},
-                                         openPhoto: { _, _ in }, openFile: { _ in })
+                                         openPhoto: { _, _ in }, openFile: { _ in }, showOriginal: { _ in })
 
     var moreReactions: () -> Void
     var forward: () -> Void
@@ -831,6 +892,8 @@ struct ToocMessageActions {
     var select: () -> Void
     var openPhoto: (UIImage, CGRect) -> Void
     var openFile: (String) -> Void
+    /// A reply's quote was tapped: go to the message it answers.
+    var showOriginal: (UUID) -> Void
 }
 
 struct ToocMessageRow: View {
@@ -843,6 +906,9 @@ struct ToocMessageRow: View {
     let joinedBelow: Bool
     var textSize: CGFloat = 17
     var highlighted = false
+    /// Waiting for the bubble flying in from the input field: hidden, reporting where it is.
+    var arriving = false
+    var onArrivingFrame: ((CGRect) -> Void)? = nil
     let actions: ToocMessageActions
 
     @Environment(ToocStore.self) private var store
@@ -854,13 +920,16 @@ struct ToocMessageRow: View {
     @State private var shownHeight: CGFloat = 0
     @State private var fullHeight: CGFloat = 0
     @State private var showReactions = false
+    @State private var showLaters = false
+    @State private var nudge = 0
 
     private static let replyDistance: CGFloat = 64
     private static let maxPull: CGFloat = 96
     private static let avatarSize: CGFloat = 36
 
     private var mine: Bool { message.senderID == store.me.id }
-    private var later: Bool { store.isLater(message.id) }
+    /// You put it off (here or on another device).
+    private var later: Bool { store.isLater(message.id) || message.laterBy.contains(store.me.id) }
 
     var body: some View {
         if message.isUnsent {
@@ -904,7 +973,7 @@ struct ToocMessageRow: View {
                 }
                 HStack(alignment: .bottom, spacing: 5) {
                     bubbleWithReactions
-                    if last || later { meta(alignment: .leading) }
+                    if last { meta(alignment: .leading) }
                 }
             }
             Spacer(minLength: 40)
@@ -916,7 +985,7 @@ struct ToocMessageRow: View {
             Spacer(minLength: 40)
             if message.failed {
                 failedMark
-            } else if last || message.sending || later {
+            } else if last || message.sending {
                 meta(alignment: .trailing)
             }
             bubbleWithReactions
@@ -945,10 +1014,6 @@ struct ToocMessageRow: View {
     /// 既読 (with the mute mark beside it) above the time.
     private func meta(alignment: HorizontalAlignment) -> some View {
         VStack(alignment: alignment, spacing: 2) {
-            if later {
-                ToocLaterMark()
-                    .transition(.scale.combined(with: .opacity))
-            }
             if message.sending {
                 ProgressView().controlSize(.mini)
             } else {
@@ -977,13 +1042,52 @@ struct ToocMessageRow: View {
 
     private var bubbleWithReactions: some View {
         VStack(alignment: mine ? .trailing : .leading, spacing: -6) {
+            if let urgency = message.urgency {
+                ToocUrgencyChip(urgency: urgency)
+                    .padding(mine ? .trailing : .leading, ToocBubbleShape.tail + 2)
+                    .padding(.bottom, 10)
+            }
             bubble
+                // あとで返信, for everyone to see: stuck to the bubble's outer top corner.
+                .overlay(alignment: mine ? .topLeading : .topTrailing) {
+                    if !message.laterBy.isEmpty {
+                        Button { showLaters = true } label: {
+                            ToocLaterMark(size: 22, count: message.laterBy.count)
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: mine ? -9 : 9, y: -9)
+                        .transition(.scale.combined(with: .opacity))
+                        .accessibilityLabel("あとで返信 \(message.laterBy.count)人")
+                    }
+                }
+                .sheet(isPresented: $showLaters) {
+                    ToocLaterSheet(messageID: message.id, roomID: room.id)
+                }
             if !message.reactions.isEmpty {
                 reactions
                     .padding(mine ? .trailing : .leading, ToocBubbleShape.tail + 8)
                     .zIndex(1)
             }
         }
+        // Shown from a reply: a little jump, so it stands out.
+        .keyframeAnimator(initialValue: ToocNudge(), trigger: nudge) { content, value in
+            content
+                .scaleEffect(value.scale, anchor: mine ? .trailing : .leading)
+                .rotationEffect(.degrees(value.angle))
+        } keyframes: { _ in
+            KeyframeTrack(\.scale) {
+                SpringKeyframe(1.12, duration: 0.18)
+                SpringKeyframe(0.96, duration: 0.16)
+                SpringKeyframe(1.0, duration: 0.3)
+            }
+            KeyframeTrack(\.angle) {
+                CubicKeyframe(-3, duration: 0.09)
+                CubicKeyframe(3, duration: 0.12)
+                CubicKeyframe(-2, duration: 0.12)
+                CubicKeyframe(0, duration: 0.14)
+            }
+        }
+        .onChange(of: highlighted) { _, on in if on { nudge += 1 } }
     }
 
     /// The reactions under the bubble: each emoji with its count, and the faces of who reacted. Tap for who did what.
@@ -1036,7 +1140,13 @@ struct ToocMessageRow: View {
             case .text(let text):
                 let shape = ToocBubbleShape(mine: mine, tail: first, joinedAbove: joinedAbove, joinedBelow: joinedBelow)
                 VStack(alignment: .leading, spacing: 6) {
-                    if let quotedMessage = quoted { quote(quotedMessage) }
+                    if let quotedMessage = quoted {
+                        quote(quotedMessage)
+                            .contentShape(Rectangle())
+                            .onTapGesture { actions.showOriginal(quotedMessage.id) }
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityHint("返信元へ移動")
+                    }
                     longText(text)
                 }
                 .padding(.horizontal, 13)
@@ -1071,6 +1181,10 @@ struct ToocMessageRow: View {
             }
         }
         .opacity(message.sending || message.failed ? 0.6 : 1)
+        .opacity(arriving ? 0 : 1)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+            if arriving { onArrivingFrame?(frame) }
+        }
         .simultaneousGesture(TapGesture(count: 2).onEnded { toggleLater() }, isEnabled: canMarkLater && !isPhoto)
         .sensoryFeedback(.impact(weight: .medium), trigger: later)
         .contextMenu {
@@ -1094,7 +1208,7 @@ struct ToocMessageRow: View {
         .menuActionDismissBehavior(.enabled)
         Button("返信", systemImage: "arrowshape.turn.up.left.fill", action: actions.reply)
         if canMarkLater {
-            Button(later ? "あとで返信を解除" : "あとで返信", systemImage: later ? "clock.badge.xmark" : "clock.badge") {
+            Button(later ? "あとで返信を解除" : "あとで返信", systemImage: later ? "xmark.circle" : "hourglass") {
                 toggleLater()
             }
         }
@@ -1551,5 +1665,64 @@ private struct ToocSelectableText: UIViewRepresentable {
 
     func updateUIView(_ view: UITextView, context: Context) {
         if view.text != text { view.text = text }
+    }
+}
+
+/// The little jump of a message shown from a reply.
+struct ToocNudge {
+    var scale = 1.0
+    var angle = 0.0
+}
+
+/// Text on its way from the input field into its new bubble.
+struct ToocFlight: Identifiable {
+    let id: UUID
+    let text: String
+    let from: CGRect
+    var to: CGRect?
+}
+
+/// The flying text: it starts as the input field's line and ends as the bubble, filling with the bubble's colour,
+/// stretching a little on the way.
+struct ToocFlyingBubble: View, Animatable {
+    let text: String
+    let from: CGRect
+    let to: CGRect
+    let origin: CGPoint
+    let size: CGFloat
+    let fill: Color
+    var progress: CGFloat
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    var body: some View {
+        let p = progress
+        let rect = CGRect(x: from.minX + (to.minX - from.minX) * p,
+                          y: from.minY + (to.minY - from.minY) * p,
+                          width: max(1, from.width + (to.width - from.width) * p),
+                          height: max(1, from.height + (to.height - from.height) * p))
+        // Squeezed sideways and stretched upward mid-flight, like something soft being pulled.
+        let pull = sin(min(max(p, 0), 1) * .pi)
+        let fade = min(1, max(0, p * 1.6))
+        return ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 18 + 4 * (1 - p), style: .continuous)
+                .fill(fill.opacity(fade))
+            Text(text)
+                .toocFont(.system(size: size))
+                .foregroundStyle(Color.primary.opacity(1 - fade))
+                .overlay(alignment: .leading) {
+                    Text(text)
+                        .toocFont(.system(size: size))
+                        .foregroundStyle(Color.white.opacity(fade))
+                }
+                .lineLimit(6)
+                .padding(.horizontal, 13 + 3 * (1 - p))
+        }
+        .frame(width: rect.width, height: rect.height)
+        .scaleEffect(x: 1 - 0.08 * pull, y: 1 + 0.1 * pull, anchor: .bottomTrailing)
+        .position(x: rect.midX - origin.x, y: rect.midY - origin.y)
     }
 }

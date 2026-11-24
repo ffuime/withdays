@@ -188,6 +188,10 @@ struct ToocMessage: Identifiable, Hashable, Codable {
     var mentions: [String] = []
     /// Couldn't be sent: kept here, to send again or delete.
     var failed = false
+    /// Who put it off with あとで返信 (seen by everyone in the talk).
+    var laterBy: [String] = []
+    /// How soon the sender hopes for an answer (温度感), if they said.
+    var urgency: ToocUrgency?
 
     var preview: String {
         switch kind {
@@ -241,7 +245,7 @@ struct ToocMessage: Identifiable, Hashable, Codable {
 
 extension ToocMessage {
     enum CodingKeys: String, CodingKey {
-        case id, senderID, kind, date, sending, readCount, replyTo, silent, scheduledAt, reactions, edited, mentions
+        case id, senderID, kind, date, sending, readCount, replyTo, silent, scheduledAt, reactions, edited, mentions, urgency
     }
 
     /// Messages saved by an older version (scheduled ones) have no mentions yet.
@@ -258,6 +262,7 @@ extension ToocMessage {
         reactions = try c.decodeIfPresent([String: String].self, forKey: .reactions) ?? [:]
         edited = try c.decodeIfPresent(Bool.self, forKey: .edited) ?? false
         mentions = try c.decodeIfPresent([String].self, forKey: .mentions) ?? []
+        urgency = try c.decodeIfPresent(ToocUrgency.self, forKey: .urgency)
     }
 }
 
@@ -332,6 +337,39 @@ struct ToocNotice: Identifiable, Hashable, Codable {
     var userID: String?
     var roomID: String?
     var seen = false
+}
+
+/// 温度感: how soon an answer is hoped for, from 返信不要 to 急遽！！.
+enum ToocUrgency: Int, CaseIterable, Codable, Identifiable {
+    case noReply, whenFree, soon, urgent
+    var id: Int { rawValue }
+
+    var label: String {
+        switch self {
+        case .noReply: "返信不要"
+        case .whenFree: "ひまなときに"
+        case .soon: "なるべく早く"
+        case .urgent: "急遽！！"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .noReply: "checkmark.bubble"
+        case .whenFree: "cup.and.saucer"
+        case .soon: "hare"
+        case .urgent: "flame"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .noReply: Color(red: 0.45, green: 0.55, blue: 0.65)
+        case .whenFree: Color(red: 0.2, green: 0.68, blue: 0.5)
+        case .soon: Color(red: 0.95, green: 0.6, blue: 0.1)
+        case .urgent: Color(red: 0.93, green: 0.24, blue: 0.22)
+        }
+    }
 }
 
 /// A message put off with あとで返信: it stays marked until you say something in that talk (or unmark it).

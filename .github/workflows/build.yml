@@ -99,31 +99,19 @@ jobs:
           APP=build/Build/Products/Release-iphoneos/WithDays.app
           # The build is unsigned, so embed the entitlements with an ad-hoc signature
           # (extensions first, then the app); SideStore reads them when it re-signs.
-          # WithDays.ipa leaves out Screen Time: its entitlement may stop a free Apple ID from installing.
+          # Screen Time is left out: its entitlement may stop a free Apple ID from installing.
           rm -rf Payload && mkdir Payload && cp -R "$APP" Payload/
           rm -rf Payload/WithDays.app/PlugIns/SubsReport.appex
           codesign -f -s - --entitlements Entitlements/WithDaysWidget.entitlements Payload/WithDays.app/PlugIns/WithDaysWidget.appex
           codesign -f -s - --entitlements Entitlements/WithDays.entitlements Payload/WithDays.app
           codesign -d --entitlements - Payload/WithDays.app
           zip -qry WithDays.ipa Payload
-          # WithDays-ScreenTime.ipa: the same with Subscribes' Screen Time (Family Controls).
-          rm -rf Payload && mkdir Payload && cp -R "$APP" Payload/
-          codesign -f -s - --entitlements Entitlements/WithDaysWidget.entitlements Payload/WithDays.app/PlugIns/WithDaysWidget.appex
-          codesign -f -s - --entitlements Entitlements/SubsReport.entitlements Payload/WithDays.app/PlugIns/SubsReport.appex
-          codesign -f -s - --entitlements Entitlements/WithDays-ScreenTime.entitlements Payload/WithDays.app
-          codesign -d --entitlements - Payload/WithDays.app
-          zip -qry WithDays-ScreenTime.ipa Payload
-          ls -l WithDays.ipa WithDays-ScreenTime.ipa
+          ls -l WithDays.ipa
 
       - uses: actions/upload-artifact@v4
         with:
           name: WithDays-ipa
           path: WithDays.ipa
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: WithDays-ScreenTime-ipa
-          path: WithDays-ScreenTime.ipa
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -131,7 +119,6 @@ jobs:
         with:
           files: |
             WithDays.ipa
-            WithDays-ScreenTime.ipa
           generate_release_notes: true
 
       - name: Update SideStore source
