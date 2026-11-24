@@ -107,6 +107,9 @@ jobs:
           codesign -d --entitlements - Payload/WithDays.app
           zip -qry WithDays.ipa Payload
           ls -l WithDays.ipa
+          # What takes the room, biggest first.
+          du -sh Payload/WithDays.app
+          find Payload/WithDays.app -type f -size +200k -exec ls -l {} + | sort -k5 -n -r | awk '{print $5, $9}' | head -n 15
 
       - uses: actions/upload-artifact@v4
         with:

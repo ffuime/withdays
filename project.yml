@@ -10,6 +10,19 @@ settings:
     MARKETING_VERSION: "1.24.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
+  # Release is built for size: optimised for size, symbols stripped from the binaries (CI builds with
+  # `build`, not `archive`, so stripping has to be switched on here), no dSYM, asset catalogs packed small.
+  configs:
+    Release:
+      SWIFT_OPTIMIZATION_LEVEL: "-Osize"
+      GCC_OPTIMIZATION_LEVEL: s
+      DEAD_CODE_STRIPPING: YES
+      DEPLOYMENT_POSTPROCESSING: YES
+      STRIP_INSTALLED_PRODUCT: YES
+      COPY_PHASE_STRIP: YES
+      STRIP_SWIFT_SYMBOLS: YES
+      DEBUG_INFORMATION_FORMAT: dwarf
+      ASSETCATALOG_COMPILER_OPTIMIZATION: space
 
 packages:
   SlidesFeature:
