@@ -7,7 +7,7 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "1.19.0"
+    MARKETING_VERSION: "1.20.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
 
@@ -52,9 +52,10 @@ targets:
         NSRemindersFullAccessUsageDescription: ToDoとしてAppleのリマインダーを表示・追加・編集するために使います。
         NSRemindersUsageDescription: ToDoとしてAppleのリマインダーを表示・追加・編集するために使います。
         NSLocationWhenInUseUsageDescription: Goで最寄り駅から電車の時刻を調べ、toocで位置情報を送るために使います。
-        NSCameraUsageDescription: Notesで書類をスキャンし、toocで友だちのQRコードを読み取り、写真を撮って送るために使います。
+        NSCameraUsageDescription: Notesで書類をスキャンし、toocで友だちのQRコードを読み取って写真を撮って送り、Galleryで写真を撮るために使います。
+        NSFaceIDUsageDescription: Galleryのロックしたアルバムを開くために使います。
         NSAppleMusicUsageDescription: Goで再生中の曲を表示し、再生・一時停止・スキップ・シャッフルを操作するために使います。
-        NSPhotoLibraryAddUsageDescription: Slidesで書き出したスライドの画像や、toocで届いた写真を写真に保存するために使います。
+        NSPhotoLibraryAddUsageDescription: Slidesで書き出したスライドの画像や、toocで届いた写真、Galleryの写真を写真に保存するために使います。
         # Notes are kept in Documents and shown in the Files app.
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true

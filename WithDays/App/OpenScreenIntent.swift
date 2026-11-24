@@ -3,7 +3,7 @@ import Foundation
 
 /// The apps inside WithDays, for the ショートカット app and Siri.
 enum WithDaysScreen: String, AppEnum {
-    case calendar, todo, tooc, slides, notes, go, planner, subscribes
+    case calendar, todo, tooc, slides, notes, go, planner, subscribes, gallery, holder
 
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "アプリ"
 
@@ -16,6 +16,8 @@ enum WithDaysScreen: String, AppEnum {
         .go: DisplayRepresentation(title: "Go", image: .init(systemName: "tram")),
         .planner: DisplayRepresentation(title: "Planner", image: .init(systemName: "yensign.circle")),
         .subscribes: DisplayRepresentation(title: "Subscribes", image: .init(systemName: "creditcard")),
+        .gallery: DisplayRepresentation(title: "Gallery", image: .init(systemName: "photo.on.rectangle")),
+        .holder: DisplayRepresentation(title: "Holder", image: .init(systemName: "rectangle.portrait.on.rectangle.portrait")),
     ]
 
     var mode: HomeMode {
@@ -28,13 +30,15 @@ enum WithDaysScreen: String, AppEnum {
         case .go: .go
         case .planner: .mo
         case .subscribes: .subs
+        case .gallery: .gallery
+        case .holder: .holder
         }
     }
 }
 
 struct OpenScreenIntent: AppIntent {
     static let title: LocalizedStringResource = "WithDaysのアプリを開く"
-    static let description = IntentDescription("Calendar・ToDo・tooc・Slides・Notes・Go・Planner・Subscribes を直接開きます。")
+    static let description = IntentDescription("Calendar・ToDo・tooc・Slides・Notes・Go・Planner・Subscribes・Gallery・Holder を直接開きます。")
     static let openAppWhenRun: Bool = true
 
     @Parameter(title: "アプリ")

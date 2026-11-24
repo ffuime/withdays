@@ -7,7 +7,7 @@ enum HomeRoute: Hashable {
 }
 
 enum HomeMode: String {
-    case calendar, todo, go, mo, notes, slides, tooc, subs
+    case calendar, todo, go, mo, notes, slides, tooc, subs, gallery, holder
 }
 
 struct HomeView: View {
@@ -64,8 +64,11 @@ struct HomeView: View {
     private var isTooc: Bool { mode == HomeMode.tooc.rawValue }
     /// Subscribes brings its own tabs and navigation too.
     private var isSubs: Bool { mode == HomeMode.subs.rawValue }
+    /// Gallery and Holder are laid over everything too.
+    private var isGallery: Bool { mode == HomeMode.gallery.rawValue }
+    private var isHolder: Bool { mode == HomeMode.holder.rawValue }
     /// Go, Planner and Notes bring their own bars; the calendar's toolbar and buttons stay out of them.
-    private var isOwnScreen: Bool { isGo || isMo || isNotes || isSlides || isTooc || isSubs }
+    private var isOwnScreen: Bool { isGo || isMo || isNotes || isSlides || isTooc || isSubs || isGallery || isHolder }
 
     private var displayedMonth: Date {
         let id = page ?? 0
@@ -75,7 +78,7 @@ struct HomeView: View {
     /// The screen for the current mode; split out so the body type-checks in reasonable time.
     private var modeContent: some View {
         ZStack {
-            if isSlides || isTooc || isSubs {
+            if isSlides || isTooc || isSubs || isGallery || isHolder {
                 Color(uiColor: .systemBackground)
             } else if isNotes {
                 NotesView {
@@ -164,6 +167,27 @@ struct HomeView: View {
                 }
             }
             .animation(.snappy(duration: 0.35), value: isSubs)
+            .overlay {
+                if isGallery {
+                    GalleryView {
+                        withAnimation(.snappy) { mode = HomeMode.calendar.rawValue }
+                    } onHolder: {
+                        withAnimation(.easeInOut(duration: 0.3)) { mode = HomeMode.holder.rawValue }
+                    }
+                    .background(Color(uiColor: .systemBackground))
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.snappy(duration: 0.35), value: isGallery)
+            .overlay {
+                if isHolder {
+                    HolderView {
+                        withAnimation(.easeInOut(duration: 0.3)) { mode = HomeMode.gallery.rawValue }
+                    }
+                    .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.3), value: isHolder)
             .overlay(alignment: .bottom) { trayLayer }
             .overlay(alignment: .bottom) { calendarBar }
             .overlay(alignment: .bottom) { toastLayer }
@@ -468,7 +492,7 @@ struct HomeView: View {
     @ViewBuilder
     private var toastLayer: some View {
         // Mo shows the toast above its own tab bar.
-        if let toast = toasts.current, !isMo, !isNotes, !isSlides, !isTooc, !isSubs {
+        if let toast = toasts.current, !isMo, !isNotes, !isSlides, !isTooc, !isSubs, !isGallery, !isHolder {
             UndoToastView(toast: toast) { toasts.performUndo() }
                 .padding(.horizontal, isTodo ? 20 : 20 + 56 + 10)
                 .padding(.bottom, isTodo ? 20 + 56 + 12 : 20)

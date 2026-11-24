@@ -23,6 +23,13 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.20.0", date: "2026.11.24", notes: [
+            "Gallery：写真とビデオをアプリの中だけに保存するギャラリー（iCloudや写真アプリとは別）",
+            "Gallery：アルバム（Face IDか4桁のパスコードでロック）、お気に入り、切り抜き、最近削除した項目",
+            "Gallery：＋長押しで無音カメラ、削除ボタン長押しで確認なしで削除",
+            "Holder：選んだ写真を1枚だけ全画面に表示",
+            "ショートカットアプリから Gallery と Holder を直接開けるように",
+        ]),
         Release(version: "1.19.0", date: "2026.11.23", notes: [
             "Subscribes：サブスク管理（リスト・更新日カレンダー・解約シミュ・過去の記録）",
             "Subscribes：人気サービスから追加、スクリーンタイム連携で今月の利用時間と¥/h",
