@@ -43,10 +43,10 @@ struct ToocPhotoViewer: View {
     var body: some View {
         GeometryReader { proxy in
             let layer = proxy.frame(in: .global)
-            let fade = 1 - min(1, abs(drag.height) / 420)
+            let fade: Double = 1 - min(1, Double(abs(drag.height)) / 420)
             ZStack {
                 Color.black
-                    .opacity(Double(progress) * fade * (fading ? 0 : 1))
+                    .opacity(fading ? 0 : Double(progress) * fade)
 
                 TabView(selection: $current) {
                     ForEach(item.photos) { photo in
