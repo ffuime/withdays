@@ -41,7 +41,10 @@ struct HolderView: View {
         .sheet(isPresented: $showSettings) {
             HolderSettingsSheet {
                 showSettings = false
-                onGallery()
+                Task {
+                    try? await Task.sleep(for: .milliseconds(350))
+                    onGallery()
+                }
             }
             .environment(store)
             .presentationDetents([.medium, .large])

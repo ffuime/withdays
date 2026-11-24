@@ -32,7 +32,11 @@ struct GalleryView: View {
         .sheet(isPresented: $showAlbums) {
             GalleryAlbumsSheet {
                 showAlbums = false
-                onHolder()
+                // Once the sheet is down, Holder fades in over Gallery.
+                Task {
+                    try? await Task.sleep(for: .milliseconds(350))
+                    onHolder()
+                }
             }
             .environment(store)
             // Grows out of the album button.
@@ -85,16 +89,19 @@ struct GalleryGridScreen: View {
         let items = store.items(in: albumID)
         let ids = items.map(\.id)
         ScrollView {
-            LazyVGrid(columns: Self.columns, spacing: 2) {
-                ForEach(items) { item in
-                    cell(item, ids: ids)
+            VStack(spacing: 0) {
+                LazyVGrid(columns: Self.columns, spacing: 2) {
+                    ForEach(items) { item in
+                        cell(item, ids: ids)
+                    }
                 }
+                if !items.isEmpty {
+                    footer(items)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 16)
+                }
+                Color.clear.frame(height: 120)
             }
-            if !items.isEmpty {
-                footer(items)
-                    .padding(.top, 14)
-            }
-            Color.clear.frame(height: 110)
         }
         .overlay {
             if items.isEmpty {
@@ -123,6 +130,7 @@ struct GalleryGridScreen: View {
         }
         .animation(.snappy, value: store.importing > 0)
         .overlay(alignment: .bottom) { bottomBar(items) }
+        .animation(.snappy, value: selecting)
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar(items) }
@@ -216,31 +224,35 @@ struct GalleryGridScreen: View {
         }
         ToolbarItem(placement: .topBarTrailing) {
             HStack(spacing: 0) {
-                if selecting {
+                // The same two slots in both modes, so the pill keeps its size and only the symbols change.
+                ZStack {
+                    filterMenu
+                        .opacity(selecting ? 0 : 1)
+                        .allowsHitTesting(!selecting)
                     Button {
-                        if selected.count == items.count { selected = [] } else { selected = Set(items.map(\.id)) }
+                        if allSelected(items) { selected = [] } else { selected = Set(items.map(\.id)) }
                     } label: {
-                        Text(selected.count == items.count && !items.isEmpty ? "選択解除" : "すべて")
-                            .font(.system(size: 14, weight: .semibold))
+                        Image(systemName: allSelected(items) ? "checklist.unchecked" : "checklist.checked")
+                            .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(.primary)
-                            .padding(.horizontal, 14)
-                            .frame(height: 38)
+                            .contentTransition(.symbolEffect(.replace))
+                            .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                } else {
-                    filterMenu
+                    .opacity(selecting ? 1 : 0)
+                    .allowsHitTesting(selecting)
+                    .accessibilityLabel(allSelected(items) ? "選択解除" : "すべて選択")
                 }
+                .animation(.easeInOut(duration: 0.2), value: selecting)
                 Button {
-                    withAnimation(.snappy) {
-                        if selecting { endSelecting() } else { selecting = true }
-                    }
+                    if selecting { endSelecting() } else { selecting = true }
                 } label: {
                     Image(systemName: selecting ? "xmark" : "checkmark.circle")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.primary)
                         .contentTransition(.symbolEffect(.replace))
-                        .frame(width: 46, height: 38)
+                        .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -271,7 +283,7 @@ struct GalleryGridScreen: View {
             Image(systemName: store.favoritesOnly ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(store.favoritesOnly ? Color.brand : Color.primary)
-                .frame(width: 46, height: 38)
+                .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
         .accessibilityLabel("しぼりこみ")
@@ -288,9 +300,9 @@ struct GalleryGridScreen: View {
                 if let onAlbums {
                     Button(action: onAlbums) {
                         Image(systemName: "rectangle.stack")
-                            .font(.system(size: 22, weight: .semibold))
+                            .font(.system(size: 24, weight: .semibold))
                             .foregroundStyle(.primary)
-                            .frame(width: 56, height: 56)
+                            .frame(width: 64, height: 64)
                             .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -361,11 +373,13 @@ struct GalleryGridScreen: View {
             .contentShape(Rectangle())
     }
 
+    private func allSelected(_ items: [GalleryItem]) -> Bool {
+        !items.isEmpty && selected.count == items.count
+    }
+
     private func endSelecting() {
-        withAnimation(.snappy) {
-            selecting = false
-            selected = []
-        }
+        selecting = false
+        selected = []
     }
 }
 
@@ -442,7 +456,7 @@ struct GalleryCheck: View {
     }
 }
 
-/// A glass pill in the top bar.
+/// A round glass button in the top bar, the size of the system's.
 struct GalleryPill: View {
     let symbol: String
     var color: Color = .primary
@@ -453,11 +467,11 @@ struct GalleryPill: View {
             Image(systemName: symbol)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(color)
-                .frame(width: 52, height: 38)
-                .contentShape(Capsule())
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .glassEffect(.regular.interactive(), in: .circle)
     }
 }
 
@@ -468,9 +482,9 @@ struct GalleryAddButton: View {
 
     var body: some View {
         Image(systemName: "plus")
-            .font(.system(size: 26, weight: .semibold))
+            .font(.system(size: 28, weight: .semibold))
             .foregroundStyle(.white)
-            .frame(width: 56, height: 56)
+            .frame(width: 64, height: 64)
             .glassEffect(.regular.tint(Color.brand).interactive(), in: .circle)
             .contentShape(Circle())
             .onTapGesture(perform: onTap)

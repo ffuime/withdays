@@ -67,6 +67,11 @@ struct HomeView: View {
     /// Gallery and Holder are laid over everything too.
     private var isGallery: Bool { mode == HomeMode.gallery.rawValue }
     private var isHolder: Bool { mode == HomeMode.holder.rawValue }
+    /// Gallery ⇄ Holder: a cross-fade, not Gallery sliding away.
+    @State private var holderSwap = false
+    private var galleryTransition: AnyTransition {
+        holderSwap ? .opacity : .move(edge: .bottom).combined(with: .opacity)
+    }
     /// Go, Planner and Notes bring their own bars; the calendar's toolbar and buttons stay out of them.
     private var isOwnScreen: Bool { isGo || isMo || isNotes || isSlides || isTooc || isSubs || isGallery || isHolder }
 
@@ -170,24 +175,28 @@ struct HomeView: View {
             .overlay {
                 if isGallery {
                     GalleryView {
+                        holderSwap = false
                         withAnimation(.snappy) { mode = HomeMode.calendar.rawValue }
                     } onHolder: {
-                        withAnimation(.easeInOut(duration: 0.3)) { mode = HomeMode.holder.rawValue }
+                        holderSwap = true
+                        withAnimation(.easeInOut(duration: 0.45)) { mode = HomeMode.holder.rawValue }
                     }
                     .background(Color(uiColor: .systemBackground))
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(galleryTransition)
                 }
             }
             .animation(.snappy(duration: 0.35), value: isGallery)
             .overlay {
                 if isHolder {
                     HolderView {
-                        withAnimation(.easeInOut(duration: 0.3)) { mode = HomeMode.gallery.rawValue }
+                        holderSwap = true
+                        withAnimation(.easeInOut(duration: 0.45)) { mode = HomeMode.gallery.rawValue }
                     }
-                    .transition(.opacity)
+                    .transition(.opacity.combined(with: .scale(scale: 1.04)))
+                    .zIndex(1)
                 }
             }
-            .animation(.easeInOut(duration: 0.3), value: isHolder)
+            .animation(.easeInOut(duration: 0.45), value: isHolder)
             .overlay(alignment: .bottom) { trayLayer }
             .overlay(alignment: .bottom) { calendarBar }
             .overlay(alignment: .bottom) { toastLayer }

@@ -193,10 +193,14 @@ struct HolderBox: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 150)
                 .clipped()
-                VStack(alignment: .leading, spacing: 2) {
-                    Label("Holder", systemImage: "rectangle.portrait.on.rectangle.portrait")
-                        .font(.system(size: 24, weight: .bold))
-                    Text(item == nil ? "写真を1枚、全画面で表示します" : "タップで全画面に。長押しで設定")
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "rectangle.portrait.on.rectangle.portrait")
+                            .font(.system(size: 18, weight: .semibold))
+                        Text("Holder")
+                            .font(.system(size: 26, weight: .bold))
+                    }
+                    Text(item == nil ? "写真を1枚、全画面で表示します" : "全画面で表示。画面の長押しで設定")
                         .font(.system(size: 13, weight: .medium))
                         .opacity(0.85)
                 }

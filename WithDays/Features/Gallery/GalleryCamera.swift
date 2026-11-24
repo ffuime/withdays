@@ -42,15 +42,8 @@ final class GalleryCameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferD
             connection.isVideoMirrored = false
         }
         try? device.lockForConfiguration()
-        // The sharpest 4:3 frames the camera streams.
-        let best = device.formats
-            .filter { format in
-                let size = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                return size.width * 3 == size.height * 4 && size.width <= 4032
-                    && format.videoSupportedFrameRateRanges.contains { $0.maxFrameRate >= 24 }
-            }
-            .max { CMVideoFormatDescriptionGetDimensions($0.formatDescription).width < CMVideoFormatDescriptionGetDimensions($1.formatDescription).width }
-        if let best { device.activeFormat = best }
+        // The photo preset's own format (a forced high-resolution one exposed too dark); brighter in low light.
+        if device.isLowLightBoostSupported { device.automaticallyEnablesLowLightBoostWhenAvailable = true }
         // On a camera with an ultra wide, 1× is the wide one.
         if let wide = device.virtualDeviceSwitchOverVideoZoomFactors.first {
             device.videoZoomFactor = CGFloat(truncating: wide)
@@ -98,7 +91,12 @@ final class GalleryCameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferD
     }
 
     private func encode(_ buffer: CVPixelBuffer) -> Data? {
-        let image = CIImage(cvPixelBuffer: buffer)
+        var image = CIImage(cvPixelBuffer: buffer)
+        // A video frame misses the photo pipeline's processing, so it's finished like Photos' auto enhance.
+        for filter in image.autoAdjustmentFilters(options: [.redEye: false]) {
+            filter.setValue(image, forKey: kCIInputImageKey)
+            if let output = filter.outputImage { image = output }
+        }
         let space = CGColorSpace(name: CGColorSpace.sRGB)!
         return context.heifRepresentation(of: image, format: .RGBA8, colorSpace: space, options: [:])
             ?? context.jpegRepresentation(of: image, colorSpace: space, options: [:])

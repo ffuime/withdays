@@ -63,6 +63,8 @@ struct GalleryViewer: View {
         }
         .coordinateSpace(.named("viewer"))
         .toolbar(.hidden, for: .navigationBar)
+        // In the album sheet a swipe down closes the photo, not the sheet.
+        .interactiveDismissDisabled()
         .statusBarHidden(!chrome)
         .environment(\.colorScheme, .dark)
         .animation(.easeInOut(duration: 0.2), value: chrome)
@@ -120,7 +122,7 @@ struct GalleryViewer: View {
                 .accessibilityLabel("一覧に戻る")
             Spacer()
             HStack(spacing: 0) {
-                GalleryHoldButton(symbol: "rectangle.stack.badge.plus") {
+                GalleryHoldButton(symbol: "rectangle.stack.badge.plus", size: CGSize(width: 44, height: 44)) {
                     addingToAlbum = true
                 } onHold: {
                     guard let current else { return }
@@ -139,7 +141,7 @@ struct GalleryViewer: View {
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(.white)
                         .contentTransition(.symbolEffect(.replace))
-                        .frame(width: 52, height: 46)
+                        .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -489,6 +491,7 @@ struct GalleryHoldButton: View {
     let symbol: String
     var tint: Color = .white
     var duration: Double = 0.8
+    var size = CGSize(width: 56, height: 46)
     var onTap: () -> Void
     var onHold: () -> Void
 
@@ -517,7 +520,7 @@ struct GalleryHoldButton: View {
                 .foregroundStyle(tint)
                 .scaleEffect(showsRing ? 0.72 : 1)
         }
-        .frame(width: 56, height: 46)
+        .frame(width: size.width, height: size.height)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
         .onLongPressGesture(minimumDuration: duration, maximumDistance: 30) {

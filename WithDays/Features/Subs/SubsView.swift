@@ -106,7 +106,7 @@ struct SubsView: View {
 
 // MARK: Shared parts
 
-/// A glass pill in the top bar.
+/// A round glass button in the top bar, the size of the system's.
 struct SubsPill: View {
     let symbol: String
     var onCard = false
@@ -117,11 +117,11 @@ struct SubsPill: View {
             Image(systemName: symbol)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(onCard ? Color.white : Color.primary)
-                .frame(width: 52, height: 38)
-                .contentShape(Capsule())
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .glassEffect(onCard ? .regular.tint(SubsListView.cardColors[0].opacity(0.55)).interactive() : .regular.interactive(), in: .capsule)
+        .glassEffect(onCard ? .regular.tint(SubsListView.cardColors[0].opacity(0.55)).interactive() : .regular.interactive(), in: .circle)
         .animation(.snappy, value: onCard)
     }
 }
