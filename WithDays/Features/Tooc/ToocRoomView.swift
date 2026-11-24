@@ -50,7 +50,8 @@ struct ToocRoomView: View {
 
     private var room: ToocRoom? { store.room(roomID) }
 
-    var body: some View {
+    /// The talk with its bars, title and arrival; the sheets and covers are added in `body`.
+    private var screen: some View {
         Group {
             if let room {
                 messages(room)
@@ -116,6 +117,10 @@ struct ToocRoomView: View {
             // Leaving with something typed keeps it, and the list shows the pencil.
             if editing == nil { store.update(roomID) { $0.draft = draft } }
         }
+    }
+
+    var body: some View {
+        screen
         .sheet(isPresented: $scheduling) { scheduleSheet }
         .sheet(isPresented: $searching) {
             ToocRoomSearchView(roomID: roomID) { id in
@@ -135,7 +140,7 @@ struct ToocRoomView: View {
         }
         .sheet(item: $composer) { kind in
             ToocComposerView(kind: kind, roomID: roomID) { message in
-                withAnimation(.snappy) { store.send(message, in: roomID) }
+                withAnimation(.snappy) { _ = store.send(message, in: roomID) }
             }
         }
         .sheet(item: Binding(get: { selecting.map { ToocSelectText(text: $0) } }, set: { selecting = $0?.text })) { item in
