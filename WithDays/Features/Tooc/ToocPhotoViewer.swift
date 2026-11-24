@@ -41,37 +41,42 @@ struct ToocPhotoViewer: View {
     private var index: Int { item.photos.firstIndex { $0.id == current } ?? 0 }
 
     var body: some View {
-        GeometryReader { proxy in
-            let layer = proxy.frame(in: .global)
-            let fade: Double = 1 - min(1, Double(abs(drag.height)) / 420)
-            ZStack {
-                Color.black
-                    .opacity(fading ? 0 : Double(progress) * fade)
+        let fade: Double = 1 - min(1, Double(abs(drag.height)) / 420)
+        ZStack {
+            Color.black
+                .opacity(fading ? 0 : Double(progress) * fade)
+                .ignoresSafeArea()
 
-                TabView(selection: $current) {
-                    ForEach(item.photos) { photo in
-                        ToocViewerPage(message: photo, image: images[photo.id]) {
-                            withAnimation(.easeInOut(duration: 0.2)) { chrome.toggle() }
-                        } onZoom: { zoomed = $0 } onLoad: { images[photo.id] = $0 }
-                        .tag(photo.id)
-                    }
+            // Every page edge to edge, so a screenshot fills the screen as it is.
+            TabView(selection: $current) {
+                ForEach(item.photos) { photo in
+                    ToocViewerPage(message: photo, image: images[photo.id]) {
+                        chrome.toggle()
+                    } onZoom: { zoomed = $0 } onLoad: { images[photo.id] = $0 }
+                    .ignoresSafeArea()
+                    .tag(photo.id)
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .offset(drag)
-                .scaleEffect(1 - min(0.2, abs(drag.height) / 1800))
-                .opacity(opened && !fading ? 1 : 0)
-                .simultaneousGesture(dismissDrag)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .ignoresSafeArea()
+            .offset(drag)
+            .scaleEffect(1 - min(0.2, abs(drag.height) / 1800))
+            .opacity(opened && !fading ? 1 : 0)
+            .simultaneousGesture(dismissDrag)
 
-                if !opened, let image = images[current] {
-                    hero(image, in: proxy.size, layer: layer)
+            if !opened, let image = images[current] {
+                GeometryReader { proxy in
+                    hero(image, in: proxy.size, layer: proxy.frame(in: .global))
                 }
+                .ignoresSafeArea()
+            }
 
+            if opened && chrome && drag == .zero && !fading {
                 buttons
-                    .opacity(opened && chrome && drag == .zero && !fading ? 1 : 0)
-                    .allowsHitTesting(opened && chrome)
+                    .transition(.opacity)
             }
         }
-        .ignoresSafeArea()
+        .animation(.easeInOut(duration: 0.2), value: chrome)
         .presentationBackground(.clear)
         .statusBarHidden(!chrome)
         .sensoryFeedback(.success, trigger: saved)
@@ -160,6 +165,7 @@ struct ToocPhotoViewer: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 17, weight: .semibold))
                         .frame(width: 44, height: 44)
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .glassEffect(.regular.interactive(), in: .circle)
@@ -167,7 +173,7 @@ struct ToocPhotoViewer: View {
                 Spacer()
             }
             .padding(.horizontal, 16)
-            .padding(.top, 60)
+            .padding(.top, 8)
             Spacer()
             HStack(spacing: 0) {
                 Button(action: save) {
@@ -175,6 +181,7 @@ struct ToocPhotoViewer: View {
                         .font(.system(size: 18, weight: .semibold))
                         .contentTransition(.symbolEffect(.replace))
                         .frame(width: 60, height: 48)
+                        .contentShape(Rectangle())
                 }
                 .disabled(images[current] == nil || saved.contains(current))
                 .accessibilityLabel(saved.contains(current) ? "保存しました" : "保存")
@@ -184,13 +191,14 @@ struct ToocPhotoViewer: View {
                     Image(systemName: "arrowshape.turn.up.right")
                         .font(.system(size: 18, weight: .semibold))
                         .frame(width: 60, height: 48)
+                        .contentShape(Rectangle())
                 }
                 .disabled(message?.forwardable != true)
                 .accessibilityLabel("転送")
             }
             .buttonStyle(.plain)
             .glassEffect(.regular.interactive(), in: .capsule)
-            .padding(.bottom, 44)
+            .padding(.bottom, 8)
         }
         .foregroundStyle(.white)
         .environment(\.colorScheme, .dark)

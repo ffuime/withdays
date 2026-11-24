@@ -18,6 +18,10 @@ struct ToocProfileSheet: View {
     @State private var renaming = false
     @State private var nickname = ""
     @FocusState private var nameFocused: Bool
+    /// Your own name or bio, being changed right where it's shown.
+    @State private var editingInPlace = false
+    @State private var draft = ""
+    @FocusState private var draftFocused: Bool
 
     /// The round icon's place on screen, so the enlarged one grows out of it and goes back into it.
     @State private var avatarFrame: CGRect = .zero
@@ -98,7 +102,14 @@ struct ToocProfileSheet: View {
                         .foregroundStyle(.white)
                     }
                     .buttonStyle(.plain)
-                    if !user.bio.isEmpty {
+                    if user.bio.isEmpty, isMe {
+                        Button { path.append(.bio) } label: {
+                            Text("Mybioを入力")
+                                .toocFont(.subheadline)
+                                .foregroundStyle(.white.opacity(0.55))
+                        }
+                        .buttonStyle(.plain)
+                    } else if !user.bio.isEmpty {
                         Button { path.append(.bio) } label: {
                             Text(user.bio)
                                 .toocFont(.subheadline)
@@ -168,12 +179,26 @@ struct ToocProfileSheet: View {
             VStack(alignment: .leading, spacing: 8) {
                 switch page {
                 case .bio:
-                    Text(user.bio)
-                        .toocFont(.body)
-                        .foregroundStyle(.white)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if editingInPlace {
+                        TextField("Mybio", text: $draft, axis: .vertical)
+                            .toocFont(.body)
+                            .foregroundStyle(.white)
+                            .focused($draftFocused)
+                    } else {
+                        Text(user.bio.isEmpty && isMe ? "Mybioはまだありません" : user.bio)
+                            .toocFont(.body)
+                            .foregroundStyle(.white.opacity(user.bio.isEmpty ? 0.55 : 1))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 case .name:
-                    if renaming {
+                    if editingInPlace {
+                        TextField(store.me.id, text: $draft)
+                            .toocFont(.largeTitle.bold())
+                            .foregroundStyle(.white)
+                            .focused($draftFocused)
+                            .submitLabel(.done)
+                            .onSubmit { finishInPlace(page) }
+                    } else if renaming {
                         // The name itself becomes the field; empty goes back to their own name.
                         TextField(user.name, text: $nickname)
                             .toocFont(.largeTitle.bold())
@@ -205,7 +230,26 @@ struct ToocProfileSheet: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         }
+        .onDisappear { if editingInPlace { finishInPlace(page) } }
         .toolbar {
+            if isMe {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        if editingInPlace {
+                            finishInPlace(page)
+                        } else {
+                            draft = page == .name ? store.me.name : store.me.bio
+                            withAnimation(.snappy) { editingInPlace = true }
+                            draftFocused = true
+                        }
+                    } label: {
+                        Image(systemName: editingInPlace ? "checkmark" : "pencil")
+                            .foregroundStyle(.white)
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .accessibilityLabel(editingInPlace ? "完了" : (page == .name ? "名前を編集" : "Mybioを編集"))
+                }
+            }
             if page == .name, !isMe, store.users[userID] != nil {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(renaming ? "完了" : "変更") {
@@ -222,6 +266,15 @@ struct ToocProfileSheet: View {
                 }
             }
         }
+    }
+
+    private func finishInPlace(_ page: ToocProfilePage) {
+        switch page {
+        case .name: store.editNameAndBio(name: draft)
+        case .bio: store.editNameAndBio(bio: draft.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        withAnimation(.snappy) { editingInPlace = false }
+        draftFocused = false
     }
 
     private func finishRename() {

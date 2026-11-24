@@ -3,15 +3,16 @@ import UIKit
 
 // MARK: - Theme
 
-/// tooc's look: the accent for buttons, text and your bubbles, the background behind everything, and the other
-/// person's bubble. 夜 is dark throughout.
+/// tooc's look, drawn from its logo (violet into blue): the accent for buttons and text, a quiet background behind
+/// everything, your bubble (a lighter accent, white text) and the other person's. 夜 is dark throughout.
 enum ToocTheme: String, CaseIterable, Identifiable, Codable {
-    case standard, sky, sakura, mint, sand, night
+    case standard, lavender, sky, sakura, mint, sand, night
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .standard: "標準"
+        case .standard: "tooc"
+        case .lavender: "ラベンダー"
         case .sky: "空"
         case .sakura: "さくら"
         case .mint: "ミント"
@@ -22,36 +23,45 @@ enum ToocTheme: String, CaseIterable, Identifiable, Codable {
 
     var accent: Color {
         switch self {
-        case .standard: .brand
-        case .sky: Color(hue: 0.56, saturation: 0.75, brightness: 0.82)
-        case .sakura: Color(hue: 0.95, saturation: 0.55, brightness: 0.86)
-        case .mint: Color(hue: 0.45, saturation: 0.7, brightness: 0.62)
-        case .sand: Color(hue: 0.07, saturation: 0.62, brightness: 0.78)
-        case .night: Color(hue: 0.62, saturation: 0.5, brightness: 0.82)
+        case .standard: .toocBrand
+        case .lavender: Color(red: 0.49, green: 0.38, blue: 0.96)
+        case .sky: Color(red: 0.13, green: 0.56, blue: 0.94)
+        case .sakura: Color(red: 0.91, green: 0.38, blue: 0.58)
+        case .mint: Color(red: 0.12, green: 0.66, blue: 0.55)
+        case .sand: Color(red: 0.86, green: 0.53, blue: 0.27)
+        case .night: Color(red: 0.55, green: 0.6, blue: 1.0)
         }
     }
 
-    /// Behind lists and talks; nil keeps the system's.
+    /// Behind lists and talks: barely tinted, so text stays easy to read. nil keeps the system's.
     var background: Color? {
         switch self {
         case .standard: nil
-        case .sky: Color(hue: 0.57, saturation: 0.1, brightness: 0.98)
-        case .sakura: Color(hue: 0.95, saturation: 0.07, brightness: 0.99)
-        case .mint: Color(hue: 0.43, saturation: 0.08, brightness: 0.97)
-        case .sand: Color(hue: 0.1, saturation: 0.09, brightness: 0.97)
-        case .night: Color(hue: 0.64, saturation: 0.5, brightness: 0.15)
+        case .lavender: Color(red: 0.975, green: 0.97, blue: 1.0)
+        case .sky: Color(red: 0.965, green: 0.98, blue: 1.0)
+        case .sakura: Color(red: 1.0, green: 0.972, blue: 0.978)
+        case .mint: Color(red: 0.962, green: 0.988, blue: 0.978)
+        case .sand: Color(red: 0.99, green: 0.978, blue: 0.962)
+        case .night: Color(red: 0.07, green: 0.075, blue: 0.12)
         }
     }
 
     var dark: Bool { self == .night }
 
-    /// See-through, so the background shows.
-    var myBubble: Color { accent.opacity(0.84) }
+    /// Your bubble: the accent, lightened, under white text.
+    var myBubble: Color {
+        switch self {
+        case .standard: Color(red: 0.42, green: 0.5, blue: 1.0)
+        case .night: accent.mix(with: .black, by: 0.25)
+        default: accent.mix(with: .white, by: 0.18)
+        }
+    }
+
     var theirBubble: Color {
         switch self {
-        case .standard: Color(.secondarySystemBackground).opacity(0.85)
-        case .night: Color.white.opacity(0.14)
-        default: Color.white.opacity(0.72)
+        case .standard: Color(.secondarySystemBackground)
+        case .night: Color.white.opacity(0.1)
+        default: Color.white
         }
     }
 
@@ -59,12 +69,17 @@ enum ToocTheme: String, CaseIterable, Identifiable, Codable {
     var card: Color {
         switch self {
         case .standard: Color(.secondarySystemBackground)
-        case .night: Color.white.opacity(0.08)
-        default: Color.white.opacity(0.75)
+        case .night: Color.white.opacity(0.07)
+        default: Color.white
         }
     }
 
     var fill: Color { background ?? Color(.systemBackground) }
+}
+
+extension Color {
+    /// tooc's own colour: the middle of its logo's violet-to-blue.
+    static let toocBrand = Color(red: 0.29, green: 0.36, blue: 1.0)
 }
 
 extension EnvironmentValues {

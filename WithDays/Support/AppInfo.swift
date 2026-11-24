@@ -23,6 +23,16 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.22.0", date: "2026.11.24", notes: [
+            "tooc：新しいロゴとブランドカラー、テーマを一新（背景は淡く、吹き出しは明るく）",
+            "tooc：あとで返信（ダブルタップか長押しメニュー）。トーク一覧に「あとで」、じぶんタブに一覧、並び替えで優先",
+            "tooc：リアクションの見た目を一新し、タップで誰が何をしたかを一覧に",
+            "tooc：友だちタブをなくし、じぶんタブから友だち一覧へ",
+            "tooc：自分のプロフィールで名前・Mybioをその場で編集、MyQRに保存ボタン、文字サイズを無段階に",
+            "tooc：フォントに Zen角ゴシック New・LINE Seed JP・佑字（肅・朴・舞）を追加、一覧は名前の文字だけ読み込み",
+            "tooc：写真のボタンが押せない問題と、写真が小さく表示される問題を修正。日付の表示、プロフィールの背景の端が暗くなる問題を修正",
+            "tooc：権利表示に UI・機能の参考（LINE・Instagram・iMessage）",
+        ]),
         Release(version: "1.21.0", date: "2026.11.24", notes: [
             "tooc：トークの写真を横にスワイプして前後の写真へ。タップでボタンを隠せ、×・保存・転送ボタンを表示",
             "tooc：Google Fonts の日本語フォント（10書体）を選べるように。選ぶとダウンロードされ端末に残ります",

@@ -119,17 +119,17 @@ struct ToocIconBackdrop: View {
                         .resizable()
                         .scaledToFill()
                 }
-                .blur(radius: blur)
+                .blur(radius: blur, opaque: true)
                 .clipped()
         } else if let address = user.backgroundURL {
             Color.clear
                 .overlay { ToocRemoteImage(address: address) }
-                .blur(radius: blur)
+                .blur(radius: blur, opaque: true)
                 .clipped()
         } else {
             ToocIconImage(user: user)
                 .scaleEffect(1.4)
-                .blur(radius: blur)
+                .blur(radius: blur, opaque: true)
                 .clipped()
         }
     }

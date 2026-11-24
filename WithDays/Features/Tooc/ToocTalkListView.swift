@@ -179,9 +179,15 @@ struct ToocTalkRow: View {
                         .padding(.top, 3)
                         .frame(maxHeight: .infinity, alignment: .top)
                 }
-                if room.unread > 0 {
-                    ToocCountBadge(count: room.unread, prominent: true)
-                        .opacity(room.muted ? 0.45 : 1)
+                HStack(spacing: 4) {
+                    if store.hasLater(room.id) {
+                        ToocLaterMark(size: 24)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                    if room.unread > 0 {
+                        ToocCountBadge(count: room.unread, prominent: true)
+                            .opacity(room.muted ? 0.45 : 1)
+                    }
                 }
             }
             .fixedSize(horizontal: true, vertical: false)

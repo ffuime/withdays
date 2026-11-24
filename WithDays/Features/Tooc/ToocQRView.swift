@@ -24,6 +24,7 @@ struct ToocQRView: View {
     @State private var path: [Step] = []
     @State private var invalid: String?
     @State private var copied = false
+    @State private var savedQR = false
 
     /// Your profile's page on the web (opens tooc to add you, or the web version).
     private var link: URL { URL(string: "https://ffui.me/tooc/@\(store.me.id)")! }
@@ -96,6 +97,11 @@ struct ToocQRView: View {
     private var shareRow: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 18) {
+                share(savedQR ? "保存済み" : "保存",
+                      mark: .symbol(savedQR ? "checkmark" : "square.and.arrow.down", AnyShapeStyle(store.theme.accent))) {
+                    saveQR()
+                }
+                .disabled(savedQR)
                 share("Instagram", mark: .glyph("ToocShareInstagram", AnyShapeStyle(Self.instagram))) {
                     // Instagram has no link for sharing text: copy it, then open Instagram.
                     UIPasteboard.general.url = link
@@ -178,6 +184,25 @@ struct ToocQRView: View {
                 .toocFont(.caption2)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    /// The code on white, with the toocID under it, into Photos.
+    @MainActor
+    private func saveQR() {
+        let card = VStack(spacing: 18) {
+            ToocQRCode(text: link.absoluteString)
+                .frame(width: 520, height: 520)
+            Text("@\(store.me.id)")
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(.black.opacity(0.6))
+        }
+        .padding(60)
+        .background(Color.white)
+        let renderer = ImageRenderer(content: card)
+        renderer.scale = 2
+        guard let image = renderer.uiImage else { return }
+        UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+        withAnimation(.snappy) { savedQR = true }
     }
 
     private func open(_ prefix: String, _ text: String) {

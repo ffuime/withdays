@@ -334,10 +334,25 @@ struct ToocNotice: Identifiable, Hashable, Codable {
     var seen = false
 }
 
+/// A message put off with あとで返信: it stays marked until you say something in that talk (or unmark it).
+struct ToocLater: Codable, Hashable {
+    let roomID: String
+    let messageID: UUID
+    let marked: Date
+}
+
+/// A marked message with its talk, for the list.
+struct ToocLaterItem: Identifiable {
+    let message: ToocMessage
+    let room: ToocRoom
+    var id: UUID { message.id }
+}
+
 struct ToocSettings: Hashable, Codable {
     var notifications = true
     var showContent = true
-    var textSize: ToocTextSize = .standard
+    /// The talk's text size in points, set freely with a slider.
+    var textPoints: Double = 17
     var theme: ToocTheme = .standard
     /// Return sends instead of starting a new line.
     var returnSends = false
@@ -348,13 +363,33 @@ struct ToocSettings: Hashable, Codable {
 
     init() {}
 
+    enum CodingKeys: String, CodingKey {
+        case notifications, showContent, textPoints, textSize, theme, returnSends, favoriteReactions, font
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(notifications, forKey: .notifications)
+        try c.encode(showContent, forKey: .showContent)
+        try c.encode(textPoints, forKey: .textPoints)
+        try c.encode(theme, forKey: .theme)
+        try c.encode(returnSends, forKey: .returnSends)
+        try c.encode(favoriteReactions, forKey: .favoriteReactions)
+        try c.encodeIfPresent(font, forKey: .font)
+    }
+
     /// Settings saved by an older version keep what they have; anything new takes its default.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let defaults = ToocSettings()
         notifications = try container.decodeIfPresent(Bool.self, forKey: .notifications) ?? defaults.notifications
         showContent = try container.decodeIfPresent(Bool.self, forKey: .showContent) ?? defaults.showContent
-        textSize = try container.decodeIfPresent(ToocTextSize.self, forKey: .textSize) ?? defaults.textSize
+        // Older versions kept one of four steps; that step becomes the slider's starting point.
+        if let points = try container.decodeIfPresent(Double.self, forKey: .textPoints) {
+            textPoints = points
+        } else if let step = try container.decodeIfPresent(ToocTextSize.self, forKey: .textSize) {
+            textPoints = Double(step.points)
+        }
         theme = try container.decodeIfPresent(ToocTheme.self, forKey: .theme) ?? defaults.theme
         returnSends = try container.decodeIfPresent(Bool.self, forKey: .returnSends) ?? defaults.returnSends
         favoriteReactions = try container.decodeIfPresent([String].self, forKey: .favoriteReactions) ?? defaults.favoriteReactions

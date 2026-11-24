@@ -42,10 +42,6 @@ struct ToocRoomView: View {
     @State private var showStickers = false
     /// People called with @ while typing (their name as typed → toocID).
     @State private var mentionPicks: [String: String] = [:]
-    /// The sticky date: which day is at the top, where each day's own label is, and the bars' height above.
-    @State private var topDay: Date?
-    @State private var dayTops: [Date: CGFloat] = [:]
-    @State private var topInset: CGFloat = 0
 
     private var room: ToocRoom? { store.room(roomID) }
 
@@ -94,6 +90,13 @@ struct ToocRoomView: View {
             if router.focusRoomID == roomID {
                 router.focusRoomID = nil
                 focused = true
+            }
+            if let id = router.highlightMessage {
+                router.highlightMessage = nil
+                Task {
+                    try? await Task.sleep(for: .milliseconds(450))
+                    highlight = id
+                }
             }
         }
         .onDisappear {
@@ -223,19 +226,14 @@ struct ToocRoomView: View {
     private func messages(_ room: ToocRoom) -> some View {
         let list = room.sent
         let waiting = room.waiting
-        let size = store.settings.textSize.points
+        let size = CGFloat(store.settings.textPoints)
         let typer = store.typing[roomID].flatMap { store.user($0) }
         return ScrollViewReader { reader in
             ScrollView {
-                LazyVStack(spacing: 2) {
+                LazyVStack(spacing: 2, pinnedViews: [.sectionHeaders]) {
                     ForEach(days(list)) { day in
-                        // Each day's own label, in the flow; it hides while the sticky copy stands in for it.
-                        dayLabel(day.date)
-                            .opacity(topDay == day.date && (dayTops[day.date] ?? 0) < topInset + 1 ? 0 : 1)
-                            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .scrollView).minY } action: {
-                                dayTops[day.date] = $0
-                            }
-                        Group {
+                        // Each day's label stays at the top while its messages scroll under it; the next day's pushes it up.
+                        Section {
                             ForEach(day.items) { item in
                                 ToocMessageRow(
                                     message: item.message,
@@ -251,6 +249,8 @@ struct ToocRoomView: View {
                                 .padding(.top, item.first && item.message.id != day.items.first?.message.id ? 10 : 0)
                                 .id(item.message.id)
                             }
+                        } header: {
+                            dayLabel(day.date)
                         }
                     }
                     if let typer {
@@ -269,13 +269,6 @@ struct ToocRoomView: View {
                 .scrollTargetLayout()
             }
             .defaultScrollAnchor(.bottom)
-            .onScrollGeometryChange(for: CGFloat.self) { $0.contentInsets.top } action: { _, inset in topInset = inset }
-            .onScrollTargetVisibilityChange(idType: UUID.self, threshold: 0.01) { ids in
-                // The day of the earliest message on screen.
-                let visible = Set(ids)
-                topDay = list.first { visible.contains($0.id) }.map { Calendar.current.startOfDay(for: $0.date) }
-            }
-            .overlay(alignment: .top) { stickyDay(list) }
             .scrollDismissesKeyboard(.interactively)
             .overlay {
                 if list.isEmpty && waiting.isEmpty {
@@ -306,18 +299,6 @@ struct ToocRoomView: View {
     }
 
     private static let dayLabelHeight: CGFloat = 40
-
-    /// The top day's label, held at the top while its messages scroll under it, and pushed up by the next day's label.
-    @ViewBuilder
-    private func stickyDay(_ list: [ToocMessage]) -> some View {
-        if let day = topDay, (dayTops[day] ?? -.infinity) < topInset + 1 {
-            let next = dayTops.filter { $0.key > day && $0.value > topInset }.map(\.value).min()
-            let push = next.map { min(0, $0 - topInset - Self.dayLabelHeight) } ?? 0
-            dayLabel(day)
-                .offset(y: push)
-                .allowsHitTesting(false)
-        }
-    }
 
     /// The day: plain text, no background.
     private func dayLabel(_ date: Date) -> some View {
@@ -872,12 +853,14 @@ struct ToocMessageRow: View {
     @State private var showFull = false
     @State private var shownHeight: CGFloat = 0
     @State private var fullHeight: CGFloat = 0
+    @State private var showReactions = false
 
     private static let replyDistance: CGFloat = 64
     private static let maxPull: CGFloat = 96
     private static let avatarSize: CGFloat = 36
 
     private var mine: Bool { message.senderID == store.me.id }
+    private var later: Bool { store.isLater(message.id) }
 
     var body: some View {
         if message.isUnsent {
@@ -921,7 +904,7 @@ struct ToocMessageRow: View {
                 }
                 HStack(alignment: .bottom, spacing: 5) {
                     bubbleWithReactions
-                    if last { meta(alignment: .leading) }
+                    if last || later { meta(alignment: .leading) }
                 }
             }
             Spacer(minLength: 40)
@@ -933,7 +916,7 @@ struct ToocMessageRow: View {
             Spacer(minLength: 40)
             if message.failed {
                 failedMark
-            } else if last || message.sending {
+            } else if last || message.sending || later {
                 meta(alignment: .trailing)
             }
             bubbleWithReactions
@@ -961,7 +944,11 @@ struct ToocMessageRow: View {
 
     /// 既読 (with the mute mark beside it) above the time.
     private func meta(alignment: HorizontalAlignment) -> some View {
-        VStack(alignment: alignment, spacing: 0) {
+        VStack(alignment: alignment, spacing: 2) {
+            if later {
+                ToocLaterMark()
+                    .transition(.scale.combined(with: .opacity))
+            }
             if message.sending {
                 ProgressView().controlSize(.mini)
             } else {
@@ -999,28 +986,47 @@ struct ToocMessageRow: View {
         }
     }
 
+    /// The reactions under the bubble: each emoji with its count, and the faces of who reacted. Tap for who did what.
     private var reactions: some View {
         let counts = Dictionary(grouping: message.reactions.values, by: { $0 }).mapValues(\.count)
         let order = ToocStore.emojis.filter { counts[$0] != nil } + counts.keys.filter { !ToocStore.emojis.contains($0) }.sorted()
+        let people = message.reactions.keys.sorted().compactMap { $0 == store.me.id ? store.me : store.user($0) }
+        let reacted = message.reactions[store.me.id] != nil
         return Button {
-            if message.reactions[store.me.id] != nil {
-                withAnimation(.snappy) { store.react(nil, to: message.id, in: room.id) }
-            }
+            showReactions = true
         } label: {
-            HStack(spacing: 3) {
-                ForEach(order, id: \.self) { emoji in
-                    Text(emoji).toocFont(.system(size: 13))
-                    if let count = counts[emoji], count > 1 {
-                        Text("\(count)").toocFont(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                HStack(spacing: 2) {
+                    ForEach(order.prefix(4), id: \.self) { emoji in
+                        Text(emoji).font(.system(size: 15))
+                        if let count = counts[emoji], count > 1 {
+                            Text("\(count)")
+                                .toocFont(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.secondary)
+                                .padding(.trailing, 2)
+                        }
+                    }
+                }
+                if room.isGroup || people.count > 1 {
+                    HStack(spacing: -6) {
+                        ForEach(people.prefix(3)) { person in
+                            ToocAvatar(user: person, size: 18)
+                                .overlay(Circle().strokeBorder(theme.card, lineWidth: 1.5))
+                        }
                     }
                 }
             }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(theme.fill, in: Capsule())
-            .overlay(Capsule().strokeBorder(message.reactions[store.me.id] != nil ? theme.accent : Color.secondary.opacity(0.25)))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(theme.card, in: Capsule())
+            .overlay(Capsule().strokeBorder(reacted ? theme.accent.opacity(0.7) : Color.primary.opacity(0.08), lineWidth: reacted ? 1.5 : 1))
+            .shadow(color: .black.opacity(0.12), radius: 4, y: 1.5)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("リアクション\(message.reactions.count)件")
+        .sheet(isPresented: $showReactions) {
+            ToocReactionsSheet(messageID: message.id, roomID: room.id)
+        }
     }
 
     @ViewBuilder
@@ -1065,6 +1071,8 @@ struct ToocMessageRow: View {
             }
         }
         .opacity(message.sending || message.failed ? 0.6 : 1)
+        .simultaneousGesture(TapGesture(count: 2).onEnded { toggleLater() }, isEnabled: canMarkLater && !isPhoto)
+        .sensoryFeedback(.impact(weight: .medium), trigger: later)
         .contextMenu {
             if !message.sending && !message.failed { menu }
         }
@@ -1084,7 +1092,12 @@ struct ToocMessageRow: View {
         }
         .controlGroupStyle(.palette)
         .menuActionDismissBehavior(.enabled)
-        Button("返信", systemImage: "arrowshape.turn.up.left", action: actions.reply)
+        Button("返信", systemImage: "arrowshape.turn.up.left.fill", action: actions.reply)
+        if canMarkLater {
+            Button(later ? "あとで返信を解除" : "あとで返信", systemImage: later ? "clock.badge.xmark" : "clock.badge") {
+                toggleLater()
+            }
+        }
         if message.forwardable {
             Button("転送", systemImage: "arrowshape.turn.up.right", action: actions.forward)
         }
@@ -1100,13 +1113,37 @@ struct ToocMessageRow: View {
         }
         Divider()
         if mine {
-            Button("送信取消", systemImage: "arrow.uturn.backward", role: .destructive) {
+            Button(role: .destructive) {
                 withAnimation(.snappy) { store.unsend(message.id, in: room.id) }
+            } label: {
+                Label { Text("送信取消") } icon: { Self.red("arrow.uturn.backward") }
             }
         }
-        Button("削除", systemImage: "trash", role: .destructive) {
+        Button(role: .destructive) {
             withAnimation(.snappy) { store.deleteMessage(message.id, in: room.id) }
+        } label: {
+            Label { Text("削除") } icon: { Self.red("trash") }
         }
+    }
+
+    /// A red symbol that stays red in the system's menu (which otherwise draws symbols in the text colour).
+    private static func red(_ symbol: String) -> Image {
+        let image = UIImage(systemName: symbol)?.withTintColor(.systemRed, renderingMode: .alwaysOriginal)
+        return image.map { Image(uiImage: $0) } ?? Image(systemName: symbol)
+    }
+
+    /// Someone else's message can be put off to answer later.
+    private var canMarkLater: Bool { !mine && !message.sending && !message.failed && !room.isMynote }
+
+    private var isPhoto: Bool {
+        switch message.kind {
+        case .photo, .remotePhoto: true
+        default: false
+        }
+    }
+
+    private func toggleLater() {
+        withAnimation(.snappy) { store.toggleLater(message, in: room.id) }
     }
 
     /// Long text stops at 14 lines, with すべてを表示 for the rest in a sheet. Short text is just itself.

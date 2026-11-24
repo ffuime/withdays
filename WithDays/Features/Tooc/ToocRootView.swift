@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum ToocTab: Hashable { case talk, friends, me }
+enum ToocTab: Hashable { case talk, me }
 
 enum ToocRoute: Hashable {
     case room(String)
@@ -19,6 +19,8 @@ enum ToocRoute: Hashable {
     case settingsAbout
     case settingsChangelog
     case settingsCredits
+    case friends
+    case later
 }
 
 enum ToocSheet: Identifiable, Hashable {
@@ -106,6 +108,8 @@ final class ToocRouter {
     var confirm: ToocConfirm? = nil
     /// A room to open with the keyboard up.
     var focusRoomID: String? = nil
+    /// A message to show (scrolled to and lit up) when its room opens.
+    var highlightMessage: UUID? = nil
 
     func open(room id: String, focus: Bool = false) {
         sheet = nil
@@ -267,12 +271,6 @@ struct ToocRootView: View {
             }
             .badge(store.unreadTotal)
 
-            Tab(value: ToocTab.friends) {
-                ToocFriendListView()
-            } label: {
-                tabLabel("友だち", "person.2", .friends)
-            }
-
             Tab(value: ToocTab.me) {
                 ToocMeView()
             } label: {
@@ -315,11 +313,7 @@ struct ToocRootView: View {
             } else {
                 Button(action: onCalendar) { ToocBarIcon("chevron.left") }
                     .accessibilityLabel("カレンダーに戻る")
-                switch router.tab {
-                case .talk: ToocTalkSortMenu()
-                case .friends: ToocFriendSortMenu()
-                case .me: EmptyView()
-                }
+                if router.tab == .talk { ToocTalkSortMenu() }
             }
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
@@ -360,22 +354,7 @@ struct ToocRootView: View {
     @ViewBuilder
     private var selectionActions: some View {
         let chosen = router.selection
-        if router.tab == .friends {
-            Button {
-                withAnimation(.snappy) {
-                    chosen.forEach(store.toggleFavorite)
-                    router.endSelecting()
-                }
-            } label: { ToocBarIcon("star") }
-                .accessibilityLabel("お気に入り")
-                .disabled(chosen.isEmpty)
-            Button { router.confirm = .hideFriends(chosen) } label: { ToocBarIcon("eye.slash") }
-                .accessibilityLabel("非表示")
-                .disabled(chosen.isEmpty)
-            Button { router.confirm = .blockFriends(chosen) } label: { ToocBarIcon("nosign") }
-                .accessibilityLabel("ブロック")
-                .disabled(chosen.isEmpty)
-        } else {
+        Group {
             Button {
                 withAnimation(.snappy) {
                     chosen.forEach(store.markRead)
@@ -430,6 +409,8 @@ private struct ToocDestination: View {
         case .settingsAbout: ToocAboutView()
         case .settingsChangelog: ToocChangelogView()
         case .settingsCredits: ToocCreditsView()
+        case .friends: ToocFriendsScreen()
+        case .later: ToocLaterView()
         }
     }
 }
@@ -489,6 +470,7 @@ struct ToocTalkSortMenu: View {
         @Bindable var store = store
         Menu {
             Section {
+                Toggle("あとで返信を優先", isOn: $store.laterFirst.animation(.snappy))
                 Toggle("お気に入りを優先", isOn: $store.favoritesFirst.animation(.snappy))
                 Toggle("未読メッセージを優先", isOn: $store.unreadFirst.animation(.snappy))
             }

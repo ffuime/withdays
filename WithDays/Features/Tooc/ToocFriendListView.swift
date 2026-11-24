@@ -160,3 +160,62 @@ struct ToocRequestRow: View {
         .frame(height: ToocTalkRow.height)
     }
 }
+
+/// 友だち, pushed from じぶん: the list, with the friend tab's top bar (並び替え, choosing and what to do with the chosen).
+struct ToocFriendsScreen: View {
+    @Environment(ToocStore.self) private var store
+    @Environment(ToocRouter.self) private var router
+
+    var body: some View {
+        ToocFriendListView()
+            .navigationTitle("友だち")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(router.selecting)
+            .toolbar {
+                if router.selecting {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("完了") { withAnimation(.snappy) { router.endSelecting() } }
+                            .fontWeight(.semibold)
+                            .foregroundStyle(store.theme.accent)
+                    }
+                    ToolbarItemGroup(placement: .topBarTrailing) { selectionActions }
+                } else {
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        ToocFriendSortMenu()
+                        Menu {
+                            ToocAddFriendSection()
+                        } label: {
+                            ToocBarIcon("plus")
+                        }
+                        .accessibilityLabel("友だち追加")
+                        Button {
+                            withAnimation(.snappy) { router.startSelecting() }
+                        } label: {
+                            ToocBarIcon("checkmark.circle")
+                        }
+                        .accessibilityLabel("友だちを選択")
+                    }
+                }
+            }
+            .onDisappear { router.endSelecting() }
+    }
+
+    @ViewBuilder
+    private var selectionActions: some View {
+        let chosen = router.selection
+        Button {
+            withAnimation(.snappy) {
+                chosen.forEach(store.toggleFavorite)
+                router.endSelecting()
+            }
+        } label: { ToocBarIcon("star") }
+            .accessibilityLabel("お気に入り")
+            .disabled(chosen.isEmpty)
+        Button { router.confirm = .hideFriends(chosen) } label: { ToocBarIcon("eye.slash") }
+            .accessibilityLabel("非表示")
+            .disabled(chosen.isEmpty)
+        Button { router.confirm = .blockFriends(chosen) } label: { ToocBarIcon("nosign") }
+            .accessibilityLabel("ブロック")
+            .disabled(chosen.isEmpty)
+    }
+}

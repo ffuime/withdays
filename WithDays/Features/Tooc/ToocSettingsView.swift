@@ -228,12 +228,14 @@ struct ToocTalkSettingsView: View {
         @Bindable var store = store
         Form {
             Section("文字サイズ") {
-                Picker("文字サイズ", selection: $store.settings.textSize) {
-                    ForEach(ToocTextSize.allCases) { Text($0.label).tag($0) }
+                HStack(spacing: 12) {
+                    Text("あ").toocFont(.system(size: 13))
+                    Slider(value: $store.settings.textPoints, in: 12...30)
+                    Text("あ").toocFont(.system(size: 24))
                 }
-                .pickerStyle(.segmented)
+                .foregroundStyle(.secondary)
                 Text("こんにちは！tooc の文字はこの大きさです。")
-                    .toocFont(.system(size: store.settings.textSize.points))
+                    .toocFont(.system(size: store.settings.textPoints))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 13)
                     .padding(.vertical, 8)
@@ -300,8 +302,7 @@ struct ToocAboutView: View {
                     Image("ToocLogo")
                         .resizable()
                         .scaledToFit()
-                        .frame(height: 56)
-                        .foregroundStyle(Color.brand)
+                        .frame(height: 84)
                         .accessibilityLabel("tooc")
                     Text(Self.summary)
                         .toocFont(.subheadline)
@@ -379,8 +380,21 @@ struct ToocCreditsView: View {
         Credit(name: "LINE", detail: "LINE および LINE のロゴは LINEヤフー株式会社の商標または登録商標です。"),
     ]
 
+    private let references: [Credit] = [
+        Credit(name: "LINE", detail: "LINEヤフー株式会社"),
+        Credit(name: "Instagram", detail: "Meta Platforms, Inc."),
+        Credit(name: "iMessage", detail: "Apple Inc."),
+    ]
+
     var body: some View {
         List {
+            Section {
+                ForEach(references) { row($0) }
+            } header: {
+                Text("UI・機能の参考")
+            } footer: {
+                Text("tooc の画面や機能は、これらのアプリを参考にしています。tooc は各社とは関係ありません。")
+            }
             Section("サービス・API") {
                 ForEach(services) { row($0) }
             }

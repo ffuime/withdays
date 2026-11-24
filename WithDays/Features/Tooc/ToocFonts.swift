@@ -10,17 +10,23 @@ struct ToocFontChoice: Identifiable, Hashable {
     let family: String
     let label: String
 
+    /// Labelled with each font's own Japanese name where it has one, so the label itself shows what it looks like.
     static let all: [ToocFontChoice] = [
         .init(id: "notosansjp", family: "Noto Sans JP", label: "Noto Sans JP"),
+        .init(id: "zenkakugothicnew", family: "Zen Kaku Gothic New", label: "Zen角ゴシック New"),
+        .init(id: "lineseedjp", family: "LINE Seed JP", label: "LINE Seed JP"),
         .init(id: "mplusrounded1c", family: "M PLUS Rounded 1c", label: "M PLUS Rounded 1c"),
-        .init(id: "zenmarugothic", family: "Zen Maru Gothic", label: "Zen Maru Gothic"),
-        .init(id: "kosugimaru", family: "Kosugi Maru", label: "Kosugi Maru"),
-        .init(id: "bizudpgothic", family: "BIZ UDPGothic", label: "BIZ UDPGothic"),
+        .init(id: "zenmarugothic", family: "Zen Maru Gothic", label: "Zen丸ゴシック"),
+        .init(id: "kosugimaru", family: "Kosugi Maru", label: "小杉丸ゴシック"),
+        .init(id: "bizudpgothic", family: "BIZ UDPGothic", label: "BIZ UDPゴシック"),
         .init(id: "notoserifjp", family: "Noto Serif JP", label: "Noto Serif JP"),
-        .init(id: "shipporimincho", family: "Shippori Mincho", label: "Shippori Mincho"),
-        .init(id: "kleeone", family: "Klee One", label: "Klee One"),
-        .init(id: "yuseimagic", family: "Yusei Magic", label: "Yusei Magic"),
-        .init(id: "dotgothic16", family: "DotGothic16", label: "DotGothic16"),
+        .init(id: "shipporimincho", family: "Shippori Mincho", label: "しっぽり明朝"),
+        .init(id: "kleeone", family: "Klee One", label: "クレー One"),
+        .init(id: "yuseimagic", family: "Yusei Magic", label: "油性マジック"),
+        .init(id: "dotgothic16", family: "DotGothic16", label: "ドットゴシック16"),
+        .init(id: "yujisyuku", family: "Yuji Syuku", label: "佑字 肅"),
+        .init(id: "yujiboku", family: "Yuji Boku", label: "佑字 朴"),
+        .init(id: "yujimai", family: "Yuji Mai", label: "佑字 舞"),
     ]
 
     static func find(_ id: String?) -> ToocFontChoice? { all.first { $0.id == id } }
@@ -34,6 +40,9 @@ final class ToocFontLibrary {
     /// Downloaded and ready (font id → the family name the files registered under).
     private(set) var ready: [String: String] = [:]
     private(set) var downloading: Set<String> = []
+    /// Just the letters of each font's label, for the list (the whole font comes only when it's chosen).
+    private(set) var previews: [String: CTFont] = [:]
+    @ObservationIgnored private var fetchingPreviews: Set<String> = []
 
     private static var folder: URL {
         let url = URL.applicationSupportDirectory.appending(path: "ToocFonts", directoryHint: .isDirectory)
@@ -82,6 +91,36 @@ final class ToocFontLibrary {
             saved.append(file)
         }
         ready[choice.id] = Self.register(saved) ?? choice.family
+    }
+
+    /// Fetches only the letters of the font's label (a few KB), kept on this device, to draw the label in it.
+    func loadPreview(_ choice: ToocFontChoice) async {
+        guard previews[choice.id] == nil, ready[choice.id] == nil, !fetchingPreviews.contains(choice.id) else { return }
+        fetchingPreviews.insert(choice.id)
+        defer { fetchingPreviews.remove(choice.id) }
+        let file = Self.previewFolder.appending(path: "\(choice.id).ttf")
+        var data = try? Data(contentsOf: file)
+        if data == nil {
+            let query = choice.family.replacingOccurrences(of: " ", with: "+")
+            let text = choice.label.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+            guard let cssURL = URL(string: "https://fonts.googleapis.com/css2?family=\(query)&text=\(text)") else { return }
+            var request = URLRequest(url: cssURL)
+            request.setValue("WithDays", forHTTPHeaderField: "User-Agent")
+            guard let css = try? await URLSession.shared.data(for: request).0,
+                  let address = Self.fontAddresses(in: String(decoding: css, as: UTF8.self)).first?.1,
+                  let fetched = try? await URLSession.shared.data(from: address).0 else { return }
+            try? fetched.write(to: file, options: .atomic)
+            data = fetched
+        }
+        // Read straight from memory, not registered, so it never stands in for the whole font.
+        guard let data, let descriptor = CTFontManagerCreateFontDescriptorFromData(data as CFData) else { return }
+        previews[choice.id] = CTFontCreateWithFontDescriptor(descriptor, 17, nil)
+    }
+
+    private static var previewFolder: URL {
+        let url = folder.appending(path: "Previews", directoryHint: .isDirectory)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
     }
 
     /// Takes a font off this device.
@@ -242,6 +281,7 @@ struct ToocFontSettingsView: View {
             Section {
                 ForEach(ToocFontChoice.all) { choice in
                     row(id: choice.id, label: choice.label, family: library.family(choice.id))
+                        .task { await library.loadPreview(choice) }
                         .swipeActions(edge: .trailing) {
                             if library.family(choice.id) != nil, chosen != choice.id {
                                 Button("削除", systemImage: "trash", role: .destructive) { library.remove(choice.id) }
@@ -251,7 +291,7 @@ struct ToocFontSettingsView: View {
             } header: {
                 Text("Google Fonts")
             } footer: {
-                Text("選ぶとダウンロードされ、この端末に残ります。使わなくなったフォントは左にスワイプして削除できます。")
+                Text("一覧では名前の文字だけを読み込んでいます。選ぶとフォント全体がダウンロードされ、この端末に残ります。使わなくなったフォントは左にスワイプして削除できます。")
             }
         }
         .navigationTitle("フォント")
@@ -268,14 +308,9 @@ struct ToocFontSettingsView: View {
             choose(id)
         } label: {
             HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(label)
-                        .font(family.map { .custom($0, size: 17) } ?? .body)
-                        .foregroundStyle(.primary)
-                    Text("あいうえお 漢字 tooc 123")
-                        .font(family.map { .custom($0, size: 14) } ?? .subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                Text(label)
+                    .font(headingFont(id: id, family: family))
+                    .foregroundStyle(.primary)
                 Spacer()
                 if let id, library.downloading.contains(id) {
                     ProgressView()
@@ -292,6 +327,13 @@ struct ToocFontSettingsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    /// The whole font once it's here; before that, the label's own letters; the system's for システム標準.
+    private func headingFont(id: String?, family: String?) -> Font {
+        if let family { return .custom(family, size: 20) }
+        if let id, let preview = library.previews[id] { return Font(CTFontCreateCopyWithAttributes(preview, 20, nil, nil)) }
+        return .system(size: 20)
     }
 
     private func choose(_ id: String?) {

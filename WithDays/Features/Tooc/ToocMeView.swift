@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// じぶん: your profile card, ways to add a friend, Mynote, the messages waiting to be sent, and your friends.
+/// じぶん: your profile card, ways to add a friend, your friends, then Mynote, あとで返信 and the messages waiting to be sent.
 struct ToocMeView: View {
     @Environment(ToocStore.self) private var store
     @Environment(ToocRouter.self) private var router
@@ -12,8 +12,8 @@ struct ToocMeView: View {
             VStack(spacing: 16) {
                 card
                 addFriend
-                shortcuts
                 friendsBox
+                shortcuts
             }
             .padding(16)
         }
@@ -97,7 +97,7 @@ struct ToocMeView: View {
         .buttonStyle(.plain)
     }
 
-    /// Mynote and the messages waiting to be sent, as plain rows with a hairline between.
+    /// Mynote, あとで返信 and the messages waiting to be sent, as plain rows with a hairline between.
     private var shortcuts: some View {
         let waiting = store.scheduledMessages
         return VStack(spacing: 0) {
@@ -107,6 +107,14 @@ struct ToocMeView: View {
                 detail: store.mynote?.last.map { $0.preview } ?? "メモを書こう"
             ) {
                 if let room = store.mynote { router.open(room: room.id) }
+            }
+            Divider().padding(.leading, 56)
+            shortcut(
+                icon: AnyView(ToocLaterMark(size: 40)),
+                title: "あとで返信",
+                detail: store.laterItems.isEmpty ? "ありません" : "\(store.laterItems.count)件"
+            ) {
+                router.path.append(.later)
             }
             Divider().padding(.leading, 56)
             shortcut(
@@ -154,7 +162,7 @@ struct ToocMeView: View {
     private var friendsBox: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.snappy) { router.tab = .friends }
+                router.path.append(.friends)
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "person.2.fill")

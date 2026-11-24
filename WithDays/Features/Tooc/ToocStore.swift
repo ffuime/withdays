@@ -49,6 +49,8 @@ private struct ToocLocal: Codable {
     var friendSort: ToocTalkSort = .added
     var scheduled: [String: [ToocMessage]] = [:]
     var revealed: Set<UUID> = []
+    var laters: [ToocLater] = []
+    var laterFirst = false
 
     init() {}
 
@@ -64,6 +66,8 @@ private struct ToocLocal: Codable {
         friendSort = (try? c.decode(ToocTalkSort.self, forKey: .friendSort)) ?? .added
         scheduled = (try? c.decode([String: [ToocMessage]].self, forKey: .scheduled)) ?? [:]
         revealed = (try? c.decode(Set<UUID>.self, forKey: .revealed)) ?? []
+        laters = (try? c.decode([ToocLater].self, forKey: .laters)) ?? []
+        laterFirst = (try? c.decode(Bool.self, forKey: .laterFirst)) ?? false
     }
 
     static func file(_ account: String) -> URL {
@@ -226,6 +230,9 @@ final class ToocStore {
     var favoritesFirst = false { didSet { local.favoritesFirst = favoritesFirst; save() } }
     var unreadFirst = false { didSet { local.unreadFirst = unreadFirst; save() } }
     var friendSort: ToocTalkSort = .added { didSet { local.friendSort = friendSort; save() } }
+    /// Messages marked あとで返信, newest mark first.
+    var laters: [ToocLater] = [] { didSet { local.laters = laters; save() } }
+    var laterFirst = false { didSet { local.laterFirst = laterFirst; save() } }
 
     /// The room on screen: what arrives there is read at once.
     var openRoomID: String? = nil {
@@ -456,6 +463,8 @@ final class ToocStore {
         favoritesFirst = local.favoritesFirst
         unreadFirst = local.unreadFirst
         friendSort = local.friendSort
+        laters = local.laters
+        laterFirst = local.laterFirst
         me = ToocUser(id: id, name: id, bio: "", hue: 0.58)
         account = id
         listenToMe(id)
@@ -870,6 +879,7 @@ final class ToocStore {
     var visibleRooms: [ToocRoom] {
         rooms.filter { !$0.hidden }.sorted { a, b in
             if a.pinned != b.pinned { return a.pinned }
+            if laterFirst, hasLater(a.id) != hasLater(b.id) { return hasLater(a.id) }
             if favoritesFirst, isFavorite(a) != isFavorite(b) { return isFavorite(a) }
             if unreadFirst, (a.unread > 0) != (b.unread > 0) { return a.unread > 0 }
             let ka = key(a, talkSort), kb = key(b, talkSort)
@@ -1099,6 +1109,44 @@ final class ToocStore {
         }
     }
 
+    // MARK: あとで返信
+
+    func isLater(_ id: UUID) -> Bool { laters.contains { $0.messageID == id } }
+    func hasLater(_ roomID: String) -> Bool { laters.contains { $0.roomID == roomID } }
+
+    func toggleLater(_ message: ToocMessage, in roomID: String) {
+        if isLater(message.id) {
+            laters.removeAll { $0.messageID == message.id }
+        } else {
+            laters.insert(ToocLater(roomID: roomID, messageID: message.id, marked: .now), at: 0)
+        }
+    }
+
+    /// The marked messages still there, with their talks.
+    var laterItems: [ToocLaterItem] {
+        laters.compactMap { later in
+            guard let room = room(later.roomID), let message = room.messages.first(where: { $0.id == later.messageID })
+            else { return nil }
+            return ToocLaterItem(message: message, room: room)
+        }
+    }
+
+    /// Only the name or the bio, changed in place on the profile.
+    func editNameAndBio(name: String? = nil, bio: String? = nil) {
+        guard let account else { return }
+        var fields: [String: Any] = ["updatedAt": Timestamp(date: .now)]
+        if let name {
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            me.name = trimmed.isEmpty ? account : trimmed
+            fields["name"] = me.name
+        }
+        if let bio {
+            me.bio = bio
+            fields["bio"] = bio
+        }
+        Task { try? await ToocServer.user(account).updateData(fields) }
+    }
+
     func editProfile(name: String, bio: String, hue: Double, iconFile: String?, backgroundFile: String?,
                      hasBackground: Bool, birthday: Date?) {
         guard let account else { return }
@@ -1143,6 +1191,10 @@ final class ToocStore {
 
     func send(_ kind: ToocMessage.Kind, in roomID: String, replyTo: UUID? = nil, silent: Bool = false, at time: Date? = nil,
               mentions: [String] = []) {
+        // Saying something in the talk answers what was put off there.
+        if time == nil || time! <= .now, laters.contains(where: { $0.roomID == roomID }) {
+            laters.removeAll { $0.roomID == roomID }
+        }
         var message = ToocMessage(senderID: me.id, kind: kind, date: time ?? .now, sending: true, replyTo: replyTo,
                                   silent: silent, scheduledAt: time)
         message.mentions = mentions

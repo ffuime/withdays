@@ -118,7 +118,7 @@ struct ToocRoomPreview: View {
                                 last: item.last,
                                 joinedAbove: item.joinedAbove,
                                 joinedBelow: item.joinedBelow,
-                                textSize: store.settings.textSize.points * 0.9,
+                                textSize: store.settings.textPoints * 0.9,
                                 actions: .none
                             )
                             .padding(.top, item.first ? 8 : 0)
