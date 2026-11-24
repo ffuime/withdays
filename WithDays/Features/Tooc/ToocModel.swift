@@ -287,6 +287,8 @@ struct ToocRoom: Identifiable, Hashable, Codable {
     var backgroundFile: String?
     var iconURL: String?
     var backgroundURL: String?
+    /// Messages pinned to the top of the talk (shared by everyone in it), newest pin first.
+    var pinnedMessages: [ToocPin] = []
 
     /// Sent (or arrived) messages, oldest first; scheduled ones wait apart.
     var sent: [ToocMessage] { messages.filter { $0.scheduledAt == nil } }
@@ -337,6 +339,18 @@ struct ToocNotice: Identifiable, Hashable, Codable {
     var userID: String?
     var roomID: String?
     var seen = false
+}
+
+/// A message pinned to the top of a talk. The words and sender are kept with the pin, so it shows even when the
+/// message itself is too far back to be loaded.
+struct ToocPin: Codable, Hashable, Identifiable {
+    static let limit = 5
+    let messageID: UUID
+    let senderID: String
+    let text: String
+    let by: String
+    let at: Date
+    var id: UUID { messageID }
 }
 
 /// 温度感: how soon an answer is hoped for, from 返信不要 to 急遽！！.

@@ -11,6 +11,7 @@ struct ToocLaterMark: View {
         Image(systemName: "hourglass")
             .font(.system(size: size * 0.5, weight: .bold))
             .foregroundStyle(.white)
+            .symbolEffect(.rotate, value: count)
             .frame(width: size, height: size)
             .background(Circle().fill(Color.red))
             .overlay(alignment: .topTrailing) {
@@ -82,7 +83,7 @@ struct ToocLaterSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
                         .accessibilityLabel("閉じる")
                 }
             }
@@ -252,7 +253,7 @@ struct ToocReactionsSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
                         .accessibilityLabel("閉じる")
                 }
             }

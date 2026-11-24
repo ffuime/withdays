@@ -50,7 +50,7 @@ private struct ToocEditorToolbar: ToolbarContent {
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            Button { dismiss() } label: { Image(systemName: "xmark") }
+            Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
                 .accessibilityLabel("キャンセル")
         }
         ToolbarItem(placement: .topBarTrailing) {
@@ -276,7 +276,7 @@ struct ToocLocationPicker: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
                         .accessibilityLabel("キャンセル")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -602,7 +602,7 @@ struct ToocAmidaSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
                         .accessibilityLabel("閉じる")
                 }
             }

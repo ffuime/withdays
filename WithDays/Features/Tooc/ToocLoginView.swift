@@ -97,7 +97,7 @@ struct ToocLoginView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(action: onCalendar) { Image(systemName: "chevron.left") }
+                    Button(action: onCalendar) { Image(systemName: "chevron.left").foregroundStyle(Color.toocBrand) }
                         .accessibilityLabel("カレンダーに戻る")
                 }
             }

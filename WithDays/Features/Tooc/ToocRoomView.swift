@@ -50,38 +50,50 @@ struct ToocRoomView: View {
 
     private var room: ToocRoom? { store.room(roomID) }
 
+    /// The messages with the pins above, the input below, and the room's top bar.
+    private func talk(_ room: ToocRoom) -> some View {
+        messages(room)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if !room.pinnedMessages.isEmpty {
+                    ToocPinBar(room: room) { id in jump(to: id) }
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.snappy, value: room.pinnedMessages)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if let stranger = notFriend(room) {
+                    notFriendBar(stranger)
+                } else {
+                    VStack(spacing: 0) {
+                        let candidates = mentionCandidates(room)
+                        if !candidates.isEmpty {
+                            ToocMentionStrip(candidates: candidates, onPick: pickMention)
+                                .padding(.top, 6)
+                        }
+                        inputBar(room)
+                        if showStickers {
+                            ToocStickerPanel { url in
+                                withAnimation(.snappy) {
+                                    store.send(.sticker(url: url), in: roomID, replyTo: replyTo?.id)
+                                    replyTo = nil
+                                }
+                            }
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                    }
+                    .animation(.snappy, value: showStickers)
+                    .animation(.snappy, value: mentionCandidates(room).map(\.id))
+                }
+            }
+            .toolbar { toolbar(room) }
+            .background(theme.fill.ignoresSafeArea())
+    }
+
     /// The talk with its bars, title and arrival; the sheets and covers are added in `body`.
     private var screen: some View {
         Group {
             if let room {
-                messages(room)
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        if let stranger = notFriend(room) {
-                            notFriendBar(stranger)
-                        } else {
-                            VStack(spacing: 0) {
-                                let candidates = mentionCandidates(room)
-                                if !candidates.isEmpty {
-                                    ToocMentionStrip(candidates: candidates, onPick: pickMention)
-                                        .padding(.top, 6)
-                                }
-                                inputBar(room)
-                                if showStickers {
-                                    ToocStickerPanel { url in
-                                        withAnimation(.snappy) {
-                                            store.send(.sticker(url: url), in: roomID, replyTo: replyTo?.id)
-                                            replyTo = nil
-                                        }
-                                    }
-                                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                                }
-                            }
-                            .animation(.snappy, value: showStickers)
-                            .animation(.snappy, value: mentionCandidates(room).map(\.id))
-                        }
-                    }
-                    .toolbar { toolbar(room) }
-                    .background(theme.fill.ignoresSafeArea())
+                talk(room)
             } else {
                 ContentUnavailableView("トークが見つかりません", systemImage: "message")
             }
@@ -90,7 +102,7 @@ struct ToocRoomView: View {
         .navigationBarTitleDisplayMode(.inline)
         .overlay { flightLayer }
         .sheet(isPresented: $choosingUrgency) {
-            ToocUrgencySheet(text: trimmed) { urgency in
+            ToocUrgencySheet(text: trimmed.isEmpty ? "写真\(attachments.count)枚" : trimmed) { urgency in
                 choosingUrgency = false
                 send(urgency: urgency)
             }
@@ -383,11 +395,14 @@ struct ToocRoomView: View {
                     quickLook = target
                 }
             },
-            showOriginal: { id in
-                highlight = nil
-                Task { @MainActor in highlight = id }
-            }
+            showOriginal: { id in jump(to: id) }
         )
+    }
+
+    /// Scrolls to a message and has it jump, so it's easy to spot.
+    private func jump(to id: UUID) {
+        highlight = nil
+        Task { @MainActor in highlight = id }
     }
 
     /// Messages waiting for their time, under the talk: dimmed, with when they'll go.
@@ -450,9 +465,12 @@ struct ToocRoomView: View {
                 self.editing = nil
             } else {
                 // The photos first, then the words, as one burst.
-                for photo in attachments {
+                for (index, photo) in attachments.enumerated() {
+                    // With no words, the 温度感 rides on the last photo.
+                    let carries = text.isEmpty && index == attachments.count - 1
                     if let file = ToocFiles.save(photo.image) {
-                        store.send(.photo(file), in: roomID, replyTo: replyTo?.id, silent: silent)
+                        store.send(.photo(file), in: roomID, replyTo: replyTo?.id, silent: silent,
+                                   urgency: carries ? urgency : nil)
                     }
                 }
                 if !text.isEmpty {
@@ -590,7 +608,7 @@ struct ToocRoomView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { scheduling = false } label: { Image(systemName: "xmark") }
+                    Button { scheduling = false } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
                         .accessibilityLabel("キャンセル")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -814,7 +832,7 @@ struct ToocRoomView: View {
                 if attachments.isEmpty {
                     Button("時刻指定して送信", systemImage: "clock") { openSchedule() }
                 }
-                if !room.isMynote, !trimmed.isEmpty {
+                if !room.isMynote {
                     Divider()
                     Button("温度感を伝える", systemImage: "thermometer.medium") { choosingUrgency = true }
                 }
@@ -1057,14 +1075,16 @@ struct ToocMessageRow: View {
                 .overlay(alignment: mine ? .topLeading : .topTrailing) {
                     if !message.laterBy.isEmpty {
                         Button { showLaters = true } label: {
-                            ToocLaterMark(size: 22, count: message.laterBy.count)
+                            ToocLaterMark(size: 28, count: message.laterBy.count)
                         }
                         .buttonStyle(.plain)
-                        .offset(x: mine ? -9 : 9, y: -9)
-                        .transition(.scale.combined(with: .opacity))
+                        .offset(x: mine ? -12 : 12, y: -12)
+                        .transition(.scale(scale: 0.1).combined(with: .opacity))
                         .accessibilityLabel("あとで返信 \(message.laterBy.count)人")
                     }
                 }
+                // Put on with a pop: it springs out of the corner and the hourglass flips.
+                .animation(.spring(response: 0.38, dampingFraction: 0.52), value: message.laterBy)
                 .sheet(isPresented: $showLaters) {
                     ToocLaterSheet(messageID: message.id, roomID: room.id)
                 }
@@ -1220,6 +1240,15 @@ struct ToocMessageRow: View {
         if message.forwardable {
             Button("転送", systemImage: "arrowshape.turn.up.right", action: actions.forward)
         }
+        if pinned {
+            Button("ピン留めを解除", systemImage: "pin.slash") {
+                withAnimation(.snappy) { store.unpin(message.id, in: room.id) }
+            }
+        } else {
+            Button("ピン留め", systemImage: "pin") {
+                withAnimation(.snappy) { store.pin(message, in: room.id) }
+            }
+        }
         if case .sticker(let url) = message.kind, !store.stickers.contains(where: { $0.url == url }) {
             Button("スタンプに追加", systemImage: "face.smiling") { store.saveSticker(url) }
         }
@@ -1250,6 +1279,8 @@ struct ToocMessageRow: View {
         let image = UIImage(systemName: symbol)?.withTintColor(.systemRed, renderingMode: .alwaysOriginal)
         return image.map { Image(uiImage: $0) } ?? Image(systemName: symbol)
     }
+
+    private var pinned: Bool { room.pinnedMessages.contains { $0.messageID == message.id } }
 
     /// Someone else's message can be put off to answer later.
     private var canMarkLater: Bool { !mine && !message.sending && !message.failed && !room.isMynote }
@@ -1303,7 +1334,7 @@ struct ToocMessageRow: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button { showFull = false } label: { Image(systemName: "xmark") }
+                        Button { showFull = false } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
                             .accessibilityLabel("閉じる")
                     }
                 }
@@ -1641,7 +1672,7 @@ struct ToocSelectTextView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button { dismiss() } label: { Image(systemName: "xmark") }
+                        Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
                             .accessibilityLabel("閉じる")
                     }
                 }

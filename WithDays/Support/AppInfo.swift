@@ -23,6 +23,12 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.24.0", date: "2026.11.25", notes: [
+            "tooc：ピン留め（長押しメニューから、トークの全員の上部に。最大5件、⌄で一覧、左スワイプで解除）",
+            "tooc：写真だけでも温度感を伝えられるように",
+            "tooc：あとで返信の印を大きく、付けるときのアニメーション。トーク一覧で未読と並んだときのずれを修正",
+            "tooc：上部のボタンの色をブランドカラーに統一",
+        ]),
         Release(version: "1.23.0", date: "2026.11.24", notes: [
             "tooc：あとで返信が相手にも見えるように。吹き出しの角の印をタップで誰がしたか、「じぶんもあとで返信」も",
             "tooc：温度感を伝える（送信ボタン長押し）。返信不要・ひまなときに・なるべく早く・急遽！！",

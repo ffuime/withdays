@@ -312,7 +312,7 @@ struct ToocRootView: View {
             if router.selecting {
                 Button("完了") { withAnimation(.snappy) { router.endSelecting() } }
                     .fontWeight(.semibold)
-                    .foregroundStyle(store.theme.accent)
+                    .foregroundStyle(Color.toocBrand)
             } else {
                 Button(action: onCalendar) { ToocBarIcon("chevron.left") }
                     .accessibilityLabel("カレンダーに戻る")
@@ -376,17 +376,16 @@ struct ToocRootView: View {
     }
 }
 
-/// A top-bar symbol: a little smaller than the system's, in the theme's colour.
+/// A top-bar symbol: a little smaller than the system's, always in tooc's own colour (whatever the theme).
 struct ToocBarIcon: View {
     let name: String
-    @Environment(\.toocTheme) private var theme
 
     init(_ name: String) { self.name = name }
 
     var body: some View {
         Image(systemName: name)
             .toocFont(.system(size: 15, weight: .semibold))
-            .foregroundStyle(theme.accent)
+            .foregroundStyle(Color.toocBrand)
     }
 }
 

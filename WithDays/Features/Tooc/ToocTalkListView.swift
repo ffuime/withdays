@@ -179,15 +179,22 @@ struct ToocTalkRow: View {
                         .padding(.top, 3)
                         .frame(maxHeight: .infinity, alignment: .top)
                 }
-                HStack(spacing: 4) {
-                    if store.hasLater(room.id) {
-                        ToocLaterMark(size: 24)
-                            .transition(.scale.combined(with: .opacity))
-                    }
-                    if room.unread > 0 {
-                        ToocCountBadge(count: room.unread, prominent: true)
-                            .opacity(room.muted ? 0.45 : 1)
-                    }
+                // The count stays where it always is (under the time); あとで sits to its left without moving
+                // anything, or alone in the count's place.
+                if room.unread > 0 {
+                    ToocCountBadge(count: room.unread, prominent: true)
+                        .opacity(room.muted ? 0.45 : 1)
+                        .overlay(alignment: .leading) {
+                            if store.hasLater(room.id) {
+                                ToocLaterMark(size: 22)
+                                    .fixedSize()
+                                    .alignmentGuide(.leading) { $0.width + 4 }
+                                    .transition(.scale.combined(with: .opacity))
+                            }
+                        }
+                } else if store.hasLater(room.id) {
+                    ToocLaterMark(size: 22)
+                        .transition(.scale.combined(with: .opacity))
                 }
             }
             .fixedSize(horizontal: true, vertical: false)

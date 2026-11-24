@@ -176,7 +176,7 @@ struct ToocFriendsScreen: View {
                     ToolbarItem(placement: .topBarLeading) {
                         Button("完了") { withAnimation(.snappy) { router.endSelecting() } }
                             .fontWeight(.semibold)
-                            .foregroundStyle(store.theme.accent)
+                            .foregroundStyle(Color.toocBrand)
                     }
                     ToolbarItemGroup(placement: .topBarTrailing) { selectionActions }
                 } else {

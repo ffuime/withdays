@@ -699,6 +699,12 @@ final class ToocStore {
                             isGroup: data["isGroup"] as? Bool ?? false, isMynote: data["isMynote"] as? Bool ?? false)
         room.iconURL = data["iconURL"] as? String
         room.backgroundURL = data["backgroundURL"] as? String
+        room.pinnedMessages = (data["pins"] as? [String: [String: Any]] ?? [:]).compactMap { key, value in
+            guard let id = UUID(uuidString: key) else { return nil }
+            return ToocPin(messageID: id, senderID: value["sender"] as? String ?? "", text: value["text"] as? String ?? "",
+                           by: value["by"] as? String ?? "", at: (value["at"] as? Timestamp)?.dateValue() ?? .distantPast)
+        }
+        .sorted { $0.at > $1.at }
         return room
     }
 
@@ -1125,7 +1131,55 @@ final class ToocStore {
         } else {
             laters.insert(ToocLater(roomID: roomID, messageID: message.id, marked: .now), at: 0)
         }
+        // Shown at once; the server follows.
+        patch(message.id, in: roomID) { message in
+            message.laterBy.removeAll { $0 == self.me.id }
+            if !marked { message.laterBy.append(self.me.id) }
+        }
         change(message.id, in: roomID, ["laterBy": marked ? FieldValue.arrayRemove([me.id]) : FieldValue.arrayUnion([me.id])])
+    }
+
+    /// Changes a message as this device has it, before the server's copy comes back.
+    private func patch(_ id: UUID, in roomID: String, _ edit: (inout ToocMessage) -> Void) {
+        guard var list = serverMessages[roomID], let index = list.firstIndex(where: { $0.id == id }) else { return }
+        edit(&list[index])
+        serverMessages[roomID] = list
+        rebuildRooms()
+    }
+
+    // MARK: ピン留め
+
+    /// Pins a message to the top of the talk for everyone in it (5 at most: a sixth takes the oldest's place).
+    func pin(_ message: ToocMessage, in roomID: String) {
+        guard let room = room(roomID), !room.pinnedMessages.contains(where: { $0.messageID == message.id }) else { return }
+        let pin = ToocPin(messageID: message.id, senderID: message.senderID, text: message.preview, by: me.id, at: .now)
+        var fields: [AnyHashable: Any] = [
+            FieldPath(["pins", message.id.uuidString]): [
+                "sender": pin.senderID, "text": pin.text, "by": pin.by, "at": Timestamp(date: pin.at),
+            ] as [String: Any],
+        ]
+        var pins = [pin] + room.pinnedMessages
+        if pins.count > ToocPin.limit, let oldest = pins.last {
+            pins.removeLast()
+            fields[FieldPath(["pins", oldest.messageID.uuidString])] = FieldValue.delete()
+        }
+        setPins(pins, in: roomID)
+        Task { try? await ToocServer.room(roomID).updateData(fields) }
+    }
+
+    func unpin(_ messageID: UUID, in roomID: String) {
+        setPins((room(roomID)?.pinnedMessages ?? []).filter { $0.messageID != messageID }, in: roomID)
+        Task { try? await ToocServer.room(roomID).updateData([FieldPath(["pins", messageID.uuidString]): FieldValue.delete()]) }
+    }
+
+    func unpinAll(in roomID: String) {
+        setPins([], in: roomID)
+        Task { try? await ToocServer.room(roomID).updateData(["pins": FieldValue.delete()]) }
+    }
+
+    private func setPins(_ pins: [ToocPin], in roomID: String) {
+        serverRooms[roomID]?.pinnedMessages = pins
+        rebuildRooms()
     }
 
     /// Everything you put off in the talk, cleared once you say something there.
