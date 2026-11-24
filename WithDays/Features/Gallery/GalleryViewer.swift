@@ -274,30 +274,39 @@ private struct GalleryCreases: View {
 
     var body: some View {
         Canvas { context, size in
-            var random = SeededRandom(seed: UInt64(seed))
-            let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            let reach = max(size.width, size.height)
-            for index in 0..<26 {
-                let angle = Double(index) / 26 * 2 * .pi + random.next() * 0.4
-                let start = CGPoint(x: center.x + (random.next() - 0.5) * size.width * 0.5,
-                                    y: center.y + (random.next() - 0.5) * size.height * 0.5)
-                let end = CGPoint(x: start.x + cos(angle) * reach * 0.6, y: start.y + sin(angle) * reach * 0.6)
-                var path = Path()
-                path.move(to: start)
-                path.addLine(to: CGPoint(x: (start.x + end.x) / 2 + (random.next() - 0.5) * 60,
-                                         y: (start.y + end.y) / 2 + (random.next() - 0.5) * 60))
-                path.addLine(to: end)
-                let dark = index % 2 == 0
-                context.stroke(path, with: .color(dark ? .black.opacity(0.35) : .white.opacity(0.45)),
-                               lineWidth: dark ? 2.5 : 1.5)
-            }
-            // A shadow toward the edge, so the ball looks round.
-            context.fill(Path(CGRect(origin: .zero, size: size)), with: .radialGradient(
-                Gradient(colors: [.clear, .black.opacity(0.45)]),
-                center: center, startRadius: 0, endRadius: reach * 0.6
-            ))
+            Self.draw(in: &context, size: size, seed: seed)
         }
         .allowsHitTesting(false)
+    }
+
+    private static func draw(in context: inout GraphicsContext, size: CGSize, seed: Int) {
+        var random = SeededRandom(seed: UInt64(seed))
+        let w: CGFloat = size.width
+        let h: CGFloat = size.height
+        let center = CGPoint(x: w / 2, y: h / 2)
+        let reach: CGFloat = max(w, h) * 0.6
+        for index in 0..<26 {
+            let turn: CGFloat = CGFloat(index) / 26 + random.next() * 0.06
+            let angle: CGFloat = turn * 2 * CGFloat.pi
+            let sx: CGFloat = center.x + (random.next() - 0.5) * w * 0.5
+            let sy: CGFloat = center.y + (random.next() - 0.5) * h * 0.5
+            let ex: CGFloat = sx + cos(angle) * reach
+            let ey: CGFloat = sy + sin(angle) * reach
+            let mx: CGFloat = (sx + ex) / 2 + (random.next() - 0.5) * 60
+            let my: CGFloat = (sy + ey) / 2 + (random.next() - 0.5) * 60
+            var path = Path()
+            path.move(to: CGPoint(x: sx, y: sy))
+            path.addLine(to: CGPoint(x: mx, y: my))
+            path.addLine(to: CGPoint(x: ex, y: ey))
+            let dark = index % 2 == 0
+            let color: Color = dark ? Color.black.opacity(0.35) : Color.white.opacity(0.45)
+            let width: CGFloat = dark ? 2.5 : 1.5
+            context.stroke(path, with: .color(color), lineWidth: width)
+        }
+        // A shadow toward the edge, so the ball looks round.
+        let shade = Gradient(colors: [Color.clear, Color.black.opacity(0.45)])
+        context.fill(Path(CGRect(origin: .zero, size: size)),
+                     with: .radialGradient(shade, center: center, startRadius: 0, endRadius: reach))
     }
 }
 
@@ -307,9 +316,9 @@ private struct SeededRandom {
 
     init(seed: UInt64) { state = seed &* 6364136223846793005 &+ 1442695040888963407 }
 
-    mutating func next() -> Double {
+    mutating func next() -> CGFloat {
         state = state &* 6364136223846793005 &+ 1442695040888963407
-        return Double(state >> 11) / Double(1 << 53)
+        return CGFloat(Double(state >> 11) / 9_007_199_254_740_992)
     }
 }
 
