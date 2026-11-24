@@ -253,6 +253,9 @@ struct ToocRootView: View {
         .overlay(alignment: .top) { ToocBanner() }
     }
 
+    /// じぶん's place in the tab bar (トーク, じぶん).
+    private static let meTabIndex = 1
+
     private var tabs: some View {
         let selection = Binding(get: { router.tab }, set: { tab in withAnimation(.snappy) { router.tab = tab } })
         return TabView(selection: selection) {
@@ -261,8 +264,8 @@ struct ToocRootView: View {
                     // じぶん: hold for the accounts, double-tap for the one used before.
                     .background(
                         ToocTabBarHook(
-                            onLongPress: { index in if index == 2 { router.sheet = .accounts } },
-                            onDoubleTap: { index in if index == 2 { switchBack() } }
+                            onLongPress: { index in if index == Self.meTabIndex { router.sheet = .accounts } },
+                            onDoubleTap: { index in if index == Self.meTabIndex { switchBack() } }
                         )
                         .frame(width: 0, height: 0)
                     )

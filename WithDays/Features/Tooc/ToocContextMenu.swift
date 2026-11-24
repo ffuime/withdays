@@ -198,7 +198,7 @@ struct ToocTabBarHook: UIViewControllerRepresentable {
             parent.onDoubleTap(index(recognizer))
         }
 
-        /// Which of the three tabs the finger is on: by the tab buttons when they can be found, else by thirds.
+        /// Which of the two tabs (トーク, じぶん) the finger is on: by the tab buttons when they can be found, else by halves.
         private func index(_ recognizer: UIGestureRecognizer) -> Int {
             guard let bar = tabBar else { return 0 }
             let point = recognizer.location(in: bar)
@@ -210,10 +210,13 @@ struct ToocTabBarHook: UIViewControllerRepresentable {
             }
             collect(bar)
             let centers = buttons.map { $0.convert(CGPoint(x: $0.bounds.midX, y: $0.bounds.midY), to: bar).x }.sorted()
-            if centers.count == 3 {
+            if centers.count == Self.tabCount {
                 return centers.indices.min { abs(centers[$0] - point.x) < abs(centers[$1] - point.x) } ?? 0
             }
-            return min(2, max(0, Int(point.x / max(1, bar.bounds.width / 3))))
+            let count = CGFloat(Self.tabCount)
+            return min(Self.tabCount - 1, max(0, Int(point.x / max(1, bar.bounds.width / count))))
         }
+
+        private static let tabCount = 2
     }
 }

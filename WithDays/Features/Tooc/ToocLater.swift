@@ -2,17 +2,14 @@ import SwiftUI
 
 // MARK: - あとで返信
 
-/// The red 「あとで」 beside a message (and on its talk in the list).
+/// The red あとで返信 mark beside a message (and on its talk in the list): a clock on a red circle.
 struct ToocLaterMark: View {
     var size: CGFloat = 26
 
     var body: some View {
-        Text("あとで")
-            .font(.system(size: size * 0.34, weight: .heavy))
+        Image(systemName: "clock.fill")
+            .font(.system(size: size * 0.52, weight: .semibold))
             .foregroundStyle(.white)
-            .minimumScaleFactor(0.6)
-            .lineLimit(1)
-            .padding(.horizontal, 2)
             .frame(width: size, height: size)
             .background(Circle().fill(Color.red))
             .accessibilityLabel("あとで返信")
