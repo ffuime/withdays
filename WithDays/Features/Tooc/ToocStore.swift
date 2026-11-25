@@ -572,11 +572,12 @@ final class ToocStore {
     }
 
     /// A notice: tooc's banner when in front, the system's notification otherwise.
-    private func announce(_ notice: ToocNotice) {
+    /// `record: false` (a plain message): told about, but not kept in お知らせ.
+    private func announce(_ notice: ToocNotice, record: Bool = true) {
         if UIApplication.shared.applicationState == .active {
-            notify(notice)
+            notify(notice, record: record)
         } else {
-            notices.insert(notice, at: 0)
+            if record { notices.insert(notice, at: 0) }
             if settings.notifications {
                 ToocNotifications.schedule(id: "tooc-\(notice.id.uuidString)", title: notice.title,
                                            body: settings.showContent ? notice.body : "新しいお知らせがあります",
@@ -784,6 +785,7 @@ final class ToocStore {
         message.mentions = data["mentions"] as? [String] ?? []
         message.laterBy = data["laterBy"] as? [String] ?? []
         message.urgency = (data["urgency"] as? Int).flatMap(ToocUrgency.init(rawValue:))
+        message.follows = (data["follows"] as? String).flatMap(UUID.init(uuidString:))
         message.system = data["system"] as? Bool ?? false
         return message
     }
@@ -861,7 +863,7 @@ final class ToocStore {
         }
         guard local.rooms[roomID]?.muted != true, !message.silent else { return }
         let title = room.isGroup ? "\(name(of: room))・\(who)" : who
-        announce(ToocNotice(title: title, body: message.preview, userID: message.senderID, roomID: roomID))
+        announce(ToocNotice(title: title, body: message.preview, userID: message.senderID, roomID: roomID), record: false)
     }
 
     private func save() {
@@ -895,6 +897,33 @@ final class ToocStore {
     func room(_ id: String) -> ToocRoom? { rooms.first { $0.id == id } }
 
     var mynote: ToocRoom? { rooms.first(where: \.isMynote) }
+
+    /// 返信ツリー: the message's whole conversation — up its replies and つづき to where it began, then
+    /// everything that answers or continues any of them — oldest first.
+    func thread(_ id: UUID, in roomID: String) -> [ToocMessage] {
+        let all = (room(roomID)?.messages ?? []).filter { $0.scheduledAt == nil }
+        var byID: [UUID: ToocMessage] = [:]
+        for message in all { byID[message.id] = message }
+        var top = id
+        var seen: Set<UUID> = [id]
+        while let message = byID[top], let up = message.replyTo ?? message.follows, byID[up] != nil, !seen.contains(up) {
+            seen.insert(up)
+            top = up
+        }
+        var members: Set<UUID> = [top]
+        for message in all {
+            if let up = message.replyTo, members.contains(up) { members.insert(message.id) }
+            if let up = message.follows, members.contains(up) { members.insert(message.id) }
+        }
+        return all.filter { members.contains($0.id) }
+    }
+
+    /// Your last message in the talk that something can continue (つなげて送信).
+    func lastOwnMessage(in roomID: String) -> ToocMessage? {
+        room(roomID)?.messages.last { message in
+            message.senderID == me.id && message.scheduledAt == nil && !message.isUnsent && !message.system && !message.failed
+        }
+    }
 
     /// The talk's name as shown in lists: a deleted person's with the red mark.
     func nameText(of room: ToocRoom) -> Text {
@@ -1080,9 +1109,11 @@ final class ToocStore {
         friendPrefs(id) { $0.nickname = (trimmed?.isEmpty ?? true) ? nil : trimmed }
     }
 
-    func notify(_ notice: ToocNotice, banner showBanner: Bool = true) {
-        notices.insert(notice, at: 0)
-        if notices.count > 100 { notices.removeLast(notices.count - 100) }
+    func notify(_ notice: ToocNotice, banner showBanner: Bool = true, record: Bool = true) {
+        if record {
+            notices.insert(notice, at: 0)
+            if notices.count > 100 { notices.removeLast(notices.count - 100) }
+        }
         if settings.notifications && showBanner { banner = notice }
     }
 
@@ -1429,12 +1460,14 @@ final class ToocStore {
 
     @discardableResult
     func send(_ kind: ToocMessage.Kind, in roomID: String, replyTo: UUID? = nil, silent: Bool = false, at time: Date? = nil,
-              mentions: [String] = [], urgency: ToocUrgency? = nil, system: Bool = false) -> UUID {
+              mentions: [String] = [], urgency: ToocUrgency? = nil, system: Bool = false,
+              follows: UUID? = nil) -> UUID {
         var message = ToocMessage(senderID: me.id, kind: kind, date: time ?? .now, sending: true, replyTo: replyTo,
                                   silent: silent, scheduledAt: time)
         message.mentions = mentions
         message.urgency = urgency
         message.system = system
+        message.follows = follows
         if let time, time > .now {
             message.sending = false
             local.scheduled[roomID, default: []].append(message)
@@ -1492,6 +1525,7 @@ final class ToocStore {
             if !message.mentions.isEmpty { fields["mentions"] = message.mentions }
             if let urgency = message.urgency { fields["urgency"] = urgency.rawValue }
             if message.system { fields["system"] = true }
+            if let follows = message.follows { fields["follows"] = follows.uuidString }
             do {
                 try await ToocServer.messages(roomID).document(message.id.uuidString).setData(fields)
                 // On the server: no longer "sending", even before the talk's listener hears of it.

@@ -3,7 +3,7 @@ import SwiftUI
 /// Make a tooc account with just a toocID and a password (email or phone can be added later), or sign back in.
 /// Until there is a server the account lives in this device's keychain.
 struct ToocLoginView: View {
-    var onCalendar: () -> Void
+    var onCalendar: (() -> Void)?
 
     @Environment(ToocStore.self) private var store
     @State private var creating = true
@@ -96,9 +96,11 @@ struct ToocLoginView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(action: onCalendar) { Image(systemName: "chevron.left").foregroundStyle(Color.toocBrand) }
-                        .accessibilityLabel("カレンダーに戻る")
+                if let onCalendar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(action: onCalendar) { Image(systemName: "chevron.left").foregroundStyle(.primary) }
+                            .accessibilityLabel("カレンダーに戻る")
+                    }
                 }
             }
             .alert("できませんでした", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {

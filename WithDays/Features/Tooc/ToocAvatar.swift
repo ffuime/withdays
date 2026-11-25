@@ -12,7 +12,7 @@ struct ToocIconImage: View {
             if user.isMynote {
                 ZStack {
                     LinearGradient(
-                        colors: [Color.brand, Color.brand.mix(with: .black, by: 0.3)],
+                        colors: [Color.toocBrand, Color.toocBrand.mix(with: .black, by: 0.3)],
                         startPoint: .topLeading, endPoint: .bottomTrailing
                     )
                     Image(systemName: "note.text")

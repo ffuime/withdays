@@ -93,7 +93,7 @@ struct ToocGroupEditView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
                         .accessibilityLabel("キャンセル")
                 }
                 ToolbarItem(placement: .topBarTrailing) {

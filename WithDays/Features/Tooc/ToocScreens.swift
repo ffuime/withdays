@@ -90,7 +90,7 @@ struct ToocNewTalkView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
                         .accessibilityLabel("閉じる")
                 }
                 if group {
@@ -141,7 +141,7 @@ struct ToocFindView: View {
                 content
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
-                            Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
+                            Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
                                 .accessibilityLabel("閉じる")
                         }
                     }
@@ -329,7 +329,7 @@ struct ToocEditProfileView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
                         .accessibilityLabel("キャンセル")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -583,7 +583,7 @@ struct ToocRoomSearchView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
                         .accessibilityLabel("閉じる")
                 }
             }
@@ -619,7 +619,7 @@ struct ToocMembersView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
                         .accessibilityLabel("閉じる")
                 }
             }

@@ -17,6 +17,12 @@ struct ToocRoomView: View {
     @State private var replyTo: ToocMessage?
     @State private var editing: ToocMessage?
     @FocusState private var focused: Bool
+    /// How far the input field is being pulled (up or down), for its give under the finger.
+    @State private var pull: CGFloat = 0
+    /// Counts つなげて送信, for its tap.
+    @State private var continued = 0
+    /// The message whose 返信ツリー is open.
+    @State private var threadOf: ToocMessage?
 
     @State private var scheduling = false
     @State private var scheduleDate = Date.now.addingTimeInterval(60 * 60)
@@ -156,6 +162,7 @@ struct ToocRoomView: View {
         .sheet(isPresented: $showMembers) { ToocMembersView(roomID: roomID) }
         .sheet(item: $forwarding) { message in ToocForwardView(message: message) }
         .sheet(item: $addingToAlbum) { message in ToocAddToAlbumSheet(roomID: roomID, message: message) }
+        .sheet(item: $threadOf) { message in ToocThreadView(roomID: roomID, messageID: message.id) }
         .onChange(of: focused) { _, focused in
             if focused { withAnimation(.snappy) { showStickers = false } }
         }
@@ -232,6 +239,8 @@ struct ToocRoomView: View {
         let last: Bool
         let joinedAbove: Bool
         let joinedBelow: Bool
+        /// A つづき whose message isn't right above it (someone else wrote in between).
+        let followsFar: Bool
         var id: UUID { message.id }
     }
 
@@ -249,12 +258,13 @@ struct ToocRoomView: View {
         for (index, message) in list.enumerated() {
             let previous = index > 0 ? list[index - 1] : nil
             let next = index < list.count - 1 ? list[index + 1] : nil
-            let first = previous.map { !Self.sameBurst($0, message) } ?? true
-            let last = next.map { !Self.sameBurst(message, $0) } ?? true
+            let first = previous.map { !Self.joins($0, message) } ?? true
+            let last = next.map { !Self.joins(message, $0) } ?? true
             let item = Item(
                 message: message, first: first, last: last,
                 joinedAbove: !first && message.isText && (previous?.isText ?? false),
-                joinedBelow: !last && message.isText && (next?.isText ?? false)
+                joinedBelow: !last && message.isText && (next?.isText ?? false),
+                followsFar: message.follows != nil && previous?.id != message.follows
             )
             let day = calendar.startOfDay(for: message.date)
             if days.last?.date == day {
@@ -278,6 +288,10 @@ struct ToocRoomView: View {
                         // Each day's label stays at the top while its messages scroll under it; the next day's pushes it up.
                         Section {
                             ForEach(day.items) { item in
+                                VStack(alignment: item.message.senderID == store.me.id ? .trailing : .leading, spacing: 3) {
+                                if item.followsFar, let up = item.message.follows {
+                                    followLink(up, mine: item.message.senderID == store.me.id)
+                                }
                                 ToocMessageRow(
                                     message: item.message,
                                     room: room,
@@ -291,6 +305,7 @@ struct ToocRoomView: View {
                                     onArrivingFrame: { frame in landFlight(item.message.id, at: frame) },
                                     actions: actions(for: item.message)
                                 )
+                                }
                                 .padding(.top, item.first && item.message.id != day.items.first?.message.id ? 10 : 0)
                                 .id(item.message.id)
                             }
@@ -410,11 +425,27 @@ struct ToocRoomView: View {
                 }
             },
             showOriginal: { id in jump(to: id) },
-            addToAlbum: { addingToAlbum = message }
+            addToAlbum: { addingToAlbum = message },
+            openThread: { threadOf = message }
         )
     }
 
     /// Scrolls to a message and has it jump, so it's easy to spot.
+    /// Over a つづき that isn't next to its message: where it continues from (tap to go there).
+    private func followLink(_ id: UUID, mine: Bool) -> some View {
+        Button { jump(to: id) } label: {
+            Label("つづき", systemImage: "arrow.turn.left.up")
+                .toocFont(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 2)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(mine ? .trailing : .leading, mine ? 18 : 52)
+        .padding(.top, 6)
+        .accessibilityHint("つながる前のメッセージへ移動")
+    }
+
     private func jump(to id: UUID) {
         highlight = nil
         Task { @MainActor in highlight = id }
@@ -457,6 +488,12 @@ struct ToocRoomView: View {
         }
     }
 
+    /// Drawn as one stack: the same burst, or `b` sent as the つづき of `a` (any time later).
+    static func joins(_ a: ToocMessage, _ b: ToocMessage) -> Bool {
+        if sameBurst(a, b) { return true }
+        return b.follows == a.id && a.senderID == b.senderID && !a.isUnsent && !b.isUnsent
+    }
+
     /// Sent by the same person in the same minute: drawn as one stack.
     static func sameBurst(_ a: ToocMessage, _ b: ToocMessage) -> Bool {
         a.senderID == b.senderID && !a.isUnsent && !b.isUnsent
@@ -470,7 +507,8 @@ struct ToocRoomView: View {
     /// Something to send: text, or photos (text is optional with photos).
     private var canSend: Bool { !trimmed.isEmpty || (!attachments.isEmpty && editing == nil) }
 
-    private func send(silent: Bool = false, urgency: ToocUrgency? = nil) {
+    /// `follows`: sent as the つづき of that earlier message of yours (not a quote).
+    private func send(silent: Bool = false, urgency: ToocUrgency? = nil, follows: UUID? = nil) {
         let text = trimmed
         guard canSend else { return }
         var flying: UUID?
@@ -484,13 +522,15 @@ struct ToocRoomView: View {
                     // With no words, the 温度感 rides on the last photo.
                     let carries = text.isEmpty && index == attachments.count - 1
                     if let file = ToocFiles.save(photo.image) {
-                        store.send(.photo(file), in: roomID, replyTo: replyTo?.id, silent: silent,
-                                   urgency: carries ? urgency : nil)
+                        store.send(.photo(file), in: roomID, replyTo: follows == nil ? replyTo?.id : nil, silent: silent,
+                                   urgency: carries ? urgency : nil, follows: index == 0 ? follows : nil)
                     }
                 }
                 if !text.isEmpty {
-                    flying = store.send(.text(text), in: roomID, replyTo: attachments.isEmpty ? replyTo?.id : nil,
-                                        silent: silent, mentions: mentions(in: text), urgency: urgency)
+                    flying = store.send(.text(text), in: roomID,
+                                        replyTo: attachments.isEmpty && follows == nil ? replyTo?.id : nil,
+                                        silent: silent, mentions: mentions(in: text), urgency: urgency,
+                                        follows: attachments.isEmpty ? follows : nil)
                 }
                 attachments = []
                 replyTo = nil
@@ -507,6 +547,51 @@ struct ToocRoomView: View {
                 if flight?.id == flying { flight = nil }
             }
         }
+    }
+
+    /// Pulled up while typing: sent as the つづき of your last message here (joined to it however long ago).
+    private func sendContinuing() {
+        continued += 1
+        send(follows: store.lastOwnMessage(in: roomID)?.id)
+    }
+
+    /// The input field follows the finger up or down: down closes the keyboard; up opens it, or — while typing —
+    /// sends as a つづき.
+    private var inputSwipe: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { value in
+                let dy = value.translation.height
+                guard abs(dy) > abs(value.translation.width) else { return }
+                // A little give, stiffer the further it goes.
+                pull = dy > 0 ? min(14, dy * 0.22) : max(-24, dy * 0.28)
+            }
+            .onEnded { value in
+                let dy = value.translation.height
+                let projected = value.predictedEndTranslation.height
+                let vertical = abs(dy) > abs(value.translation.width) * 1.3
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) { pull = 0 }
+                guard vertical else { return }
+                if dy > 36 || projected > 140 {
+                    if focused { focused = false }
+                } else if dy < -36 || projected < -140 {
+                    if !focused {
+                        focused = true
+                    } else if canSend, editing == nil {
+                        sendContinuing()
+                    }
+                }
+            }
+    }
+
+    /// Shown over the field while it's pulled up with something typed.
+    private var continueHint: some View {
+        Label(store.lastOwnMessage(in: roomID) == nil ? "送信" : "つなげて送信", systemImage: "arrow.up")
+            .toocFont(.caption.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 5)
+            .background(theme.accent, in: Capsule())
+            .fixedSize()
     }
 
     /// The new bubble has its place: fly there with a soft, stretchy spring, then show the real one.
@@ -623,7 +708,7 @@ struct ToocRoomView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { scheduling = false } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
+                    Button { scheduling = false } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
                         .accessibilityLabel("キャンセル")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -832,6 +917,17 @@ struct ToocRoomView: View {
             }
             // The whole field is glass that stretches under the finger.
             .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: Self.barHeight / 2, style: .continuous))
+            .overlay(alignment: .top) {
+                if pull < -12, focused, canSend, editing == nil {
+                    continueHint
+                        .offset(y: -34)
+                        .transition(.scale(scale: 0.8, anchor: .bottom).combined(with: .opacity))
+                }
+            }
+            .offset(y: pull)
+            .animation(.snappy(duration: 0.2), value: pull < -12)
+            .simultaneousGesture(inputSwipe)
+            .sensoryFeedback(.impact(weight: .medium), trigger: continued)
         }
         .padding(.horizontal, 12)
         .padding(.top, 6)
@@ -942,6 +1038,8 @@ struct ToocMessageActions {
     /// A reply's quote was tapped: go to the message it answers.
     var showOriginal: (UUID) -> Void
     var addToAlbum: () -> Void = {}
+    /// 返信ツリー: the conversation this message is part of.
+    var openThread: () -> Void = {}
 }
 
 struct ToocMessageRow: View {
@@ -1204,9 +1302,12 @@ struct ToocMessageRow: View {
                     if let quotedMessage = quoted {
                         quote(quotedMessage)
                             .contentShape(Rectangle())
+                            // Twice: the 返信ツリー. Once: go to the message it answers.
+                            .onTapGesture(count: 2) { actions.openThread() }
                             .onTapGesture { actions.showOriginal(quotedMessage.id) }
                             .accessibilityAddTraits(.isButton)
-                            .accessibilityHint("返信元へ移動")
+                            .accessibilityHint("返信元へ移動。ダブルタップで返信ツリー")
+                            .accessibilityAction(named: "返信ツリー") { actions.openThread() }
                     }
                     longText(text)
                 }
@@ -1267,11 +1368,18 @@ struct ToocMessageRow: View {
         }
         .controlGroupStyle(.palette)
         .menuActionDismissBehavior(.enabled)
-        Button("返信", systemImage: "arrowshape.turn.up.left.fill", action: actions.reply)
-        if canMarkLater {
-            Button(later ? "あとで返信を解除" : "あとで返信", systemImage: later ? "xmark.circle" : "hourglass") {
-                toggleLater()
+        Menu {
+            Button("返信する", systemImage: "arrowshape.turn.up.left.fill", action: actions.reply)
+            if canMarkLater {
+                Button(later ? "あとで返信を解除" : "あとで返信をマーク", systemImage: later ? "xmark.circle" : "hourglass") {
+                    toggleLater()
+                }
             }
+            if inThread {
+                Button("返信ツリー", systemImage: "arrow.triangle.branch", action: actions.openThread)
+            }
+        } label: {
+            Label("返信", systemImage: "arrowshape.turn.up.left.fill")
         }
         if message.forwardable {
             Button("転送", systemImage: "arrowshape.turn.up.right", action: actions.forward)
@@ -1320,6 +1428,12 @@ struct ToocMessageRow: View {
     }
 
     private var pinned: Bool { room.pinnedMessages.contains { $0.messageID == message.id } }
+
+    /// Part of a conversation: it answers or continues something, or something answers or continues it.
+    private var inThread: Bool {
+        message.replyTo != nil || message.follows != nil
+            || room.messages.contains { $0.replyTo == message.id || $0.follows == message.id }
+    }
 
     /// Someone else's message can be put off to answer later.
     private var canMarkLater: Bool { !mine && !message.sending && !message.failed && !room.isMynote }
@@ -1373,7 +1487,7 @@ struct ToocMessageRow: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button { showFull = false } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
+                        Button { showFull = false } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
                             .accessibilityLabel("閉じる")
                     }
                 }
@@ -1711,7 +1825,7 @@ struct ToocSelectTextView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
+                        Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
                             .accessibilityLabel("閉じる")
                     }
                 }
@@ -1799,5 +1913,125 @@ struct ToocFlyingBubble: View, Animatable {
         .frame(width: rect.width, height: rect.height)
         .scaleEffect(x: 1 - 0.08 * pull, y: 1 + 0.1 * pull, anchor: .bottomTrailing)
         .position(x: rect.midX - origin.x, y: rect.midY - origin.y)
+    }
+}
+
+// MARK: - 返信ツリー
+
+/// A conversation on its own: where it began, every reply and つづき, oldest first. Writing here answers the last
+/// message of the tree — or, when that one is yours, continues it (two in a row join up, as in the talk).
+struct ToocThreadView: View {
+    let roomID: String
+    let messageID: UUID
+
+    @Environment(ToocStore.self) private var store
+    @Environment(\.toocTheme) private var theme
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let room = store.room(roomID) {
+                    content(room)
+                } else {
+                    ContentUnavailableView("トークが見つかりません", systemImage: "bubble.left.and.bubble.right")
+                }
+            }
+            .navigationTitle("返信ツリー")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                        .accessibilityLabel("閉じる")
+                }
+            }
+            .background(theme.fill.ignoresSafeArea())
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func content(_ room: ToocRoom) -> some View {
+        let thread = store.thread(messageID, in: roomID)
+        let size = CGFloat(store.settings.textPoints)
+        return ScrollViewReader { reader in
+            ScrollView {
+                LazyVStack(spacing: 2) {
+                    ForEach(Array(thread.enumerated()), id: \.element.id) { index, message in
+                        let previous = index > 0 ? thread[index - 1] : nil
+                        let next = index < thread.count - 1 ? thread[index + 1] : nil
+                        let first = previous.map { !ToocRoomView.joins($0, message) } ?? true
+                        let last = next.map { !ToocRoomView.joins(message, $0) } ?? true
+                        ToocMessageRow(
+                            message: message,
+                            room: room,
+                            first: first,
+                            last: last,
+                            joinedAbove: !first && message.isText && (previous?.isText ?? false),
+                            joinedBelow: !last && message.isText && (next?.isText ?? false),
+                            textSize: size,
+                            highlighted: message.id == messageID,
+                            actions: .none
+                        )
+                        .padding(.top, first && index > 0 ? 10 : 0)
+                        .id(message.id)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
+                .padding(.vertical, 12)
+                .animation(.smooth(duration: 0.3), value: thread.map(\.id))
+            }
+            .defaultScrollAnchor(.bottom)
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: thread.count) {
+                withAnimation(.smooth) { reader.scrollTo(thread.last?.id, anchor: .bottom) }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) { input(thread) }
+        }
+    }
+
+    private var trimmed: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private func input(_ thread: [ToocMessage]) -> some View {
+        let continuing = thread.last?.senderID == store.me.id
+        return HStack(alignment: .bottom, spacing: 6) {
+            TextField(continuing ? "続けて送信" : "ツリーに返信", text: $draft, axis: .vertical)
+                .lineLimit(1...5)
+                .focused($focused)
+                .padding(.vertical, 13)
+                .padding(.leading, 16)
+            if !trimmed.isEmpty {
+                Button { send(thread) } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .toocFont(.system(size: 32))
+                        .foregroundStyle(theme.accent)
+                }
+                .padding(.bottom, 6)
+                .accessibilityLabel("送信")
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .padding(.trailing, 6)
+        .animation(.snappy(duration: 0.2), value: trimmed.isEmpty)
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 25, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
+    }
+
+    /// Answers the tree's last message; yours already, it continues it instead.
+    private func send(_ thread: [ToocMessage]) {
+        let text = trimmed
+        guard !text.isEmpty, let last = thread.last else { return }
+        withAnimation(.snappy) {
+            if last.senderID == store.me.id {
+                _ = store.send(.text(text), in: roomID, follows: last.id)
+            } else {
+                _ = store.send(.text(text), in: roomID, replyTo: last.id)
+            }
+            draft = ""
+        }
     }
 }

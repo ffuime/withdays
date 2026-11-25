@@ -190,6 +190,9 @@ struct ToocMessage: Identifiable, Hashable, Codable {
     /// How many have read it (in a group), or whether the other person has (1 / 0).
     var readCount = 0
     var replyTo: UUID?
+    /// Sent as the つづき of this earlier message of yours: drawn joined to it however long after, and part of its
+    /// 返信ツリー (it's not a quote).
+    var follows: UUID?
     /// Sent as a mute message: it reaches them without a notification.
     var silent = false
     /// Waiting to be sent at this time.
@@ -261,7 +264,7 @@ struct ToocMessage: Identifiable, Hashable, Codable {
 extension ToocMessage {
     enum CodingKeys: String, CodingKey {
         case id, senderID, kind, date, sending, readCount, replyTo, silent, scheduledAt, reactions, edited, mentions, urgency
-        case laterBy, system
+        case laterBy, system, follows
     }
 
     /// Messages saved by an older version (scheduled ones) have no mentions yet.
@@ -281,6 +284,7 @@ extension ToocMessage {
         urgency = try c.decodeIfPresent(ToocUrgency.self, forKey: .urgency)
         laterBy = try c.decodeIfPresent([String].self, forKey: .laterBy) ?? []
         system = try c.decodeIfPresent(Bool.self, forKey: .system) ?? false
+        follows = try c.decodeIfPresent(UUID.self, forKey: .follows)
     }
 }
 

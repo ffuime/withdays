@@ -45,11 +45,13 @@ jobs:
           [ -f WithDays/GoogleService-Info.plist ] || exit 0
           APP_ID=$(/usr/libexec/PlistBuddy -c "Print :GOOGLE_APP_ID" WithDays/GoogleService-Info.plist)
           SCHEME="app-$(echo "$APP_ID" | tr ':' '-')"
-          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:1 dict" \
-            -c "Add :CFBundleURLTypes:1:CFBundleURLName string firebase-phone" \
-            -c "Add :CFBundleURLTypes:1:CFBundleURLSchemes array" \
-            -c "Add :CFBundleURLTypes:1:CFBundleURLSchemes:0 string $SCHEME" WithDays/Info.plist
-          /usr/libexec/PlistBuddy -c "Print :CFBundleURLTypes" WithDays/Info.plist
+          for PLIST in WithDays/Info.plist Tooc/Info.plist; do
+            /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:1 dict" \
+              -c "Add :CFBundleURLTypes:1:CFBundleURLName string firebase-phone" \
+              -c "Add :CFBundleURLTypes:1:CFBundleURLSchemes array" \
+              -c "Add :CFBundleURLTypes:1:CFBundleURLSchemes:0 string $SCHEME" "$PLIST"
+            /usr/libexec/PlistBuddy -c "Print :CFBundleURLTypes" "$PLIST"
+          done
 
       - name: Resolve version
         id: version
@@ -82,17 +84,38 @@ jobs:
           test -d build/Build/Products/Release-iphoneos/WithDays.app/PlugIns/WithDaysWidget.appex
           test -d build/Build/Products/Release-iphoneos/WithDays.app/PlugIns/SubsReport.appex
 
+      # tooc on its own: the same tooc, as tooc.app.
+      - name: Build tooc (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project WithDays.xcodeproj \
+            -scheme Tooc \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            build 2>&1 | tee tooc-build.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" tooc-build.log
+          test -d build/Build/Products/Release-iphoneos/tooc.app
+
       - name: Show compile errors
         if: failure()
         run: |
           # Surface each compiler error as an annotation so it shows on the run summary.
-          grep -E "^/.*: error: " build.log | sort -u | head -n 50 | while IFS= read -r line; do
+          touch build.log tooc-build.log
+          cat build.log tooc-build.log | grep -E "^/.*: error: " | sort -u | head -n 50 | while IFS= read -r line; do
             file=$(echo "$line" | cut -d: -f1 | sed "s|$GITHUB_WORKSPACE/||")
             row=$(echo "$line" | cut -d: -f2)
             msg=$(echo "$line" | sed -E 's/^[^ ]+ error: //')
             echo "::error file=$file,line=$row::$msg"
           done
-          grep -E "error:" -A3 build.log | head -n 200 || true
+          cat build.log tooc-build.log | grep -E "error:" -A3 | head -n 200 || true
 
       - name: Package IPA
         run: |
@@ -111,10 +134,24 @@ jobs:
           du -sh Payload/WithDays.app
           find Payload/WithDays.app -type f -size +200k -exec ls -l {} + | sort -k5 -n -r | awk '{print $5, $9}' | head -n 15
 
+      - name: Package tooc IPA
+        run: |
+          rm -rf Payload && mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/tooc.app Payload/
+          codesign -f -s - Payload/tooc.app
+          zip -qry tooc.ipa Payload
+          ls -l tooc.ipa
+          du -sh Payload/tooc.app
+
       - uses: actions/upload-artifact@v4
         with:
-          name: WithDays-ipa
+          name: withdays-ipa
           path: WithDays.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tooc-ipa
+          path: tooc.ipa
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -122,6 +159,7 @@ jobs:
         with:
           files: |
             WithDays.ipa
+            tooc.ipa
           generate_release_notes: true
 
       - name: Update SideStore source

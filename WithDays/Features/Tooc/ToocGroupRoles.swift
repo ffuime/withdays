@@ -25,7 +25,7 @@ struct ToocGroupRolesView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
                         .accessibilityLabel("閉じる")
                 }
             }

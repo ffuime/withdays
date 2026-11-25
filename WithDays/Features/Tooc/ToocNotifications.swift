@@ -9,6 +9,9 @@ enum ToocNotifications {
 
     @MainActor private static var pendingRoom: String?
 
+    /// Running as the tooc app itself (not inside WithDays).
+    static var standalone: Bool { Bundle.main.bundleIdentifier == "com.ffuime.tooc" }
+
     static func requestAuthorization() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
@@ -82,6 +85,10 @@ final class ToocNotificationDelegate: NSObject, UNUserNotificationCenterDelegate
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         defer { completionHandler() }
         guard let room = response.notification.request.content.userInfo["toocRoom"] as? String else { return }
+        if ToocNotifications.standalone {
+            DispatchQueue.main.async { ToocNotifications.open(room) }
+            return
+        }
         var components = URLComponents()
         components.scheme = "withdays"
         components.host = "tooc"

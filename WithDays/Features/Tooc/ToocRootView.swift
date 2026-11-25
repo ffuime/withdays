@@ -139,7 +139,8 @@ final class ToocRouter {
 /// tooc: sign-in, then three tabs (トーク・友だち・じぶん) inside one navigation stack, so the top pills morph
 /// as the tab changes. The top-left back button returns to the calendar.
 struct ToocRootView: View {
-    var onCalendar: () -> Void
+    /// Back to WithDays' calendar; nil in the tooc app (nothing to go back to).
+    var onCalendar: (() -> Void)? = nil
 
     @State private var store = ToocStore()
     @State private var router = ToocRouter()
@@ -259,8 +260,8 @@ struct ToocRootView: View {
                         .background(ToocNavigationBarTint().frame(width: 0, height: 0))
                 }
         }
-        // The bar's own buttons (‹ back) in tooc's colour; the screens keep the theme's.
-        .tint(Color.toocBrand)
+        // The bar's own buttons (‹ back) in the text colour; the screens keep the theme's.
+        .tint(Color.primary)
         .sheet(item: $router.sheet) { ToocSheetView(sheet: $0) }
         .alert(router.confirm?.title ?? "", isPresented: Binding(
             get: { router.confirm != nil }, set: { if !$0 { router.confirm = nil } }
@@ -337,10 +338,12 @@ struct ToocRootView: View {
             if router.selecting {
                 Button("完了") { withAnimation(.snappy) { router.endSelecting() } }
                     .fontWeight(.semibold)
-                    .foregroundStyle(Color.toocBrand)
+                    .foregroundStyle(.primary)
             } else {
-                Button(action: onCalendar) { ToocBarIcon("chevron.left") }
-                    .accessibilityLabel("カレンダーに戻る")
+                if let onCalendar {
+                    Button(action: onCalendar) { ToocBarIcon("chevron.left") }
+                        .accessibilityLabel("カレンダーに戻る")
+                }
                 if router.tab == .talk { ToocTalkSortMenu() }
             }
         }
@@ -394,7 +397,7 @@ struct ToocRootView: View {
     }
 }
 
-/// A top-bar symbol: a little smaller than the system's, always in tooc's own colour (whatever the theme).
+/// A top-bar symbol: a little smaller than the system's, in the text colour (whatever the theme).
 struct ToocBarIcon: View {
     let name: String
 
@@ -403,7 +406,7 @@ struct ToocBarIcon: View {
     var body: some View {
         Image(systemName: name)
             .toocFont(.system(size: 15, weight: .semibold))
-            .foregroundStyle(Color.toocBrand)
+            .foregroundStyle(.primary)
     }
 }
 
@@ -587,8 +590,7 @@ private struct ToocBanner: View {
     }
 }
 
-/// Colours the navigation bar's own ‹ back button in tooc's brand colour (the system draws it in the text colour,
-/// and SwiftUI's tint doesn't reach it).
+/// Draws the navigation bar's own ‹ back button in the text colour, like the other bar symbols.
 struct ToocNavigationBarTint: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> Controller { Controller() }
     func updateUIViewController(_ controller: Controller, context: Context) { controller.apply() }
@@ -605,7 +607,7 @@ struct ToocNavigationBarTint: UIViewControllerRepresentable {
         }
 
         func apply() {
-            navigationController?.navigationBar.tintColor = UIColor(Color.toocBrand)
+            navigationController?.navigationBar.tintColor = .label
         }
     }
 }
