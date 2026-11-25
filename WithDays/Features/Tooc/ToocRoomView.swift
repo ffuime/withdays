@@ -952,7 +952,7 @@ struct ToocRoomView: View {
     private func sendButton(_ room: ToocRoom) -> some View {
         let icon = Image(systemName: editing == nil ? "arrow.up.circle.fill" : "checkmark.circle.fill")
             .toocFont(.system(size: 32))
-            .foregroundStyle(Color.primary)
+            .foregroundStyle(theme.accent)
         if editing != nil {
             Button { send() } label: { icon }
                 .accessibilityLabel("編集を保存")
@@ -1337,7 +1337,7 @@ struct ToocMessageRow: View {
                 .background {
                     if !mine {
                         shape.fill(theme.theirBubble)
-                            .shadow(color: .black.opacity(0.07), radius: 2.5, x: 0, y: 1)
+                            .shadow(color: .black.opacity(0.12), radius: 3, x: 0, y: 1.5)
                     }
                 }
             case .photo(let file):
@@ -2035,7 +2035,7 @@ struct ToocThreadView: View {
                 Button { send(thread) } label: {
                     Image(systemName: "arrow.up.circle.fill")
                         .toocFont(.system(size: 32))
-                        .foregroundStyle(Color.primary)
+                        .foregroundStyle(theme.accent)
                 }
                 .padding(.bottom, 6)
                 .accessibilityLabel("送信")
