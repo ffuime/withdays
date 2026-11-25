@@ -248,10 +248,13 @@ struct ToocRootView: View {
             if store.signedIn { store.logOut() }
         }
         .onChange(of: scenePhase) { _, phase in
-            // Locked again on leaving; covered at once while tooc is showing (also hides it in the app switcher).
-            if phase == .background {
-                ToocLock.shared.needsUnlock = true
+            // Away for a minute or more: the code again on coming back.
+            switch phase {
+            case .background: ToocLock.shared.left()
+            case .active:
+                ToocLock.shared.cameBack()
                 if ToocLock.shared.onScreen { lockIfNeeded() }
+            default: break
             }
         }
         .onDisappear {

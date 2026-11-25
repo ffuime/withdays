@@ -7,7 +7,7 @@ import UIKit
 // MARK: - Passcode lock
 
 /// パスコードロック: a 4–6 digit code kept on this device only (in the keychain, as a hash), asked for on opening tooc
-/// and on coming back to it, in a sheet over the loading screen. Face ID can open it too.
+/// and on coming back after a minute or more away, in a sheet over the loading screen. Face ID can open it too.
 @MainActor
 @Observable
 final class ToocLock {
@@ -29,6 +29,18 @@ final class ToocLock {
     /// tooc is what's on screen (in WithDays it's one place among others).
     var onScreen = false
     @ObservationIgnored private var window: UIWindow?
+    @ObservationIgnored private var leftAt: Date?
+    /// How long away before the code is asked again.
+    private static let grace: TimeInterval = 60
+
+    func left() {
+        if leftAt == nil { leftAt = .now }
+    }
+
+    func cameBack() {
+        if let leftAt, Date.now.timeIntervalSince(leftAt) >= Self.grace { needsUnlock = true }
+        leftAt = nil
+    }
 
     private init() {
         faceID = UserDefaults.standard.bool(forKey: Self.faceIDKey)
@@ -486,7 +498,7 @@ struct ToocPrivacySettingsView: View {
                     }
                 }
             } footer: {
-                Text("tooc を開くときに、4〜6桁のパスコードを入力します。パスコードはこの iPhone の中だけに保存されます。").toocFont(.footnote)
+                Text("tooc を開くときと、1分以上ほかのアプリにいて戻ったときに、4〜6桁のパスコードを入力します。パスコードはこの iPhone の中だけに保存されます。").toocFont(.footnote)
             }
             Section {
                 Toggle("toocIDによる検索を許可", isOn: Binding(get: { store.me.findable }, set: { store.setFindable($0) }))

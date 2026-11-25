@@ -1201,11 +1201,6 @@ struct ToocMessageRow: View {
                 .background(theme.theirBubble, in: Capsule())
                 .contentShape(.contextMenuPreview, Capsule())
                 .contextMenu {
-                    if mine, store.canRestore(message.id) {
-                        ToocMenuButton("復元", systemImage: "arrow.uturn.backward") {
-                            withAnimation(.snappy) { store.restore(message.id, in: room.id) }
-                        }
-                    }
                     ToocDestructiveButton("削除", systemImage: "trash") {
                         withAnimation(.snappy) { store.deleteMessage(message.id, in: room.id) }
                     }
