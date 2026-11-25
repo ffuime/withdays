@@ -139,8 +139,12 @@ struct ToocLaterView: View {
         .toocBackground(theme)
         .overlay {
             if items.isEmpty {
-                ContentUnavailableView("あとで返信はありません", systemImage: "hourglass",
-                                       description: Text("メッセージをダブルタップするか、長押しメニューの「あとで返信」で印を付けられます。"))
+                ContentUnavailableView {
+                    Label("あとで返信はありません", systemImage: "hourglass")
+                } description: {
+                    Text("メッセージをダブルタップするか、長押しメニューの「あとで返信」で印を付けられます。")
+                        .toocFont(.footnote)
+                }
             }
         }
         .navigationTitle("あとで返信")

@@ -51,6 +51,8 @@ private struct ToocLocal: Codable {
     var revealed: Set<UUID> = []
     var laters: [ToocLater] = []
     var laterFirst = false
+    /// Your messages taken back from this device: what they were (encoded), for 復元.
+    var unsent: [UUID: String] = [:]
 
     init() {}
 
@@ -68,6 +70,7 @@ private struct ToocLocal: Codable {
         revealed = (try? c.decode(Set<UUID>.self, forKey: .revealed)) ?? []
         laters = (try? c.decode([ToocLater].self, forKey: .laters)) ?? []
         laterFirst = (try? c.decode(Bool.self, forKey: .laterFirst)) ?? false
+        unsent = (try? c.decode([UUID: String].self, forKey: .unsent)) ?? [:]
     }
 
     static func file(_ account: String) -> URL {
@@ -1661,7 +1664,21 @@ final class ToocStore {
 
     /// Takes your message back for everyone.
     func unsend(_ id: UUID, in roomID: String) {
+        if let message = room(roomID)?.messages.first(where: { $0.id == id }), !message.isUnsent {
+            local.unsent[id] = ToocServer.encode(message.kind)
+            save()
+        }
         change(id, in: roomID, ["kind": ToocServer.encode(.unsent), "reactions": [String: String]()])
+    }
+
+    /// A message you took back from this device can be put back as it was.
+    func canRestore(_ id: UUID) -> Bool { local.unsent[id] != nil }
+
+    func restore(_ id: UUID, in roomID: String) {
+        guard let kind = local.unsent[id] else { return }
+        local.unsent[id] = nil
+        save()
+        change(id, in: roomID, ["kind": kind])
     }
 
     func react(_ emoji: String?, to id: UUID, in roomID: String) {

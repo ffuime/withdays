@@ -7,7 +7,7 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "1.29.2"
+    MARKETING_VERSION: "1.30.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
   # Release is built for size: optimised for size, symbols stripped from the binaries (CI builds with
@@ -66,7 +66,7 @@ targets:
         NSRemindersUsageDescription: ToDoとしてAppleのリマインダーを表示・追加・編集するために使います。
         NSLocationWhenInUseUsageDescription: Goで最寄り駅から電車の時刻を調べ、toocで位置情報を送るために使います。
         NSCameraUsageDescription: Notesで書類をスキャンし、toocで友だちのQRコードを読み取って写真を撮って送り、Galleryで写真を撮るために使います。
-        NSFaceIDUsageDescription: Galleryのロックしたアルバムを開くために使います。
+        NSFaceIDUsageDescription: Galleryのロックしたアルバムを開き、toocのパスコードロックを解除するために使います。
         NSAppleMusicUsageDescription: Goで再生中の曲を表示し、再生・一時停止・スキップ・シャッフルを操作するために使います。
         NSPhotoLibraryAddUsageDescription: Slidesで書き出したスライドの画像や、toocで届いた写真、Galleryの写真を写真に保存するために使います。
         # Notes are kept in Documents and shown in the Files app.
@@ -129,6 +129,7 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         NSLocationWhenInUseUsageDescription: トークで位置情報を送るために使います。
         NSCameraUsageDescription: 友だちのQRコードを読み取り、写真を撮って送るために使います。
+        NSFaceIDUsageDescription: パスコードロックを Face ID で解除するために使います。
         NSPhotoLibraryAddUsageDescription: 届いた写真やMyQRを写真に保存するために使います。
         CFBundleURLTypes:
           - CFBundleURLName: com.ffuime.tooc
@@ -148,7 +149,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.ffuime.tooc
         PRODUCT_NAME: tooc
         # tooc's own version (its changelog is ToocInfo).
-        MARKETING_VERSION: "1.2.2"
+        MARKETING_VERSION: "1.3.0"
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO

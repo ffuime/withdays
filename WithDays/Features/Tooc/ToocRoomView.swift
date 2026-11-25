@@ -49,6 +49,7 @@ struct ToocRoomView: View {
     @State private var awayFromBottom = false
     /// The reply whose quote was tapped to go up to what it answers (the 返信元へ button takes you back).
     @State private var returnTo: UUID?
+    @State private var position = ScrollPosition(edge: .bottom)
     @State private var showMembers = false
     @State private var editingGroup = false
     @State private var confirmClear = false
@@ -272,7 +273,9 @@ struct ToocRoomView: View {
                 joinedBelow: !last && message.isText && (next?.isText ?? false),
                 followsFar: message.follows != nil && previous?.id != message.follows,
                 link: previous.flatMap { previous in
-                    message.follows == previous.id && previous.senderID != message.senderID
+                    message.follows == previous.id
+                        && (previous.senderID != message.senderID
+                            || !calendar.isDate(previous.date, inSameDayAs: message.date))
                         ? ToocFollowLine.Sides(fromMine: previous.senderID == store.me.id,
                                                toMine: message.senderID == store.me.id)
                         : nil
@@ -325,16 +328,6 @@ struct ToocRoomView: View {
                                     actions: actions(for: item.message)
                                 )
                                 }
-                                // Shown from a reply: a soft wash behind the whole row as well as the jump.
-                                .background {
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .fill(theme.accent.opacity(highlight == item.message.id ? 0.16 : 0))
-                                        .padding(.horizontal, -8)
-                                        .padding(.vertical, -4)
-                                        .animation(.easeOut(duration: highlight == item.message.id ? 0.2 : 0.8),
-                                                   value: highlight == item.message.id)
-                                        .allowsHitTesting(false)
-                                }
                                 .padding(.top, item.first && item.message.id != day.items.first?.message.id ? 10 : 0)
                                 .id(item.message.id)
                             }
@@ -357,6 +350,7 @@ struct ToocRoomView: View {
                 .animation(.snappy, value: typer?.id)
                 .scrollTargetLayout()
             }
+            .scrollPosition($position)
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
             .onScrollGeometryChange(for: Bool.self) { geometry in
@@ -402,8 +396,8 @@ struct ToocRoomView: View {
     private static let dayLabelHeight: CGFloat = 40
     private static let scrollButtonSize: CGFloat = 44
 
-    /// 最下部へ (scrolled up a little), and above it, after going up from a reply's quote, 返信元へ: it comes out of
-    /// 最下部へ and turns a quarter clockwise to stand upright, as wide as it.
+    /// 最下部へ (scrolled up a little), and above it, after going up from a reply's quote, 返信元へ: standing upright
+    /// (turned a quarter clockwise), as wide as 最下部へ, coming out of it.
     private func scrollButtons(_ reader: ScrollViewProxy) -> some View {
         VStack(spacing: 10) {
             if awayFromBottom, let back = returnTo {
@@ -433,7 +427,13 @@ struct ToocRoomView: View {
             }
             if awayFromBottom {
                 Button {
-                    withAnimation(.snappy) { reader.scrollTo("bottom", anchor: .bottom) }
+                    returnTo = nil
+                    withAnimation(.smooth(duration: 0.45)) { position.scrollTo(edge: .bottom) }
+                    // Rows drawn on the way can make the end move: settle on it once more.
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(480))
+                        withAnimation(.snappy) { position.scrollTo(edge: .bottom) }
+                    }
                 } label: {
                     Image(systemName: "arrow.down")
                         .font(.system(size: 17, weight: .semibold))
@@ -1199,6 +1199,17 @@ struct ToocMessageRow: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 5)
                 .background(theme.theirBubble, in: Capsule())
+                .contentShape(.contextMenuPreview, Capsule())
+                .contextMenu {
+                    if mine, store.canRestore(message.id) {
+                        ToocMenuButton("復元", systemImage: "arrow.uturn.backward") {
+                            withAnimation(.snappy) { store.restore(message.id, in: room.id) }
+                        }
+                    }
+                    ToocDestructiveButton("削除", systemImage: "trash") {
+                        withAnimation(.snappy) { store.deleteMessage(message.id, in: room.id) }
+                    }
+                }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
         } else {
@@ -1337,19 +1348,26 @@ struct ToocMessageRow: View {
             content
                 .scaleEffect(value.scale, anchor: mine ? .trailing : .leading)
                 .rotationEffect(.degrees(value.angle))
+                .offset(y: value.lift)
         } keyframes: { _ in
             KeyframeTrack(\.scale) {
-                SpringKeyframe(1.18, duration: 0.2)
-                SpringKeyframe(0.95, duration: 0.16)
-                SpringKeyframe(1.06, duration: 0.16)
+                SpringKeyframe(1.3, duration: 0.22)
+                SpringKeyframe(0.9, duration: 0.16)
+                SpringKeyframe(1.16, duration: 0.16)
+                SpringKeyframe(0.97, duration: 0.14)
                 SpringKeyframe(1.0, duration: 0.3)
             }
             KeyframeTrack(\.angle) {
-                CubicKeyframe(-4, duration: 0.09)
+                CubicKeyframe(-7, duration: 0.1)
+                CubicKeyframe(7, duration: 0.12)
+                CubicKeyframe(-5, duration: 0.12)
                 CubicKeyframe(4, duration: 0.12)
-                CubicKeyframe(-3, duration: 0.12)
-                CubicKeyframe(2, duration: 0.12)
-                CubicKeyframe(0, duration: 0.14)
+                CubicKeyframe(-2, duration: 0.1)
+                CubicKeyframe(0, duration: 0.12)
+            }
+            KeyframeTrack(\.lift) {
+                SpringKeyframe(-10, duration: 0.22)
+                SpringKeyframe(0, duration: 0.4)
             }
         }
         .onChange(of: highlighted) { _, on in if on { nudge += 1 } }
@@ -2007,6 +2025,7 @@ private struct ToocSelectableText: UIViewRepresentable {
 struct ToocNudge {
     var scale = 1.0
     var angle = 0.0
+    var lift = 0.0
 }
 
 /// A reply's quote being tapped.
@@ -2073,13 +2092,12 @@ private struct ToocQuarterTurnLayout: Layout {
     }
 }
 
-/// 返信元へ coming out of 最下部へ under it: from its place, small and lying flat, turning upright as it rises.
+/// 返信元へ coming out of 最下部へ under it: from its place, small, rising into its own.
 struct ToocSplitOff: Transition {
     let distance: CGFloat
 
     func body(content: Content, phase: TransitionPhase) -> some View {
         content
-            .rotationEffect(.degrees(phase.isIdentity ? 0 : -90))
             .scaleEffect(phase.isIdentity ? 1 : 0.45)
             .offset(y: phase.isIdentity ? 0 : distance)
             .opacity(phase.isIdentity ? 1 : 0)

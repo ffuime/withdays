@@ -174,7 +174,7 @@ struct ToocTalkRow: View {
                 preview
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            ZStack {
+            ZStack(alignment: .trailing) {
                 if let last = room.last {
                     Text(ToocTime.listLabel(last.date))
                         .toocFont(.system(size: 12))

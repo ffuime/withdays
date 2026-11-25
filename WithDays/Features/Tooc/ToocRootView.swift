@@ -19,6 +19,9 @@ enum ToocRoute: Hashable {
     case settingsAbout
     case settingsChangelog
     case settingsCredits
+    case settingsPrivacy
+    case settingsTerms
+    case settingsPrivacyPolicy
     case friends
     case later
 }
@@ -236,10 +239,33 @@ struct ToocRootView: View {
                 try? await Task.sleep(for: .seconds(5))
             }
         }
-        .onDisappear { store.flush() }
+        .onAppear {
+            ToocLock.shared.onScreen = true
+            lockIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ToocLock.forgotNotification)) { _ in
+            // Passcode forgotten: signed out, and the lock lifted.
+            if store.signedIn { store.logOut() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Locked again on leaving; covered at once while tooc is showing (also hides it in the app switcher).
+            if phase == .background {
+                ToocLock.shared.needsUnlock = true
+                if ToocLock.shared.onScreen { lockIfNeeded() }
+            }
+        }
+        .onDisappear {
+            ToocLock.shared.onScreen = false
+            store.flush()
+        }
     }
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
+
+    private func lockIfNeeded() {
+        ToocLock.shared.lockIfNeeded(theme: store.signedIn ? store.settings.theme : .standard)
+    }
 
     /// The name to greet: the profile's once it has arrived, the one this device remembers before that.
     private var greetingName: String {
@@ -305,7 +331,7 @@ struct ToocRootView: View {
             Tab(value: ToocTab.me) {
                 ToocMeView()
             } label: {
-                Label("じぶん", systemImage: "face.smiling.fill")
+                Label("じぶん", systemImage: "face.smiling.inverse")
             }
         }
         // Both symbols are named filled, chosen or not.
@@ -425,6 +451,9 @@ private struct ToocDestination: View {
         case .settingsAbout: ToocAboutView()
         case .settingsChangelog: ToocChangelogView()
         case .settingsCredits: ToocCreditsView()
+        case .settingsPrivacy: ToocPrivacySettingsView()
+        case .settingsTerms: ToocLegalView(document: .terms)
+        case .settingsPrivacyPolicy: ToocLegalView(document: .privacy)
         case .friends: ToocFriendsScreen()
         case .later: ToocLaterView()
         }

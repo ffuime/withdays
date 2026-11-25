@@ -25,13 +25,7 @@ struct ToocSettingsView: View {
                 link("通知", "bell", .settingsNotifications)
                 link("非表示・ブロック", "eye.slash", .settingsHidden)
                 link("トーク", "message", .settingsTalk)
-            }
-            Section {
-                Toggle("toocIDで友だち追加を許可", isOn: Binding(get: { store.me.findable }, set: { store.setFindable($0) }))
-            } header: {
-                Text("プライバシー").toocFont(.footnote)
-            } footer: {
-                Text("オフのあいだは、toocIDを入力して検索されても見つかりません。QRコードとリンクからは追加できます。").toocFont(.footnote)
+                link("プライバシー", "hand.raised", .settingsPrivacy)
             }
             Section {
                 link("tooc について", "info.circle", .settingsAbout)
@@ -318,6 +312,8 @@ struct ToocAboutView: View {
             Section {
                 LabeledContent("バージョン", value: "\(AppInfo.version) (\(AppInfo.build))")
                 NavigationLink("更新履歴", value: ToocRoute.settingsChangelog)
+                NavigationLink("利用規約", value: ToocRoute.settingsTerms)
+                NavigationLink("プライバシーポリシー", value: ToocRoute.settingsPrivacyPolicy)
                 NavigationLink("権利表示", value: ToocRoute.settingsCredits)
             } footer: {
                 if !ToocNotifications.standalone {

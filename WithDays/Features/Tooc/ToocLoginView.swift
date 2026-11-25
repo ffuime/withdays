@@ -12,6 +12,7 @@ struct ToocLoginView: View {
     @State private var errorMessage: String?
     @State private var working = false
     @State private var phoneLogin = false
+    @State private var reading: ToocLegalDocument?
     @FocusState private var field: Field?
 
     private enum Field { case id, password }
@@ -84,6 +85,19 @@ struct ToocLoginView: View {
                     .disabled(!valid || working)
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets())
+                } footer: {
+                    if creating {
+                        Text("登録すると、[利用規約](tooc-legal://terms)と[プライバシーポリシー](tooc-legal://privacy)に同意したものとみなされます。")
+                            .toocFont(.caption2)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 8)
+                            .environment(\.openURL, OpenURLAction { url in
+                                reading = url.host() == "privacy" ? .privacy : .terms
+                                return .handled
+                            })
+                    }
                 }
 
                 if !creating {
@@ -110,6 +124,16 @@ struct ToocLoginView: View {
             }
             .onAppear { creating = !store.hasDeviceAccount }
             .sheet(isPresented: $phoneLogin) { ToocPhoneLoginView() }
+            .sheet(item: $reading) { document in
+                NavigationStack {
+                    ToocLegalView(document: document)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("閉じる", systemImage: "xmark") { reading = nil }
+                            }
+                        }
+                }
+            }
         }
     }
 
