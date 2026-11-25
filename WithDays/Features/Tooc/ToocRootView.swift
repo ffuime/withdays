@@ -145,16 +145,6 @@ struct ToocRootView: View {
     @State private var store = ToocStore()
     @State private var router = ToocRouter()
     @State private var welcome = false
-    /// The iPhone's own light / dark (for 自動).
-    @State private var systemDark = ToocRootView.deviceDark
-
-    static var deviceDark: Bool { UIScreen.main.traitCollection.userInterfaceStyle == .dark }
-
-    private var scheme: ColorScheme {
-        // Signed in, the theme decides; before that, the iPhone's own.
-        if store.signedIn { return store.settings.theme.colorScheme }
-        return systemDark ? .dark : .light
-    }
     /// Who you were when a switch began, for the overlay's first face.
     @State private var switchFrom: ToocUser?
 
@@ -174,7 +164,6 @@ struct ToocRootView: View {
                     .transition(.asymmetric(insertion: .opacity.combined(with: .scale(scale: 1.04)), removal: .opacity))
             }
         }
-        .id(scheme)
         .animation(.smooth(duration: 0.5), value: store.signedIn)
         .environment(store)
         .environment(router)
@@ -182,13 +171,9 @@ struct ToocRootView: View {
         .toocFont(.body)
         .environment(\.toocFontFamily, ToocFontLibrary.shared.family(store.settings.font))
         .tint(theme.accent)
-        // ライト・ダーク・自動 decided here (自動 = the iPhone's own setting, read from the screen so nothing around
-        // tooc can change it), then given to SwiftUI and set on the window alike, so text, lists, bars and sheets agree.
-        .environment(\.colorScheme, scheme)
-        .background(ToocInterfaceStyle(scheme: scheme))
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-            systemDark = Self.deviceDark
-        }
+        // Light or dark comes with the theme; asked of the system as the app's own preference, so every screen,
+        // bar, list and sheet changes together, with nothing laid over them. Signed out: the iPhone's own.
+        .preferredColorScheme(store.signedIn ? store.settings.theme.colorScheme : nil)
         // No scaling or blurring of the screen itself while switching: done to the whole TabView, it left the
         // tab bar and top bar laid out shrunk toward the middle. The overlay's own frosted layer covers it instead.
         .overlay {
@@ -298,8 +283,6 @@ struct ToocRootView: View {
 
     /// じぶん's place in the tab bar (トーク, じぶん).
     private static let meTabIndex = 1
-    /// The tabs' symbols in order (the chosen one shows its filled version).
-    private static let tabSymbols = ["message", "face.smiling"]
 
     private var tabs: some View {
         let selection = Binding(get: { router.tab }, set: { tab in withAnimation(.snappy) { router.tab = tab } })
@@ -310,30 +293,22 @@ struct ToocRootView: View {
                     .background(
                         ToocTabBarHook(
                             onLongPress: { index in if index == Self.meTabIndex { router.sheet = .accounts } },
-                            onDoubleTap: { index in if index == Self.meTabIndex { switchBack() } },
-                            symbols: Self.tabSymbols,
-                            selected: router.tab == .talk ? 0 : 1
+                            onDoubleTap: { index in if index == Self.meTabIndex { switchBack() } }
                         )
                         .frame(width: 0, height: 0)
                     )
             } label: {
-                tabLabel("トーク", "message", .talk)
+                Label("トーク", systemImage: "message.fill")
             }
             .badge(store.unreadTotal)
 
             Tab(value: ToocTab.me) {
                 ToocMeView()
-                    .background(
-                        ToocTabBarHook(onLongPress: { _ in }, onDoubleTap: { _ in }, symbols: Self.tabSymbols,
-                                       selected: router.tab == .talk ? 0 : 1, gestures: false)
-                        .frame(width: 0, height: 0)
-                    )
             } label: {
-                tabLabel("じぶん", "face.smiling", .me)
+                Label("じぶん", systemImage: "face.smiling.fill")
             }
         }
-        // Outlined everywhere; only the chosen tab names its filled symbol.
-        .environment(\.symbolVariants, .none)
+        // Both symbols are named filled, chosen or not.
     }
 
     private func switchBack() {
@@ -346,15 +321,6 @@ struct ToocRootView: View {
         }
     }
 
-    private func tabLabel(_ title: String, _ symbol: String, _ tab: ToocTab) -> some View {
-        Label {
-            Text(title)
-        } icon: {
-            Image(uiImage: ToocTabBarHook.tabImage("\(symbol).fill"))
-                .renderingMode(.template)
-        }
-        .environment(\.symbolVariants, .none)
-    }
 
     // MARK: Top bar, shared by the tabs so its pills morph between them
 
@@ -682,56 +648,5 @@ struct ToocGoodbyeView: View {
             onDone()
         }
         .allowsHitTesting(stage < 3)
-    }
-}
-
-/// ライト・ダーク・自動 for the window tooc is in (what it was before comes back when tooc closes).
-struct ToocInterfaceStyle: UIViewRepresentable {
-    let scheme: ColorScheme?
-
-    func makeUIView(context: Context) -> Probe { Probe() }
-
-    func updateUIView(_ view: Probe, context: Context) {
-        view.style = switch scheme {
-        case .dark?: .dark
-        case .light?: .light
-        default: .unspecified
-        }
-        view.apply()
-    }
-
-    static func dismantleUIView(_ view: Probe, coordinator: ()) { view.restore() }
-
-    final class Probe: UIView {
-        var style: UIUserInterfaceStyle = .unspecified
-        private weak var held: UIWindow?
-        private var original: UIUserInterfaceStyle = .unspecified
-        private var originalRoot: UIUserInterfaceStyle = .unspecified
-
-        override func didMoveToWindow() {
-            super.didMoveToWindow()
-            apply()
-        }
-
-        func apply() {
-            guard let window else { return }
-            if held !== window {
-                held = window
-                original = window.overrideUserInterfaceStyle
-                originalRoot = window.rootViewController?.overrideUserInterfaceStyle ?? .unspecified
-            }
-            let root = window.rootViewController
-            guard window.overrideUserInterfaceStyle != style || root?.overrideUserInterfaceStyle != style else { return }
-            let next = style
-            UIView.transition(with: window, duration: 0.3, options: [.transitionCrossDissolve, .allowUserInteraction]) {
-                window.overrideUserInterfaceStyle = next
-                root?.overrideUserInterfaceStyle = next
-            }
-        }
-
-        func restore() {
-            held?.overrideUserInterfaceStyle = original
-            held?.rootViewController?.overrideUserInterfaceStyle = originalRoot
-        }
     }
 }

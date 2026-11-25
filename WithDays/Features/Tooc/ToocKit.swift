@@ -23,7 +23,7 @@ enum ToocTheme: String, CaseIterable, Identifiable, Codable {
         case .mint: "ミント"
         case .sand: "すな"
         case .night: "ナイト"
-        case .dusk: "薄暮"
+        case .dusk: "トワイライト"
         case .deepSea: "深海"
         case .yozakura: "夜桜"
         case .forest: "森"

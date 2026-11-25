@@ -93,15 +93,18 @@ struct ToocAvatar: View {
 struct ToocCountBadge: View {
     let count: Int
     var prominent = false
+    /// Next to a title (the talk's top bar).
+    var large = false
     @Environment(\.toocTheme) private var theme
 
     var body: some View {
+        let big = prominent || large
         Text(count > 999 ? "999+" : "\(count)")
-            .toocFont(.system(size: prominent ? 13 : 10, weight: .bold))
+            .toocFont(.system(size: big ? 13 : 10, weight: .bold))
             .monospacedDigit()
             .foregroundStyle(prominent ? Color.white : Color.secondary)
-            .padding(.horizontal, prominent ? 6 : 4)
-            .frame(minWidth: prominent ? 22 : 16, minHeight: prominent ? 22 : 16)
+            .padding(.horizontal, big ? 6 : 4)
+            .frame(minWidth: big ? 22 : 16, minHeight: big ? 22 : 16)
             .background(Capsule().fill(prominent ? theme.accent : Color(.tertiarySystemFill)))
     }
 }

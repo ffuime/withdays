@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+env:
+  # WithDays isn't being shipped for now: only tooc.ipa is built.
+  BUILD_WITHDAYS: "false"
+
 jobs:
   build:
     # arm64 macOS runners are often stuck queued for capacity; the Intel image has the same Xcode.
@@ -64,6 +68,7 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build (unsigned)
+        if: env.BUILD_WITHDAYS == 'true'
         run: |
           set -o pipefail
           xcodebuild \
@@ -117,6 +122,7 @@ jobs:
           cat build.log tooc-build.log | grep -E "error:" -A3 | head -n 200 || true
 
       - name: Package IPA
+        if: env.BUILD_WITHDAYS == 'true'
         run: |
           APP=build/Build/Products/Release-iphoneos/WithDays.app
           # The build is unsigned, so embed the entitlements with an ad-hoc signature
@@ -143,6 +149,7 @@ jobs:
           du -sh Payload/tooc.app
 
       - uses: actions/upload-artifact@v4
+        if: env.BUILD_WITHDAYS == 'true'
         with:
           name: withdays-ipa
           path: WithDays.ipa
@@ -162,7 +169,7 @@ jobs:
           generate_release_notes: true
 
       - name: Update SideStore source
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.BUILD_WITHDAYS == 'true' && startsWith(github.ref, 'refs/tags/v')
         run: |
           SIZE=$(stat -f%z WithDays.ipa)
           git fetch origin main
@@ -181,6 +188,7 @@ jobs:
       # SlidesFeature's unit tests, on an iOS simulator. After the IPA is uploaded, so a failing test
       # still leaves the build to install.
       - name: Test SlidesFeature
+        if: env.BUILD_WITHDAYS == 'true'
         run: |
           set -o pipefail
           UDID=$(xcrun simctl list devices available -j | python3 -c '
@@ -209,7 +217,7 @@ jobs:
           grep -q "TEST SUCCEEDED" ../test.log
 
       - name: Show test failures
-        if: failure()
+        if: env.BUILD_WITHDAYS == 'true' && failure()
         run: |
           [ -f test.log ] || exit 0
           grep -E "error:|failed" test.log | sort -u | head -n 60 | while IFS= read -r line; do echo "::error::$line"; done

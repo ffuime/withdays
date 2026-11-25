@@ -138,23 +138,9 @@ struct ToocRoomPreview: View {
 
 /// Watches tooc's tab bar for a long press or a double tap on a tab (the system's tab bar offers neither).
 struct ToocTabBarHook: UIViewControllerRepresentable {
-    /// A tab's symbol drawn into a plain picture (still taking the bar's colours), so the bar can't swap in its
-    /// filled version by itself.
-    static func tabImage(_ name: String) -> UIImage {
-        let config = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
-        guard let symbol = UIImage(systemName: name, withConfiguration: config)?
-            .withTintColor(.black, renderingMode: .alwaysOriginal) else { return UIImage() }
-        let picture = UIGraphicsImageRenderer(size: symbol.size).image { _ in symbol.draw(at: .zero) }
-        return picture.withRenderingMode(.alwaysTemplate)
-    }
 
     var onLongPress: (Int) -> Void
     var onDoubleTap: (Int) -> Void
-    /// Each tab's symbol, filled (set on the bar's items, where SwiftUI's label can't).
-    var symbols: [String] = []
-    var selected = 0
-    /// Only one hook adds the hold and double-tap.
-    var gestures = true
 
     func makeUIViewController(context: Context) -> HookController {
         let controller = HookController()
@@ -164,22 +150,13 @@ struct ToocTabBarHook: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: HookController, context: Context) {
         context.coordinator.parent = self
-        // After SwiftUI has updated the bar for this change.
-        context.coordinator.applySymbolsSoon()
+
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     final class HookController: UIViewController {
         weak var coordinator: Coordinator?
-
-        override func viewDidLoad() {
-            super.viewDidLoad()
-            // Light / dark redraws the bar's items from SwiftUI's labels: put the symbols back after.
-            registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (controller: HookController, _: UITraitCollection) in
-                controller.coordinator?.applySymbolsSoon()
-            }
-        }
 
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
@@ -197,11 +174,8 @@ struct ToocTabBarHook: UIViewControllerRepresentable {
         func attach(from controller: UIViewController) {
             var current: UIViewController? = controller
             while let next = current, !(next is UITabBarController) { current = next.parent }
-            guard let bar = (current as? UITabBarController)?.tabBar else { return }
-            defer { applySymbols() }
-            guard bar !== tabBar else { return }
+            guard let bar = (current as? UITabBarController)?.tabBar, bar !== tabBar else { return }
             tabBar = bar
-            guard parent.gestures else { return }
             let press = UILongPressGestureRecognizer(target: self, action: #selector(pressed(_:)))
             press.minimumPressDuration = 0.45
             press.cancelsTouchesInView = false
@@ -213,21 +187,6 @@ struct ToocTabBarHook: UIViewControllerRepresentable {
             double.delegate = self
             bar.addGestureRecognizer(press)
             bar.addGestureRecognizer(double)
-        }
-
-        /// Now, and again a moment later (SwiftUI may still be updating the bar).
-        func applySymbolsSoon() {
-            DispatchQueue.main.async { self.applySymbols() }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.applySymbols() }
-        }
-
-        func applySymbols() {
-            guard let items = tabBar?.items else { return }
-            for (index, item) in items.enumerated() where index < parent.symbols.count {
-                let name = parent.symbols[index]
-                item.image = ToocTabBarHook.tabImage("\(name).fill")
-                item.selectedImage = ToocTabBarHook.tabImage("\(name).fill")
-            }
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,

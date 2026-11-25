@@ -747,9 +747,7 @@ struct ToocRoomView: View {
                     .toocFont(.headline)
                     .lineLimit(1)
                 if room.isGroup {
-                    Text("(\(room.memberIDs.count + 1))")
-                        .toocFont(.headline)
-                        .foregroundStyle(.secondary)
+                    ToocCountBadge(count: room.memberIDs.count + 1, large: true)
                 }
             }
             .fixedSize()
@@ -2009,6 +2007,7 @@ struct ToocThreadView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
+                .padding(.horizontal, 12)
                 .padding(.vertical, 12)
                 .animation(.smooth(duration: 0.3), value: thread.map(\.id))
             }

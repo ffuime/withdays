@@ -275,14 +275,9 @@ struct ToocTalkSettingsView: View {
                 }
             }
             Section {
-                themeGrid(ToocTheme.brightThemes, store: store)
+                themeGrid(ToocTheme.brightThemes + ToocTheme.darkThemes, store: store)
             } header: {
-                Text("明るいテーマ").toocFont(.footnote)
-            }
-            Section {
-                themeGrid(ToocTheme.darkThemes, store: store)
-            } header: {
-                Text("暗いテーマ").toocFont(.footnote)
+                Text("テーマ").toocFont(.footnote)
             }
             Section {
                 Toggle("改行キーで送信", isOn: $store.settings.returnSends)
