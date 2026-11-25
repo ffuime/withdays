@@ -171,9 +171,8 @@ struct ToocRootView: View {
         .environment(\.toocFontFamily, ToocFontLibrary.shared.family(store.settings.font))
         .tint(theme.accent)
         .environment(\.colorScheme, theme.dark ? .dark : colorScheme)
-        .scaleEffect(switching ? 0.93 : 1)
-        .blur(radius: switching ? 8 : 0)
-        .animation(.spring(response: 0.5, dampingFraction: 0.82), value: switching)
+        // No scaling or blurring of the screen itself while switching: done to the whole TabView, it left the
+        // tab bar and top bar laid out shrunk toward the middle. The overlay's own frosted layer covers it instead.
         .overlay {
             if welcome {
                 ToocWelcomeView(name: store.me.name) { welcome = false }
@@ -230,8 +229,6 @@ struct ToocRootView: View {
 
     @Environment(\.colorScheme) private var colorScheme
 
-    /// The overlay is up and the new account isn't in front yet.
-    private var switching: Bool { store.switchingTo != nil && switchFrom != nil }
 
     private var main: some View {
         @Bindable var router = router
