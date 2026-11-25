@@ -187,6 +187,7 @@ struct ToocFriendsScreen: View {
                         } label: {
                             ToocBarIcon("plus")
                         }
+                        .tint(Color.primary)
                         .accessibilityLabel("友だち追加")
                         Button {
                             withAnimation(.snappy) { router.startSelecting() }

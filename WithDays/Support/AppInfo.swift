@@ -23,6 +23,11 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.28.1", date: "2026.11.25", notes: [
+            "tooc：単独アプリの更新履歴を tooc だけの番号と文章に、テーマ「空」を「スカイ」に",
+            "tooc：メニューのアイコンを白黒に、削除・退会は赤に。アルバムの上部ボタンも白黒に",
+            "tooc：ライト・ダークの切り替えで一覧の文字が見えなくなる問題、じぶんタブのアイコンが塗りつぶしにならない問題を修正",
+        ]),
         Release(version: "1.28.0", date: "2026.11.25", notes: [
             "tooc：どのテーマにもライト・ダークを用意し、外観を 自動・ライト・ダーク から選べるように（夜テーマは tooc のダークへ）",
             "tooc：ダークでも読みやすいブランドカラーに。上部やピルのアイコンはすべて白黒に",

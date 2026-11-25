@@ -75,7 +75,7 @@ struct ToocStickerPanel: View {
                     .buttonStyle(ToocPressStyle())
                     .accessibilityLabel("スタンプを送る")
                     .contextMenu {
-                        Button("削除", systemImage: "trash", role: .destructive) {
+                        ToocDestructiveButton("削除", systemImage: "trash") {
                             withAnimation(.snappy) { store.deleteSticker(sticker.id) }
                         }
                     }

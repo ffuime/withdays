@@ -171,9 +171,8 @@ struct ToocRootView: View {
         .toocFont(.body)
         .environment(\.toocFontFamily, ToocFontLibrary.shared.family(store.settings.font))
         .tint(theme.accent)
-        // ライト・ダーク・自動: the screen, its sheets and its bars all follow.
-        .environment(\.colorScheme, store.settings.appearance.colorScheme ?? colorScheme)
-        .preferredColorScheme(store.signedIn ? store.settings.appearance.colorScheme : nil)
+        // ライト・ダーク・自動: set on the window, so lists, bars and sheets all redraw in it together.
+        .background(ToocInterfaceStyle(scheme: store.signedIn ? store.settings.appearance.colorScheme : nil))
         // No scaling or blurring of the screen itself while switching: done to the whole TabView, it left the
         // tab bar and top bar laid out shrunk toward the middle. The overlay's own frosted layer covers it instead.
         .overlay {
@@ -283,6 +282,8 @@ struct ToocRootView: View {
 
     /// じぶん's place in the tab bar (トーク, じぶん).
     private static let meTabIndex = 1
+    /// The tabs' symbols in order (the chosen one shows its filled version).
+    private static let tabSymbols = ["message", "face.smiling"]
 
     private var tabs: some View {
         let selection = Binding(get: { router.tab }, set: { tab in withAnimation(.snappy) { router.tab = tab } })
@@ -293,7 +294,9 @@ struct ToocRootView: View {
                     .background(
                         ToocTabBarHook(
                             onLongPress: { index in if index == Self.meTabIndex { router.sheet = .accounts } },
-                            onDoubleTap: { index in if index == Self.meTabIndex { switchBack() } }
+                            onDoubleTap: { index in if index == Self.meTabIndex { switchBack() } },
+                            symbols: Self.tabSymbols,
+                            selected: router.tab == .talk ? 0 : 1
                         )
                         .frame(width: 0, height: 0)
                     )
@@ -304,6 +307,11 @@ struct ToocRootView: View {
 
             Tab(value: ToocTab.me) {
                 ToocMeView()
+                    .background(
+                        ToocTabBarHook(onLongPress: { _ in }, onDoubleTap: { _ in }, symbols: Self.tabSymbols,
+                                       selected: router.tab == .talk ? 0 : 1, gestures: false)
+                        .frame(width: 0, height: 0)
+                    )
             } label: {
                 tabLabel("じぶん", "face.smiling", .me)
             }
@@ -326,7 +334,7 @@ struct ToocRootView: View {
         Label {
             Text(title)
         } icon: {
-            Image(uiImage: UIImage(systemName: router.tab == tab ? "\(symbol).fill" : symbol) ?? UIImage())
+            Image(uiImage: UIImage(systemName: symbol) ?? UIImage())
                 .renderingMode(.template)
         }
         .environment(\.symbolVariants, .none)
@@ -358,6 +366,7 @@ struct ToocRootView: View {
                 } label: {
                     ToocBarIcon("plus")
                 }
+                .tint(Color.primary)
                 .accessibilityLabel("友だち追加")
                 Button { router.path.append(.notices) } label: {
                     ToocBarIcon(store.unseenNotices > 0 ? "bell.badge" : "bell")
@@ -478,6 +487,7 @@ struct ToocPlusMenu: View {
         } label: {
             ToocBarIcon("plus")
         }
+        .tint(Color.primary)
         .accessibilityLabel("追加")
     }
 }
@@ -516,6 +526,7 @@ struct ToocTalkSortMenu: View {
         } label: {
             ToocBarIcon("arrow.up.arrow.down")
         }
+        .tint(Color.primary)
         .accessibilityLabel("並び替え")
     }
 }
@@ -533,6 +544,7 @@ struct ToocFriendSortMenu: View {
         } label: {
             ToocBarIcon("arrow.up.arrow.down")
         }
+        .tint(Color.primary)
         .accessibilityLabel("並び替え")
     }
 }
@@ -654,5 +666,51 @@ struct ToocGoodbyeView: View {
             onDone()
         }
         .allowsHitTesting(stage < 3)
+    }
+}
+
+/// ライト・ダーク・自動 for the window tooc is in (what it was before comes back when tooc closes).
+struct ToocInterfaceStyle: UIViewRepresentable {
+    let scheme: ColorScheme?
+
+    func makeUIView(context: Context) -> Probe { Probe() }
+
+    func updateUIView(_ view: Probe, context: Context) {
+        view.style = switch scheme {
+        case .dark?: .dark
+        case .light?: .light
+        default: .unspecified
+        }
+        view.apply()
+    }
+
+    static func dismantleUIView(_ view: Probe, coordinator: ()) { view.restore() }
+
+    final class Probe: UIView {
+        var style: UIUserInterfaceStyle = .unspecified
+        private weak var held: UIWindow?
+        private var original: UIUserInterfaceStyle = .unspecified
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            apply()
+        }
+
+        func apply() {
+            guard let window else { return }
+            if held !== window {
+                held = window
+                original = window.overrideUserInterfaceStyle
+            }
+            guard window.overrideUserInterfaceStyle != style else { return }
+            let next = style
+            UIView.transition(with: window, duration: 0.3, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+                window.overrideUserInterfaceStyle = next
+            }
+        }
+
+        func restore() {
+            held?.overrideUserInterfaceStyle = original
+        }
     }
 }

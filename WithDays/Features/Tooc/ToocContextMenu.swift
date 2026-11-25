@@ -139,6 +139,11 @@ struct ToocRoomPreview: View {
 struct ToocTabBarHook: UIViewControllerRepresentable {
     var onLongPress: (Int) -> Void
     var onDoubleTap: (Int) -> Void
+    /// Each tab's symbol: outlined, and filled when chosen (set on the bar's items, where SwiftUI's label can't).
+    var symbols: [String] = []
+    var selected = 0
+    /// Only one hook adds the hold and double-tap.
+    var gestures = true
 
     func makeUIViewController(context: Context) -> HookController {
         let controller = HookController()
@@ -148,6 +153,8 @@ struct ToocTabBarHook: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: HookController, context: Context) {
         context.coordinator.parent = self
+        // After SwiftUI has updated the bar for this change.
+        DispatchQueue.main.async { context.coordinator.applySymbols() }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -171,8 +178,11 @@ struct ToocTabBarHook: UIViewControllerRepresentable {
         func attach(from controller: UIViewController) {
             var current: UIViewController? = controller
             while let next = current, !(next is UITabBarController) { current = next.parent }
-            guard let bar = (current as? UITabBarController)?.tabBar, bar !== tabBar else { return }
+            guard let bar = (current as? UITabBarController)?.tabBar else { return }
+            defer { applySymbols() }
+            guard bar !== tabBar else { return }
             tabBar = bar
+            guard parent.gestures else { return }
             let press = UILongPressGestureRecognizer(target: self, action: #selector(pressed(_:)))
             press.minimumPressDuration = 0.45
             press.cancelsTouchesInView = false
@@ -184,6 +194,15 @@ struct ToocTabBarHook: UIViewControllerRepresentable {
             double.delegate = self
             bar.addGestureRecognizer(press)
             bar.addGestureRecognizer(double)
+        }
+
+        func applySymbols() {
+            guard let items = tabBar?.items else { return }
+            for (index, item) in items.enumerated() where index < parent.symbols.count {
+                let name = parent.symbols[index]
+                item.image = UIImage(systemName: name)
+                item.selectedImage = UIImage(systemName: "\(name).fill")
+            }
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,

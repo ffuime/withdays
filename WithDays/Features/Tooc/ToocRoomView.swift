@@ -490,7 +490,7 @@ struct ToocRoomView: View {
                             Button("今すぐ送信", systemImage: "paperplane") {
                                 withAnimation(.snappy) { store.sendNow(message.id, in: roomID) }
                             }
-                            Button("送信予約を取り消す", systemImage: "xmark.circle", role: .destructive) {
+                            ToocDestructiveButton("送信予約を取り消す", systemImage: "xmark.circle") {
                                 withAnimation(.snappy) { store.deleteMessage(message.id, in: roomID) }
                             }
                         }
@@ -794,19 +794,20 @@ struct ToocRoomView: View {
                 }
             }
             Section {
-                Button("トーク履歴を削除", systemImage: "trash", role: .destructive) { confirmClear = true }
+                ToocDestructiveButton("トーク履歴を削除", systemImage: "trash") { confirmClear = true }
                 if room.isGroup {
-                    Button("グループを退会", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
+                    ToocDestructiveButton("グループを退会", systemImage: "rectangle.portrait.and.arrow.right") {
                         confirmLeave = true
                     }
                     if store.isAdmin(room) {
-                        Button("グループを削除", systemImage: "trash.fill", role: .destructive) { confirmDeleteGroup = true }
+                        ToocDestructiveButton("グループを削除", systemImage: "trash.fill") { confirmDeleteGroup = true }
                     }
                 }
             }
         } label: {
             ToocBarIcon("ellipsis")
         }
+        .tint(Color.primary)
         .accessibilityLabel("その他")
     }
 
@@ -861,6 +862,7 @@ struct ToocRoomView: View {
                 } label: {
                     Image(systemName: "plus").frame(width: 44, height: Self.barHeight)
                 }
+                .tint(Color.primary)
                 .accessibilityLabel("追加")
                 Button { pickingPhoto = true } label: {
                     Image(systemName: "photo.on.rectangle.angled").frame(width: 44, height: Self.barHeight)
@@ -972,6 +974,7 @@ struct ToocRoomView: View {
             } primaryAction: {
                 send()
             }
+            .tint(Color.primary)
             .menuIndicator(.hidden)
             .accessibilityLabel("送信")
         }
@@ -1168,7 +1171,7 @@ struct ToocMessageRow: View {
             Button("再送", systemImage: "arrow.clockwise") {
                 withAnimation(.snappy) { store.resend(message.id, in: room.id) }
             }
-            Button("削除", systemImage: "trash", role: .destructive) {
+            ToocDestructiveButton("削除", systemImage: "trash") {
                 withAnimation(.snappy) { store.discardFailed(message.id, in: room.id) }
             }
         } label: {
@@ -1177,6 +1180,7 @@ struct ToocMessageRow: View {
                 .foregroundStyle(.red)
                 .frame(width: 28, height: 28)
         }
+        .tint(Color.primary)
         .accessibilityLabel("送信できませんでした")
         .transition(.scale.combined(with: .opacity))
     }
@@ -1391,6 +1395,7 @@ struct ToocMessageRow: View {
         } label: {
             Label("返信", systemImage: "arrowshape.turn.up.left.fill")
         }
+        .tint(Color.primary)
         if message.forwardable {
             Button("転送", systemImage: "arrowshape.turn.up.right", action: actions.forward)
         }

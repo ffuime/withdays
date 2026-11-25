@@ -425,12 +425,13 @@ struct ToocNoteCard: View {
                 Spacer()
                 if note.authorID == store.me.id {
                     Menu {
-                        Button("削除", systemImage: "trash", role: .destructive) { confirmDelete = true }
+                        ToocDestructiveButton("削除", systemImage: "trash") { confirmDelete = true }
                     } label: {
                         Image(systemName: "ellipsis")
                             .frame(width: 32, height: 32)
                             .contentShape(Rectangle())
                     }
+                    .tint(Color.primary)
                     .foregroundStyle(.secondary)
                 }
             }
@@ -541,7 +542,7 @@ struct ToocNoteDetail: View {
         .contextMenu {
             Button("コピー", systemImage: "doc.on.doc") { UIPasteboard.general.string = comment.text }
             if comment.authorID == store.me.id {
-                Button("削除", systemImage: "trash", role: .destructive) {
+                ToocDestructiveButton("削除", systemImage: "trash") {
                     withAnimation(.snappy) { board.deleteComment(comment, on: noteID) }
                 }
             }
@@ -887,7 +888,7 @@ struct ToocAlbumDetail: View {
     private func toolbar(_ album: ToocAlbum) -> some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
             PhotosPicker(selection: $items, maxSelectionCount: 30, matching: .images) {
-                Image(systemName: "plus")
+                Image(systemName: "plus").foregroundStyle(Color.primary)
             }
             .disabled(uploading)
             .accessibilityLabel("写真を追加")
@@ -897,10 +898,11 @@ struct ToocAlbumDetail: View {
                         newTitle = album.title
                         renaming = true
                     }
-                    Button("アルバムを削除", systemImage: "trash", role: .destructive) { confirmDelete = true }
+                    ToocDestructiveButton("アルバムを削除", systemImage: "trash") { confirmDelete = true }
                 } label: {
-                    Image(systemName: "ellipsis")
+                    Image(systemName: "ellipsis").foregroundStyle(Color.primary)
                 }
+                .tint(Color.primary)
                 .accessibilityLabel("その他")
             }
         }
@@ -916,7 +918,7 @@ struct ToocAlbumDetail: View {
             }
         }
         if photo.by == store.me.id || album.authorID == store.me.id {
-            Button("アルバムから削除", systemImage: "trash", role: .destructive) {
+            ToocDestructiveButton("アルバムから削除", systemImage: "trash") {
                 withAnimation(.snappy) { board.remove(photo, from: album) }
             }
         }

@@ -18,7 +18,7 @@ enum ToocTheme: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .standard, .night: "tooc"
         case .lavender: "ラベンダー"
-        case .sky: "空"
+        case .sky: "スカイ"
         case .sakura: "さくら"
         case .mint: "ミント"
         case .sand: "すな"
@@ -432,4 +432,28 @@ struct ToocCropRequest: Identifiable {
     let id = UUID()
     let image: UIImage
     let icon: Bool
+}
+
+/// A destructive menu item with its symbol in red too (menus draw symbols in the text colour).
+struct ToocDestructiveButton: View {
+    let title: String
+    let symbol: String
+    let action: () -> Void
+
+    init(_ title: String, systemImage: String, action: @escaping () -> Void) {
+        self.title = title
+        self.symbol = systemImage
+        self.action = action
+    }
+
+    var body: some View {
+        Button(role: .destructive, action: action) {
+            Label {
+                Text(title)
+            } icon: {
+                Image(uiImage: UIImage(systemName: symbol)?.withTintColor(.systemRed, renderingMode: .alwaysOriginal)
+                      ?? UIImage())
+            }
+        }
+    }
 }

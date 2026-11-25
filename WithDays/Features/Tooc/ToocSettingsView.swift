@@ -247,8 +247,7 @@ struct ToocTalkSettingsView: View {
                     ForEach(ToocAppearance.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                .listRowSeparator(.hidden)
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 12) {
                     ForEach(ToocTheme.allCases) { option in
                         Button {
@@ -294,7 +293,11 @@ struct ToocTalkSettingsView: View {
 
 /// tooc について: the logo, what it is, and the version.
 struct ToocAboutView: View {
-    static let summary = "tooc は WithDays の中で使えるトークアプリです。友だちやグループと、メッセージ・写真・ファイル・スタンプをやり取りできます。"
+    static var summary: String {
+        ToocNotifications.standalone
+            ? "tooc は、友だちやグループとメッセージ・写真・ファイル・スタンプをやり取りできるトークアプリです。"
+            : "tooc は WithDays の中で使えるトークアプリです。友だちやグループと、メッセージ・写真・ファイル・スタンプをやり取りできます。"
+    }
 
     var body: some View {
         List {
@@ -318,7 +321,9 @@ struct ToocAboutView: View {
                 NavigationLink("更新履歴", value: ToocRoute.settingsChangelog)
                 NavigationLink("権利表示", value: ToocRoute.settingsCredits)
             } footer: {
-                Text("tooc は WithDays と一緒に更新されます。バージョンは WithDays と同じです。").toocFont(.footnote)
+                if !ToocNotifications.standalone {
+                    Text("tooc は WithDays と一緒に更新されます。バージョンは WithDays と同じです。").toocFont(.footnote)
+                }
             }
         }
         .navigationTitle("tooc について")
@@ -337,7 +342,11 @@ struct ToocChangelogView: View {
     }
 
     private var entries: [Entry] {
-        AppInfo.changelog.compactMap { release in
+        // The tooc app: its own releases, numbered on their own.
+        if ToocNotifications.standalone {
+            return ToocInfo.changelog.map { Entry(release: $0, notes: $0.notes) }
+        }
+        return AppInfo.changelog.compactMap { release in
             let notes = release.notes.filter { $0.hasPrefix(Self.prefix) }.map { String($0.dropFirst(Self.prefix.count)) }
             return notes.isEmpty ? nil : Entry(release: release, notes: notes)
         }

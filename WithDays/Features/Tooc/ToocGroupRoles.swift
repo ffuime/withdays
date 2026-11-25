@@ -155,6 +155,7 @@ struct ToocGroupRolesView: View {
                         .frame(width: 36, height: 36)
                         .contentShape(Rectangle())
                 }
+                .tint(Color.primary)
                 .accessibilityLabel("\(user.displayName)の役割")
             }
         }
