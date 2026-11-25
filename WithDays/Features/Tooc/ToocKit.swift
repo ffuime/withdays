@@ -4,82 +4,130 @@ import UIKit
 // MARK: - Theme
 
 /// tooc's look, drawn from its logo (violet into blue): the accent for buttons and text, a quiet background behind
-/// everything, your bubble (a lighter accent, white text) and the other person's. 夜 is dark throughout.
+/// everything, your bubble (the accent under white text) and the other person's. Every theme has a light and a dark
+/// version; which one shows follows ライト・ダーク・自動 (ToocAppearance).
 enum ToocTheme: String, CaseIterable, Identifiable, Codable {
-    case standard, lavender, sky, sakura, mint, sand, night
+    case standard, lavender, sky, sakura, mint, sand
+    /// 夜 from before themes had a dark version: read as tooc in dark.
+    case night
     var id: String { rawValue }
+
+    static var allCases: [ToocTheme] { [.standard, .lavender, .sky, .sakura, .mint, .sand] }
 
     var label: String {
         switch self {
-        case .standard: "tooc"
+        case .standard, .night: "tooc"
         case .lavender: "ラベンダー"
         case .sky: "空"
         case .sakura: "さくら"
         case .mint: "ミント"
         case .sand: "すな"
-        case .night: "夜"
         }
     }
 
-    var accent: Color {
+    /// The accent, bright enough to read on black in dark.
+    private func accentRGB(dark: Bool) -> ToocRGB {
         switch self {
-        case .standard: .toocBrand
-        case .lavender: Color(red: 0.49, green: 0.38, blue: 0.96)
-        case .sky: Color(red: 0.13, green: 0.56, blue: 0.94)
-        case .sakura: Color(red: 0.91, green: 0.38, blue: 0.58)
-        case .mint: Color(red: 0.12, green: 0.66, blue: 0.55)
-        case .sand: Color(red: 0.86, green: 0.53, blue: 0.27)
-        case .night: Color(red: 0.55, green: 0.6, blue: 1.0)
+        case .standard, .night: dark ? ToocRGB(0.5, 0.58, 1.0) : ToocRGB(0.29, 0.36, 1.0)
+        case .lavender: dark ? ToocRGB(0.69, 0.61, 1.0) : ToocRGB(0.49, 0.38, 0.96)
+        case .sky: dark ? ToocRGB(0.42, 0.74, 1.0) : ToocRGB(0.13, 0.56, 0.94)
+        case .sakura: dark ? ToocRGB(1.0, 0.58, 0.72) : ToocRGB(0.91, 0.38, 0.58)
+        case .mint: dark ? ToocRGB(0.35, 0.84, 0.72) : ToocRGB(0.12, 0.66, 0.55)
+        case .sand: dark ? ToocRGB(1.0, 0.71, 0.46) : ToocRGB(0.86, 0.53, 0.27)
         }
     }
+
+    var accent: Color { .tooc(light: accentRGB(dark: false).ui, dark: accentRGB(dark: true).ui) }
 
     /// Behind lists and talks: barely tinted, so text stays easy to read. nil keeps the system's.
     var background: Color? {
         switch self {
-        case .standard: nil
-        case .lavender: Color(red: 0.975, green: 0.97, blue: 1.0)
-        case .sky: Color(red: 0.965, green: 0.98, blue: 1.0)
-        case .sakura: Color(red: 1.0, green: 0.972, blue: 0.978)
-        case .mint: Color(red: 0.962, green: 0.988, blue: 0.978)
-        case .sand: Color(red: 0.99, green: 0.978, blue: 0.962)
-        case .night: Color(red: 0.07, green: 0.075, blue: 0.12)
+        case .standard, .night: nil
+        case .lavender: .tooc(light: ToocRGB(0.975, 0.97, 1.0).ui, dark: ToocRGB(0.07, 0.06, 0.11).ui)
+        case .sky: .tooc(light: ToocRGB(0.965, 0.98, 1.0).ui, dark: ToocRGB(0.05, 0.075, 0.11).ui)
+        case .sakura: .tooc(light: ToocRGB(1.0, 0.972, 0.978).ui, dark: ToocRGB(0.1, 0.06, 0.075).ui)
+        case .mint: .tooc(light: ToocRGB(0.962, 0.988, 0.978).ui, dark: ToocRGB(0.05, 0.09, 0.08).ui)
+        case .sand: .tooc(light: ToocRGB(0.99, 0.978, 0.962).ui, dark: ToocRGB(0.1, 0.08, 0.06).ui)
         }
     }
 
-    var dark: Bool { self == .night }
-
-    /// Your bubble: the accent, lightened, under white text.
+    /// Your bubble: the accent under white text (lighter in light, deeper in dark, so white reads on both).
     var myBubble: Color {
-        switch self {
-        case .standard: Color(red: 0.42, green: 0.5, blue: 1.0)
-        case .night: accent.mix(with: .black, by: 0.25)
-        default: accent.mix(with: .white, by: 0.18)
-        }
+        let light = self == .standard || self == .night ? ToocRGB(0.42, 0.5, 1.0) : accentRGB(dark: false).mix(.white, 0.18)
+        let dark = accentRGB(dark: false).mix(.black, 0.12)
+        return .tooc(light: light.ui, dark: dark.ui)
     }
 
     var theirBubble: Color {
         switch self {
-        case .standard: Color(.secondarySystemBackground)
-        case .night: Color.white.opacity(0.1)
-        default: Color.white
+        case .standard, .night: Color(.secondarySystemBackground)
+        default: .tooc(light: .white, dark: UIColor(white: 1, alpha: 0.11))
         }
     }
 
     /// A card or box on the background.
     var card: Color {
         switch self {
-        case .standard: Color(.secondarySystemBackground)
-        case .night: Color.white.opacity(0.07)
-        default: Color.white
+        case .standard, .night: Color(.secondarySystemBackground)
+        default: .tooc(light: .white, dark: UIColor(white: 1, alpha: 0.08))
         }
     }
 
     var fill: Color { background ?? Color(.systemBackground) }
 }
 
+/// ライト・ダーク, or the same as the iPhone (自動).
+enum ToocAppearance: String, CaseIterable, Identifiable, Codable {
+    case system, light, dark
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system: "自動"
+        case .light: "ライト"
+        case .dark: "ダーク"
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
+    }
+}
+
+/// A colour by its parts, for mixing the themes' light and dark versions.
+struct ToocRGB {
+    let r: CGFloat
+    let g: CGFloat
+    let b: CGFloat
+
+    init(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat) {
+        self.r = r
+        self.g = g
+        self.b = b
+    }
+
+    static let white = ToocRGB(1, 1, 1)
+    static let black = ToocRGB(0, 0, 0)
+
+    func mix(_ other: ToocRGB, _ amount: CGFloat) -> ToocRGB {
+        ToocRGB(r + (other.r - r) * amount, g + (other.g - g) * amount, b + (other.b - b) * amount)
+    }
+
+    var ui: UIColor { UIColor(red: r, green: g, blue: b, alpha: 1) }
+}
+
 extension Color {
-    /// tooc's own colour: the middle of its logo's violet-to-blue.
-    static let toocBrand = Color(red: 0.29, green: 0.36, blue: 1.0)
+    /// tooc's own colour: the middle of its logo's violet-to-blue (lighter in dark, to read on black).
+    static let toocBrand = Color.tooc(light: ToocRGB(0.29, 0.36, 1.0).ui, dark: ToocRGB(0.5, 0.58, 1.0).ui)
+
+    /// One colour in light, another in dark.
+    static func tooc(light: UIColor, dark: UIColor) -> Color {
+        Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? dark : light })
+    }
 }
 
 extension EnvironmentValues {
@@ -322,7 +370,7 @@ struct ToocCropView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("キャンセル")
                 }
                 ToolbarItem(placement: .topBarTrailing) {

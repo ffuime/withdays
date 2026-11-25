@@ -58,7 +58,7 @@ struct ToocLaterSheet: View {
                         .listRowBackground(Color.clear)
                     }
                 } footer: {
-                    Text("あとで返信した人がそのトークで何か送ると、印は消えます。")
+                    Text("あとで返信した人がそのトークで何か送ると、印は消えます。").toocFont(.footnote)
                 }
             }
             .listStyle(.insetGrouped)
@@ -83,7 +83,7 @@ struct ToocLaterSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("閉じる")
                 }
             }
@@ -253,7 +253,7 @@ struct ToocReactionsSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("閉じる")
                 }
             }

@@ -289,9 +289,9 @@ struct ToocFontSettingsView: View {
                         }
                 }
             } header: {
-                Text("Google Fonts")
+                Text("Google Fonts").toocFont(.footnote)
             } footer: {
-                Text("一覧では名前の文字だけを読み込んでいます。選ぶとフォント全体がダウンロードされ、この端末に残ります。使わなくなったフォントは左にスワイプして削除できます。")
+                Text("一覧では名前の文字だけを読み込んでいます。選ぶとフォント全体がダウンロードされ、この端末に残ります。使わなくなったフォントは左にスワイプして削除できます。").toocFont(.footnote)
             }
         }
         .navigationTitle("フォント")

@@ -241,6 +241,8 @@ struct ToocRoomView: View {
         let joinedBelow: Bool
         /// A つづき whose message isn't right above it (someone else wrote in between).
         let followsFar: Bool
+        /// A つづき of someone else's message right above: a thin line links them. True when that one is yours.
+        let linkedFromMine: Bool?
         var id: UUID { message.id }
     }
 
@@ -264,7 +266,11 @@ struct ToocRoomView: View {
                 message: message, first: first, last: last,
                 joinedAbove: !first && message.isText && (previous?.isText ?? false),
                 joinedBelow: !last && message.isText && (next?.isText ?? false),
-                followsFar: message.follows != nil && previous?.id != message.follows
+                followsFar: message.follows != nil && previous?.id != message.follows,
+                linkedFromMine: previous.flatMap { previous in
+                    message.follows == previous.id && previous.senderID != message.senderID
+                        ? previous.senderID == store.me.id : nil
+                }
             )
             let day = calendar.startOfDay(for: message.date)
             if days.last?.date == day {
@@ -291,6 +297,9 @@ struct ToocRoomView: View {
                                 VStack(alignment: item.message.senderID == store.me.id ? .trailing : .leading, spacing: 3) {
                                 if item.followsFar, let up = item.message.follows {
                                     followLink(up, mine: item.message.senderID == store.me.id)
+                                }
+                                if let fromMine = item.linkedFromMine {
+                                    ToocFollowLine(fromMine: fromMine)
                                 }
                                 ToocMessageRow(
                                     message: item.message,
@@ -433,8 +442,10 @@ struct ToocRoomView: View {
     /// Scrolls to a message and has it jump, so it's easy to spot.
     /// Over a つづき that isn't next to its message: where it continues from (tap to go there).
     private func followLink(_ id: UUID, mine: Bool) -> some View {
-        Button { jump(to: id) } label: {
-            Label("つづき", systemImage: "arrow.turn.left.up")
+        let from = room?.messages.first { $0.id == id }.map(\.senderID)
+        let title = from == nil || from == store.me.id ? "つづき" : "\(store.displayName(from ?? ""))へのつづき"
+        return Button { jump(to: id) } label: {
+            Label(title, systemImage: "arrow.turn.left.up")
                 .toocFont(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.vertical, 2)
@@ -549,10 +560,10 @@ struct ToocRoomView: View {
         }
     }
 
-    /// Pulled up while typing: sent as the つづき of your last message here (joined to it however long ago).
+    /// Pulled up while typing: sent as the つづき of the talk's last message (linked to it however long ago).
     private func sendContinuing() {
         continued += 1
-        send(follows: store.lastOwnMessage(in: roomID)?.id)
+        send(follows: store.lastMessage(in: roomID)?.id)
     }
 
     /// The input field follows the finger up or down: down closes the keyboard; up opens it, or — while typing —
@@ -585,7 +596,7 @@ struct ToocRoomView: View {
 
     /// Shown over the field while it's pulled up with something typed.
     private var continueHint: some View {
-        Label(store.lastOwnMessage(in: roomID) == nil ? "送信" : "つなげて送信", systemImage: "arrow.up")
+        Label(store.lastMessage(in: roomID) == nil ? "送信" : "つなげて送信", systemImage: "arrow.up")
             .toocFont(.caption.weight(.semibold))
             .foregroundStyle(.white)
             .padding(.horizontal, 11)
@@ -708,7 +719,7 @@ struct ToocRoomView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { scheduling = false } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { scheduling = false } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("キャンセル")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -857,7 +868,7 @@ struct ToocRoomView: View {
                 .accessibilityLabel("写真")
             }
             .toocFont(.system(size: 19, weight: .medium))
-            .foregroundStyle(theme.accent)
+            .foregroundStyle(Color.primary)
             .padding(.horizontal, 2)
             .glassEffect(.regular.interactive(), in: .capsule)
 
@@ -904,7 +915,7 @@ struct ToocRoomView: View {
                         } label: {
                             Image(systemName: showStickers ? "keyboard" : "face.smiling")
                                 .toocFont(.system(size: 21, weight: .medium))
-                                .foregroundStyle(showStickers ? theme.accent : Color.secondary)
+                                .foregroundStyle(showStickers ? Color.primary : Color.secondary)
                                 .contentTransition(.symbolEffect(.replace))
                                 .frame(width: 36, height: Self.barHeight)
                         }
@@ -1056,6 +1067,8 @@ struct ToocMessageRow: View {
     var arriving = false
     var onArrivingFrame: ((CGRect) -> Void)? = nil
     let actions: ToocMessageActions
+    /// Where the reply quote is (a double tap there opens the tree instead).
+    @State private var quoteFrame: CGRect = .zero
 
     @Environment(ToocStore.self) private var store
     @Environment(ToocRouter.self) private var router
@@ -1302,6 +1315,7 @@ struct ToocMessageRow: View {
                     if let quotedMessage = quoted {
                         quote(quotedMessage)
                             .contentShape(Rectangle())
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { quoteFrame = $0 }
                             // Twice: the 返信ツリー. Once: go to the message it answers.
                             .onTapGesture(count: 2) { actions.openThread() }
                             .onTapGesture { actions.showOriginal(quotedMessage.id) }
@@ -1335,19 +1349,15 @@ struct ToocMessageRow: View {
                     .padding(mine ? .trailing : .leading, ToocBubbleShape.tail)
             }
         }
-        .overlay {
-            if highlighted {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(theme.accent, lineWidth: 3)
-                    .padding(mine ? .trailing : .leading, ToocBubbleShape.tail)
-            }
-        }
         .opacity(message.sending || message.failed ? 0.6 : 1)
         .opacity(arriving ? 0 : 1)
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
             if arriving { onArrivingFrame?(frame) }
         }
-        .simultaneousGesture(TapGesture(count: 2).onEnded { toggleLater() }, isEnabled: canMarkLater && !isPhoto)
+        .simultaneousGesture(SpatialTapGesture(count: 2, coordinateSpace: .global).onEnded { tap in
+            guard quoted == nil || !quoteFrame.contains(tap.location) else { return }
+            toggleLater()
+        }, isEnabled: canMarkLater && !isPhoto)
         .sensoryFeedback(.impact(weight: .medium), trigger: later)
         .contextMenu {
             if !message.sending && !message.failed { menu }
@@ -1487,7 +1497,7 @@ struct ToocMessageRow: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button { showFull = false } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                        Button { showFull = false } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                             .accessibilityLabel("閉じる")
                     }
                 }
@@ -1825,7 +1835,7 @@ struct ToocSelectTextView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                        Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                             .accessibilityLabel("閉じる")
                     }
                 }
@@ -1943,7 +1953,7 @@ struct ToocThreadView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("閉じる")
                 }
             }
@@ -1972,7 +1982,6 @@ struct ToocThreadView: View {
                             joinedAbove: !first && message.isText && (previous?.isText ?? false),
                             joinedBelow: !last && message.isText && (next?.isText ?? false),
                             textSize: size,
-                            highlighted: message.id == messageID,
                             actions: .none
                         )
                         .padding(.top, first && index > 0 ? 10 : 0)
@@ -2033,5 +2042,32 @@ struct ToocThreadView: View {
             }
             draft = ""
         }
+    }
+}
+
+/// A thin line from someone's message down to the つづき sent to it from the other side.
+struct ToocFollowLine: View {
+    /// The message above is yours (the line runs from the right to the left).
+    let fromMine: Bool
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let height = proxy.size.height
+            let left: CGFloat = 72
+            let right = width - 36
+            let start = fromMine ? right : left
+            let end = fromMine ? left : right
+            let turn: CGFloat = end > start ? 8 : -8
+            Path { path in
+                path.move(to: CGPoint(x: start, y: 0))
+                path.addQuadCurve(to: CGPoint(x: start + turn, y: height / 2), control: CGPoint(x: start, y: height / 2))
+                path.addLine(to: CGPoint(x: end - turn, y: height / 2))
+                path.addQuadCurve(to: CGPoint(x: end, y: height), control: CGPoint(x: end, y: height / 2))
+            }
+            .stroke(Color.secondary.opacity(0.45), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+        }
+        .frame(height: 16)
+        .accessibilityHidden(true)
     }
 }

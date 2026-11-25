@@ -168,7 +168,7 @@ struct ToocEmailSettingsView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             } footer: {
-                Text("ログイン画面で toocID の代わりに使えます。")
+                Text("ログイン画面で toocID の代わりに使えます。").toocFont(.footnote)
             }
             Section {
                 Button(current == nil ? "登録する" : "変更する") {
@@ -329,7 +329,7 @@ struct ToocPhoneLoginView: View {
                         SecureField("新しいパスワード（8文字以上）", text: $newPassword)
                             .textContentType(.newPassword)
                     } header: {
-                        Text("パスワードを変える場合")
+                        Text("パスワードを変える場合").toocFont(.footnote)
                     }
                     Section {
                         Button("パスワードを設定") {
@@ -371,7 +371,7 @@ struct ToocPhoneLoginView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("閉じる")
                 }
             }

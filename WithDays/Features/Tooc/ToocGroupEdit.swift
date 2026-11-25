@@ -58,11 +58,13 @@ struct ToocGroupEditView: View {
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets())
                 }
-                Section("グループ名") {
+                Section {
                     TextField("グループ名", text: $name)
                         .disabled(!canEditProfile)
+                } header: {
+                    Text("グループ名").toocFont(.footnote)
                 }
-                Section("メンバー（\(members.count + 1)）") {
+                Section {
                     HStack(spacing: 12) {
                         ToocAvatar(user: store.me, size: 36)
                         Text("\(store.me.displayName)（あなた）")
@@ -87,13 +89,15 @@ struct ToocGroupEditView: View {
                         .disabled(inGroup ? !canRemove : !canAdd)
                         .opacity((inGroup ? canRemove : canAdd) ? 1 : 0.45)
                     }
+                } header: {
+                    Text("メンバー（\(members.count + 1)）").toocFont(.footnote)
                 }
             }
             .navigationTitle("グループプロフィール")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("キャンセル")
                 }
                 ToolbarItem(placement: .topBarTrailing) {

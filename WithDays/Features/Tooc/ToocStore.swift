@@ -918,10 +918,10 @@ final class ToocStore {
         return all.filter { members.contains($0.id) }
     }
 
-    /// Your last message in the talk that something can continue (つなげて送信).
-    func lastOwnMessage(in roomID: String) -> ToocMessage? {
+    /// The talk's last message (anyone's), which つなげて送信 continues.
+    func lastMessage(in roomID: String) -> ToocMessage? {
         room(roomID)?.messages.last { message in
-            message.senderID == me.id && message.scheduledAt == nil && !message.isUnsent && !message.system && !message.failed
+            message.scheduledAt == nil && !message.isUnsent && !message.system && !message.failed
         }
     }
 

@@ -190,8 +190,8 @@ struct ToocMessage: Identifiable, Hashable, Codable {
     /// How many have read it (in a group), or whether the other person has (1 / 0).
     var readCount = 0
     var replyTo: UUID?
-    /// Sent as the つづき of this earlier message of yours: drawn joined to it however long after, and part of its
-    /// 返信ツリー (it's not a quote).
+    /// Sent as the つづき of this earlier message (anyone's): joined to it however long after — the bubbles join when
+    /// it's the same person's, a thin line links them when not — and part of its 返信ツリー (it's not a quote).
     var follows: UUID?
     /// Sent as a mute message: it reaches them without a notification.
     var silent = false
@@ -456,6 +456,8 @@ struct ToocSettings: Hashable, Codable {
     /// The talk's text size in points, set freely with a slider.
     var textPoints: Double = 17
     var theme: ToocTheme = .standard
+    /// ライト・ダーク・自動 (every theme has both).
+    var appearance: ToocAppearance = .system
     /// Return sends instead of starting a new line.
     var returnSends = false
     /// The five reactions at the top of a message's long-press menu.
@@ -466,7 +468,7 @@ struct ToocSettings: Hashable, Codable {
     init() {}
 
     enum CodingKeys: String, CodingKey {
-        case notifications, showContent, textPoints, textSize, theme, returnSends, favoriteReactions, font
+        case notifications, showContent, textPoints, textSize, theme, appearance, returnSends, favoriteReactions, font
     }
 
     func encode(to encoder: Encoder) throws {
@@ -475,6 +477,7 @@ struct ToocSettings: Hashable, Codable {
         try c.encode(showContent, forKey: .showContent)
         try c.encode(textPoints, forKey: .textPoints)
         try c.encode(theme, forKey: .theme)
+        try c.encode(appearance, forKey: .appearance)
         try c.encode(returnSends, forKey: .returnSends)
         try c.encode(favoriteReactions, forKey: .favoriteReactions)
         try c.encodeIfPresent(font, forKey: .font)
@@ -493,6 +496,12 @@ struct ToocSettings: Hashable, Codable {
             textPoints = Double(step.points)
         }
         theme = try container.decodeIfPresent(ToocTheme.self, forKey: .theme) ?? defaults.theme
+        appearance = try container.decodeIfPresent(ToocAppearance.self, forKey: .appearance) ?? defaults.appearance
+        // 夜 was a theme of its own: now tooc, in dark.
+        if theme == .night {
+            theme = .standard
+            if (try? container.decodeIfPresent(ToocAppearance.self, forKey: .appearance)) == nil { appearance = .dark }
+        }
         returnSends = try container.decodeIfPresent(Bool.self, forKey: .returnSends) ?? defaults.returnSends
         favoriteReactions = try container.decodeIfPresent([String].self, forKey: .favoriteReactions) ?? defaults.favoriteReactions
         font = try container.decodeIfPresent(String.self, forKey: .font)

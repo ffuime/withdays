@@ -171,7 +171,9 @@ struct ToocRootView: View {
         .toocFont(.body)
         .environment(\.toocFontFamily, ToocFontLibrary.shared.family(store.settings.font))
         .tint(theme.accent)
-        .environment(\.colorScheme, theme.dark ? .dark : colorScheme)
+        // ライト・ダーク・自動: the screen, its sheets and its bars all follow.
+        .environment(\.colorScheme, store.settings.appearance.colorScheme ?? colorScheme)
+        .preferredColorScheme(store.signedIn ? store.settings.appearance.colorScheme : nil)
         // No scaling or blurring of the screen itself while switching: done to the whole TabView, it left the
         // tab bar and top bar laid out shrunk toward the middle. The overlay's own frosted layer covers it instead.
         .overlay {
@@ -324,8 +326,8 @@ struct ToocRootView: View {
         Label {
             Text(title)
         } icon: {
-            Image(systemName: router.tab == tab ? "\(symbol).fill" : symbol)
-                .environment(\.symbolVariants, .none)
+            Image(uiImage: UIImage(systemName: router.tab == tab ? "\(symbol).fill" : symbol) ?? UIImage())
+                .renderingMode(.template)
         }
         .environment(\.symbolVariants, .none)
     }
@@ -338,7 +340,7 @@ struct ToocRootView: View {
             if router.selecting {
                 Button("完了") { withAnimation(.snappy) { router.endSelecting() } }
                     .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.primary)
             } else {
                 if let onCalendar {
                     Button(action: onCalendar) { ToocBarIcon("chevron.left") }
@@ -406,7 +408,7 @@ struct ToocBarIcon: View {
     var body: some View {
         Image(systemName: name)
             .toocFont(.system(size: 15, weight: .semibold))
-            .foregroundStyle(.primary)
+            .foregroundStyle(Color.primary)
     }
 }
 
@@ -484,10 +486,12 @@ struct ToocAddFriendSection: View {
     @Environment(ToocRouter.self) private var router
 
     var body: some View {
-        Section("友だち追加") {
+        Section {
             Button("MyQRを表示", systemImage: "qrcode") { router.sheet = .qr(.show) }
             Button("MyQRをスキャン", systemImage: "qrcode.viewfinder") { router.sheet = .qr(.scan) }
             Button("toocIDで検索", systemImage: "at") { router.sheet = .find("") }
+        } header: {
+            Text("友だち追加").toocFont(.footnote)
         }
     }
 }

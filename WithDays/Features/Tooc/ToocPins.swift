@@ -34,7 +34,7 @@ struct ToocPinBar: View {
                 } label: {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Color.toocBrand)
+                        .foregroundStyle(Color.primary)
                         .rotationEffect(.degrees(expanded ? 180 : 0))
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())

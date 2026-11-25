@@ -50,7 +50,7 @@ private struct ToocEditorToolbar: ToolbarContent {
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+            Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                 .accessibilityLabel("キャンセル")
         }
         ToolbarItem(placement: .topBarTrailing) {
@@ -83,8 +83,10 @@ struct ToocPollEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("質問") {
+                Section {
                     TextField("例：打ち上げどこにする？", text: $question, axis: .vertical)
+                } header: {
+                    Text("質問").toocFont(.footnote)
                 }
                 Section {
                     ForEach(options.indices, id: \.self) { index in
@@ -97,7 +99,7 @@ struct ToocPollEditor: View {
                         Button("選択肢を追加", systemImage: "plus") { options.append("") }
                     }
                 } header: {
-                    Text("選択肢")
+                    Text("選択肢").toocFont(.footnote)
                 }
                 Section {
                     Toggle("複数選択できる", isOn: $multiple)
@@ -129,8 +131,10 @@ struct ToocDatePollEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("タイトル") {
+                Section {
                     TextField("例：打ち上げ", text: $title)
+                } header: {
+                    Text("タイトル").toocFont(.footnote)
                 }
                 Section {
                     ForEach(dates, id: \.self) { date in
@@ -146,7 +150,7 @@ struct ToocDatePollEditor: View {
                         }
                     }
                 } header: {
-                    Text("候補日（\(dates.count)）")
+                    Text("候補日（\(dates.count)）").toocFont(.footnote)
                 }
                 ToocDeadlineSection(on: $hasDeadline, date: $deadline)
             }
@@ -180,10 +184,12 @@ struct ToocAmidaEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("タイトル") {
+                Section {
                     TextField("例：買い出し係", text: $title)
+                } header: {
+                    Text("タイトル").toocFont(.footnote)
                 }
-                Section("参加する人") {
+                Section {
                     ForEach(entrants.indices, id: \.self) { index in
                         TextField("参加者\(index + 1)", text: $entrants[index])
                     }
@@ -193,13 +199,15 @@ struct ToocAmidaEditor: View {
                     if entrants.count < 10 {
                         Button("参加者を追加", systemImage: "plus") { entrants.append("") }
                     }
+                } header: {
+                    Text("参加する人").toocFont(.footnote)
                 }
                 Section {
                     ForEach(prizes.indices, id: \.self) { index in
                         TextField("結果\(index + 1)", text: $prizes[index])
                     }
                 } header: {
-                    Text("結果")
+                    Text("結果").toocFont(.footnote)
                 }
             }
             .navigationTitle("あみだくじ")
@@ -274,7 +282,7 @@ struct ToocLocationPicker: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("キャンセル")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -599,7 +607,7 @@ struct ToocAmidaSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("閉じる")
                 }
             }

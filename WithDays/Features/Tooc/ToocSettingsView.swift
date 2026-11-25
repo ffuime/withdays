@@ -29,9 +29,9 @@ struct ToocSettingsView: View {
             Section {
                 Toggle("toocIDで友だち追加を許可", isOn: Binding(get: { store.me.findable }, set: { store.setFindable($0) }))
             } header: {
-                Text("プライバシー")
+                Text("プライバシー").toocFont(.footnote)
             } footer: {
-                Text("オフのあいだは、toocIDを入力して検索されても見つかりません。QRコードとリンクからは追加できます。")
+                Text("オフのあいだは、toocIDを入力して検索されても見つかりません。QRコードとリンクからは追加できます。").toocFont(.footnote)
             }
             Section {
                 link("tooc について", "info.circle", .settingsAbout)
@@ -67,7 +67,7 @@ struct ToocAccountSettingsView: View {
             Section {
                 Button("アカウントを切り替え", systemImage: "person.2.circle") { router.sheet = .accounts }
             } footer: {
-                Text("じぶんタブの長押しでも切り替えられます。ダブルタップで前のアカウントに戻ります。")
+                Text("じぶんタブの長押しでも切り替えられます。ダブルタップで前のアカウントに戻ります。").toocFont(.footnote)
             }
             Section {
                 Button("ログアウト") { confirmLogOut = true }
@@ -110,9 +110,9 @@ struct ToocPasswordView: View {
                     .textContentType(.newPassword)
             } footer: {
                 if !again.isEmpty, new != again {
-                    Text("新しいパスワードが一致しません。")
+                    Text("新しいパスワードが一致しません。").toocFont(.footnote)
                 } else {
-                    Text("8文字以上")
+                    Text("8文字以上").toocFont(.footnote)
                 }
             }
             Section {
@@ -167,25 +167,31 @@ struct ToocHiddenSettingsView: View {
 
     var body: some View {
         List {
-            Section("非表示の友だち") {
+            Section {
                 if store.hiddenFriends.isEmpty { empty }
                 ForEach(store.hiddenFriends) { user in
                     row(user.displayName, user: user, action: "再表示") { store.showFriend(user.id) }
                 }
+            } header: {
+                Text("非表示の友だち").toocFont(.footnote)
             }
-            Section("ブロック中") {
+            Section {
                 if store.blockedUsers.isEmpty { empty }
                 ForEach(store.blockedUsers) { user in
                     row(user.displayName, user: user, action: "ブロック解除") { store.unblock(user.id) }
                 }
+            } header: {
+                Text("ブロック中").toocFont(.footnote)
             }
-            Section("非表示のトーク") {
+            Section {
                 if store.hiddenRooms.isEmpty { empty }
                 ForEach(store.hiddenRooms) { room in
                     row(store.name(of: room), user: store.iconUser(of: room), action: "再表示") {
                         store.update(room.id) { $0.hidden = false }
                     }
                 }
+            } header: {
+                Text("非表示のトーク").toocFont(.footnote)
             }
         }
         .navigationTitle("非表示・ブロック")
@@ -214,7 +220,7 @@ struct ToocTalkSettingsView: View {
     var body: some View {
         @Bindable var store = store
         Form {
-            Section("文字サイズ") {
+            Section {
                 HStack(spacing: 12) {
                     Text("あ").toocFont(.system(size: 13))
                     Slider(value: $store.settings.textPoints, in: 12...30)
@@ -228,6 +234,8 @@ struct ToocTalkSettingsView: View {
                     .padding(.vertical, 8)
                     .background(store.theme.myBubble, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .frame(maxWidth: .infinity, alignment: .trailing)
+            } header: {
+                Text("文字サイズ").toocFont(.footnote)
             }
             Section {
                 NavigationLink(value: ToocRoute.settingsFont) {
@@ -235,6 +243,12 @@ struct ToocTalkSettingsView: View {
                 }
             }
             Section {
+                Picker("外観", selection: $store.settings.appearance.animation(.smooth)) {
+                    ForEach(ToocAppearance.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 12) {
                     ForEach(ToocTheme.allCases) { option in
                         Button {
@@ -265,7 +279,7 @@ struct ToocTalkSettingsView: View {
                 }
                 .padding(.vertical, 4)
             } header: {
-                Text("テーマ")
+                Text("テーマ").toocFont(.footnote)
             }
             Section {
                 Toggle("改行キーで送信", isOn: $store.settings.returnSends)
@@ -304,7 +318,7 @@ struct ToocAboutView: View {
                 NavigationLink("更新履歴", value: ToocRoute.settingsChangelog)
                 NavigationLink("権利表示", value: ToocRoute.settingsCredits)
             } footer: {
-                Text("tooc は WithDays と一緒に更新されます。バージョンは WithDays と同じです。")
+                Text("tooc は WithDays と一緒に更新されます。バージョンは WithDays と同じです。").toocFont(.footnote)
             }
         }
         .navigationTitle("tooc について")
@@ -335,9 +349,9 @@ struct ToocChangelogView: View {
                 ForEach(entry.notes, id: \.self) { Text($0).toocFont(.system(size: 14)) }
             } header: {
                 HStack {
-                    Text(entry.release.version)
+                    Text(entry.release.version).toocFont(.footnote)
                     Spacer()
-                    Text(entry.release.date)
+                    Text(entry.release.date).toocFont(.footnote)
                 }
             }
         }
@@ -378,28 +392,30 @@ struct ToocCreditsView: View {
             Section {
                 ForEach(references) { row($0) }
             } header: {
-                Text("UI・機能の参考")
+                Text("UI・機能の参考").toocFont(.footnote)
             } footer: {
-                Text("tooc の画面や機能は、これらのアプリを参考にしています。tooc は各社とは関係ありません。")
+                Text("tooc の画面や機能は、これらのアプリを参考にしています。tooc は各社とは関係ありません。").toocFont(.footnote)
             }
-            Section("サービス・API") {
+            Section {
                 ForEach(services) { row($0) }
+            } header: {
+                Text("サービス・API").toocFont(.footnote)
             }
             Section {
                 ForEach(ToocFontChoice.all) { font in
                     Text(font.label)
                 }
             } header: {
-                Text("フォント")
+                Text("フォント").toocFont(.footnote)
             } footer: {
-                Text("いずれも Google Fonts から配布され、SIL Open Font License 1.1 のもとで使用しています。")
+                Text("いずれも Google Fonts から配布され、SIL Open Font License 1.1 のもとで使用しています。").toocFont(.footnote)
             }
             Section {
                 ForEach(marks) { row($0) }
             } header: {
-                Text("ロゴ・商標")
+                Text("ロゴ・商標").toocFont(.footnote)
             } footer: {
-                Text("共有ボタンに各社のロゴを使用しています。各社のロゴは、各社のブランドガイドラインに沿って表示しています。")
+                Text("共有ボタンに各社のロゴを使用しています。各社のロゴは、各社のブランドガイドラインに沿って表示しています。").toocFont(.footnote)
             }
         }
         .navigationTitle("権利表示")

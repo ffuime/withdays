@@ -51,7 +51,7 @@ struct ToocNewTalkView: View {
                     Section {
                         TextField("グループ名", text: $name)
                     } footer: {
-                        Text(chosen.isEmpty ? "メンバーを選んでください" : "\(chosen.count)人を選択中（あなたを含めて\(chosen.count + 1)人）")
+                        Text(chosen.isEmpty ? "メンバーを選んでください" : "\(chosen.count)人を選択中（あなたを含めて\(chosen.count + 1)人）").toocFont(.footnote)
                     }
                 }
                 Section {
@@ -90,7 +90,7 @@ struct ToocNewTalkView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("閉じる")
                 }
                 if group {
@@ -141,7 +141,7 @@ struct ToocFindView: View {
                 content
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
-                            Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                            Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                                 .accessibilityLabel("閉じる")
                         }
                     }
@@ -302,18 +302,20 @@ struct ToocEditProfileView: View {
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets())
                 }
-                Section("名前") {
+                Section {
                     TextField("名前", text: $name)
                         .onChange(of: name) { _, new in if new.count > 20 { name = String(new.prefix(20)) } }
+                } header: {
+                    Text("名前").toocFont(.footnote)
                 }
                 Section {
                     TextField("ひとこと", text: $bio, axis: .vertical)
                         .lineLimit(3...8)
                         .onChange(of: bio) { _, new in if new.count > 500 { bio = String(new.prefix(500)) } }
                 } header: {
-                    Text("Mybio")
+                    Text("Mybio").toocFont(.footnote)
                 } footer: {
-                    Text("\(bio.count)/500")
+                    Text("\(bio.count)/500").toocFont(.footnote)
                 }
                 Section {
                     Toggle("誕生日を表示", isOn: $hasBirthday.animation(.snappy))
@@ -329,7 +331,7 @@ struct ToocEditProfileView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("キャンセル")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -461,7 +463,7 @@ struct ToocSearchView: View {
         let hits: [Hit] = q.isEmpty ? [] : Self.hits(in: store.visibleRooms, q)
         List {
             if !rooms.isEmpty {
-                Section("トーク") {
+                Section {
                     ForEach(rooms) { room in
                         Button { router.path = [.room(room.id)] } label: {
                             HStack(spacing: 12) {
@@ -471,10 +473,12 @@ struct ToocSearchView: View {
                         }
                         .listRowBackground(Color.clear)
                     }
+                } header: {
+                    Text("トーク").toocFont(.footnote)
                 }
             }
             if !friends.isEmpty {
-                Section("友だち") {
+                Section {
                     ForEach(friends) { friend in
                         Button { router.sheet = .profile(friend.id) } label: {
                             HStack(spacing: 12) {
@@ -487,10 +491,12 @@ struct ToocSearchView: View {
                         }
                         .listRowBackground(Color.clear)
                     }
+                } header: {
+                    Text("友だち").toocFont(.footnote)
                 }
             }
             if !hits.isEmpty {
-                Section("メッセージ") {
+                Section {
                     ForEach(hits) { hit in
                         Button { router.path = [.room(hit.room.id)] } label: {
                             HStack(spacing: 12) {
@@ -511,6 +517,8 @@ struct ToocSearchView: View {
                         }
                         .listRowBackground(Color.clear)
                     }
+                } header: {
+                    Text("メッセージ").toocFont(.footnote)
                 }
             }
         }
@@ -583,7 +591,7 @@ struct ToocRoomSearchView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("閉じる")
                 }
             }
@@ -619,7 +627,7 @@ struct ToocMembersView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("閉じる")
                 }
             }

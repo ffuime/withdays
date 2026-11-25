@@ -19,7 +19,7 @@ struct ToocFriendListView: View {
                             .selectionDisabled()
                     }
                 } header: {
-                    Text("友だち申請")
+                    Text("友だち申請").toocFont(.footnote)
                 }
             }
             ForEach(store.friends) { friend in

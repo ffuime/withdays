@@ -25,7 +25,7 @@ struct ToocGroupRolesView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("閉じる")
                 }
             }
@@ -50,12 +50,12 @@ struct ToocGroupRolesView: View {
             Section {
                 ForEach(admins) { user in row(user, role: "管理人", room: room, admin: admin) }
             } header: {
-                Text("管理人")
+                Text("管理人").toocFont(.footnote)
             } footer: {
-                Text("メンバーの追加・削除、グループプロフィールの変更、グループの削除、権限の設定ができます。")
+                Text("メンバーの追加・削除、グループプロフィールの変更、グループの削除、権限の設定ができます。").toocFont(.footnote)
             }
             if !operators.isEmpty {
-                Section("オペレーター") {
+                Section {
                     ForEach(operators) { user in
                         row(user, role: "オペレーター", room: room, admin: admin)
                         if admin {
@@ -81,11 +81,15 @@ struct ToocGroupRolesView: View {
                                 .padding(.leading, 44)
                         }
                     }
+                } header: {
+                    Text("オペレーター").toocFont(.footnote)
                 }
             }
             if !members.isEmpty {
-                Section("メンバー") {
+                Section {
                     ForEach(members) { user in row(user, role: nil, room: room, admin: admin) }
+                } header: {
+                    Text("メンバー").toocFont(.footnote)
                 }
             }
             Section {
@@ -95,7 +99,7 @@ struct ToocGroupRolesView: View {
                 ))
                 .disabled(!admin)
             } footer: {
-                Text("オンにすると「◯◯を追加しました」「◯◯が退会しました」がトークに出ます。")
+                Text("オンにすると「◯◯を追加しました」「◯◯が退会しました」がトークに出ます。").toocFont(.footnote)
             }
         }
         .tint(theme.accent)

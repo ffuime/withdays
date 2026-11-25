@@ -68,7 +68,7 @@ struct ToocAccountsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("閉じる")
                 }
             }
@@ -97,7 +97,7 @@ struct ToocSavedAccountsSection: View {
 
     var body: some View {
         if !store.savedAccounts.isEmpty {
-            Section("この端末のアカウント") {
+            Section {
                 ForEach(store.savedAccounts) { saved in
                     Button {
                         working = saved.id
@@ -125,6 +125,8 @@ struct ToocSavedAccountsSection: View {
                 .onDelete { offsets in
                     for index in offsets { store.forgetAccount(store.savedAccounts[index].id) }
                 }
+            } header: {
+                Text("この端末のアカウント").toocFont(.footnote)
             }
             .alert("ログインできませんでした", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
                 Button("OK", role: .cancel) {}

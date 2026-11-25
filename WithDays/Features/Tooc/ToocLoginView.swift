@@ -65,7 +65,7 @@ struct ToocLoginView: View {
                         .onSubmit(submit)
                 } footer: {
                     if creating {
-                        Text("toocIDは半角英数字と . _ の4〜20文字、パスワードは8文字以上です。メールアドレスや電話番号の登録はあとからできます。")
+                        Text("toocIDは半角英数字と . _ の4〜20文字、パスワードは8文字以上です。メールアドレスや電話番号の登録はあとからできます。").toocFont(.footnote)
                     }
                 }
 
@@ -98,7 +98,7 @@ struct ToocLoginView: View {
             .toolbar {
                 if let onCalendar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button(action: onCalendar) { Image(systemName: "chevron.left").foregroundStyle(.primary) }
+                        Button(action: onCalendar) { Image(systemName: "chevron.left").foregroundStyle(Color.primary) }
                             .accessibilityLabel("カレンダーに戻る")
                     }
                 }

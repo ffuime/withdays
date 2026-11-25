@@ -154,7 +154,7 @@ struct ToocStickerMaker: View {
                         }
                     } footer: {
                         if removeBackground && lifted == nil && !lifting {
-                            Text("写っているものを見つけられませんでした。背景ごとスタンプになります。")
+                            Text("写っているものを見つけられませんでした。背景ごとスタンプになります。").toocFont(.footnote)
                         }
                     }
                 }
@@ -163,7 +163,7 @@ struct ToocStickerMaker: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("キャンセル")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -325,7 +325,7 @@ struct ToocForwardView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("キャンセル")
                 }
                 ToolbarItem(placement: .topBarTrailing) {

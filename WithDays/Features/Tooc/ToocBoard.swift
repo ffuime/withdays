@@ -374,11 +374,11 @@ struct ToocNotesView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("閉じる")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { composing = true } label: { Image(systemName: "square.and.pencil").foregroundStyle(.primary) }
+                    Button { composing = true } label: { Image(systemName: "square.and.pencil").foregroundStyle(Color.primary) }
                         .accessibilityLabel("投稿する")
                 }
             }
@@ -611,7 +611,7 @@ struct ToocNoteComposer: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("キャンセル")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -745,11 +745,11 @@ struct ToocAlbumsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("閉じる")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { creating = true } label: { Image(systemName: "plus").foregroundStyle(.primary) }
+                    Button { creating = true } label: { Image(systemName: "plus").foregroundStyle(Color.primary) }
                         .accessibilityLabel("アルバムを作成")
                 }
             }
@@ -959,8 +959,10 @@ struct ToocAlbumCreate: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("アルバム名") {
+                Section {
                     TextField("例：夏休み", text: $title)
+                } header: {
+                    Text("アルバム名").toocFont(.footnote)
                 }
                 Section {
                     ToocPickedPhotos(images: $images)
@@ -973,7 +975,7 @@ struct ToocAlbumCreate: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("キャンセル")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -1116,7 +1118,7 @@ struct ToocAddToAlbumSheet: View {
                             .foregroundStyle(Color.toocBrand)
                     }
                 }
-                Section("このトークのアルバム") {
+                Section {
                     if !board.loadedAlbums {
                         ProgressView().frame(maxWidth: .infinity)
                     } else if board.albums.isEmpty {
@@ -1135,6 +1137,8 @@ struct ToocAddToAlbumSheet: View {
                             .contentShape(Rectangle())
                         }
                     }
+                } header: {
+                    Text("このトークのアルバム").toocFont(.footnote)
                 }
             }
             .toocFont(.body)
@@ -1144,7 +1148,7 @@ struct ToocAddToAlbumSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.primary) }
                         .accessibilityLabel("閉じる")
                 }
             }
