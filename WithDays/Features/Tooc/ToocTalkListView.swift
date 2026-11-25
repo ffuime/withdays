@@ -6,6 +6,7 @@ struct ToocTalkListView: View {
     @Environment(ToocStore.self) private var store
     @Environment(ToocRouter.self) private var router
     @Environment(\.toocTheme) private var theme
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         @Bindable var router = router
@@ -25,11 +26,14 @@ struct ToocTalkListView: View {
                                 .environment(store)
                                 .environment(router)
                                 .environment(\.toocTheme, theme)
+                                .environment(\.colorScheme, scheme)
                         },
                         content: ToocTalkRow(room: room)
                             .environment(store)
                             .environment(router)
                             .environment(\.toocTheme, theme)
+                            .environment(\.colorScheme, scheme),
+                        scheme: scheme
                     )
                     .frame(height: ToocTalkRow.height)
                 }

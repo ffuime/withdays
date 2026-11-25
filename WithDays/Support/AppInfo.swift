@@ -23,6 +23,10 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.29.2", date: "2026.11.26", notes: [
+            "tooc：最下部へボタンと返信元へボタン、引用全体をタップ可能に、移動先を強く表示、つづきの線をタップで返信ツリー",
+            "tooc：テーマを変えたときにトーク一覧の文字色が変わらない問題、他人どうしのつづきの線の形を修正",
+        ]),
         Release(version: "1.29.1", date: "2026.11.25", notes: [
             "tooc：テーマを1つの一覧に、「薄暮」を「トワイライト」に、グループの人数を丸いバッジで表示",
             "tooc：テーマを変えたときに文字色が追いつかない問題、返信ツリーの左右の余白、タブのアイコンを修正",

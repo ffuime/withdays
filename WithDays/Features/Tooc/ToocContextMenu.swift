@@ -16,15 +16,20 @@ struct ToocContextMenuHost<Content: View, Preview: View>: UIViewControllerRepres
     var onOpen: () -> Void
     var preview: () -> Preview
     var content: Content
+    /// Light or dark as around it (the row is drawn in a host of its own, which doesn't follow by itself).
+    var scheme: ColorScheme = .light
 
     func makeUIViewController(context: Context) -> UIHostingController<Content> {
         let host = UIHostingController(rootView: content)
+        host.overrideUserInterfaceStyle = scheme == .dark ? .dark : .light
         host.view.backgroundColor = .clear
         host.view.addInteraction(UIContextMenuInteraction(delegate: context.coordinator))
         return host
     }
 
     func updateUIViewController(_ host: UIHostingController<Content>, context: Context) {
+        let style: UIUserInterfaceStyle = scheme == .dark ? .dark : .light
+        if host.overrideUserInterfaceStyle != style { host.overrideUserInterfaceStyle = style }
         host.rootView = content
         context.coordinator.parent = self
     }
@@ -43,6 +48,7 @@ struct ToocContextMenuHost<Content: View, Preview: View>: UIViewControllerRepres
             let parent = self.parent
             return UIContextMenuConfiguration(identifier: nil, previewProvider: {
                 let host = UIHostingController(rootView: parent.preview())
+                host.overrideUserInterfaceStyle = parent.scheme == .dark ? .dark : .light
                 host.preferredContentSize = CGSize(width: 340, height: 460)
                 return host
             }, actionProvider: { _ in

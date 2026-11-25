@@ -45,6 +45,10 @@ struct ToocRoomView: View {
     @State private var selecting: String?
     @State private var searching = false
     @State private var highlight: UUID?
+    /// Scrolled up from the newest messages (the 最下部へ button shows).
+    @State private var awayFromBottom = false
+    /// The reply whose quote was tapped to go up to what it answers (the 返信元へ button takes you back).
+    @State private var returnTo: UUID?
     @State private var showMembers = false
     @State private var editingGroup = false
     @State private var confirmClear = false
@@ -241,8 +245,8 @@ struct ToocRoomView: View {
         let joinedBelow: Bool
         /// A つづき whose message isn't right above it (someone else wrote in between).
         let followsFar: Bool
-        /// A つづき of someone else's message right above: a thin line links them. True when that one is yours.
-        let linkedFromMine: Bool?
+        /// A つづき of someone else's message right above: a thin line links them.
+        let link: ToocFollowLine.Sides?
         var id: UUID { message.id }
     }
 
@@ -267,9 +271,11 @@ struct ToocRoomView: View {
                 joinedAbove: !first && message.isText && (previous?.isText ?? false),
                 joinedBelow: !last && message.isText && (next?.isText ?? false),
                 followsFar: message.follows != nil && previous?.id != message.follows,
-                linkedFromMine: previous.flatMap { previous in
+                link: previous.flatMap { previous in
                     message.follows == previous.id && previous.senderID != message.senderID
-                        ? previous.senderID == store.me.id : nil
+                        ? ToocFollowLine.Sides(fromMine: previous.senderID == store.me.id,
+                                               toMine: message.senderID == store.me.id)
+                        : nil
                 }
             )
             let day = calendar.startOfDay(for: message.date)
@@ -298,8 +304,12 @@ struct ToocRoomView: View {
                                 if item.followsFar, let up = item.message.follows {
                                     followLink(up, mine: item.message.senderID == store.me.id)
                                 }
-                                if let fromMine = item.linkedFromMine {
-                                    ToocFollowLine(fromMine: fromMine)
+                                if let link = item.link {
+                                    // Tap the line: the 返信ツリー the two are part of.
+                                    ToocFollowLine(sides: link)
+                                        .onTapGesture { threadOf = item.message }
+                                        .accessibilityAddTraits(.isButton)
+                                        .accessibilityLabel("返信ツリーを開く")
                                 }
                                 ToocMessageRow(
                                     message: item.message,
@@ -314,6 +324,16 @@ struct ToocRoomView: View {
                                     onArrivingFrame: { frame in landFlight(item.message.id, at: frame) },
                                     actions: actions(for: item.message)
                                 )
+                                }
+                                // Shown from a reply: a soft wash behind the whole row as well as the jump.
+                                .background {
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .fill(theme.accent.opacity(highlight == item.message.id ? 0.16 : 0))
+                                        .padding(.horizontal, -8)
+                                        .padding(.vertical, -4)
+                                        .animation(.easeOut(duration: highlight == item.message.id ? 0.2 : 0.8),
+                                                   value: highlight == item.message.id)
+                                        .allowsHitTesting(false)
                                 }
                                 .padding(.top, item.first && item.message.id != day.items.first?.message.id ? 10 : 0)
                                 .id(item.message.id)
@@ -339,6 +359,18 @@ struct ToocRoomView: View {
             }
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentSize.height - geometry.visibleRect.maxY > 240
+            } action: { _, away in
+                withAnimation(.snappy) {
+                    awayFromBottom = away
+                    // Back at the newest messages yourself: nothing to return to.
+                    if !away { returnTo = nil }
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                scrollButtons(reader)
+            }
             .overlay {
                 if list.isEmpty && waiting.isEmpty {
                     Button {
@@ -368,6 +400,58 @@ struct ToocRoomView: View {
     }
 
     private static let dayLabelHeight: CGFloat = 40
+    private static let scrollButtonSize: CGFloat = 44
+
+    /// 最下部へ (scrolled up a little), and above it, after going up from a reply's quote, 返信元へ: it comes out of
+    /// 最下部へ and turns a quarter clockwise to stand upright, as wide as it.
+    private func scrollButtons(_ reader: ScrollViewProxy) -> some View {
+        VStack(spacing: 10) {
+            if awayFromBottom, let back = returnTo {
+                Button {
+                    returnTo = nil
+                    jump(to: back)
+                } label: {
+                    ToocQuarterTurn {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.uturn.backward")
+                                .font(.system(size: 15, weight: .semibold))
+                                .rotationEffect(.degrees(-90))
+                            Text("返信元へ")
+                                .toocFont(.system(size: 14, weight: .semibold))
+                        }
+                        .foregroundStyle(Color.primary)
+                        .padding(.horizontal, 16)
+                        .frame(height: Self.scrollButtonSize)
+                        .fixedSize()
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("返信元へ戻る")
+                .transition(ToocSplitOff(distance: Self.scrollButtonSize + 10))
+                .zIndex(0)
+            }
+            if awayFromBottom {
+                Button {
+                    withAnimation(.snappy) { reader.scrollTo("bottom", anchor: .bottom) }
+                } label: {
+                    Image(systemName: "arrow.down")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Color.primary)
+                        .frame(width: Self.scrollButtonSize, height: Self.scrollButtonSize)
+                        .glassEffect(.regular.interactive(), in: .circle)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("最下部へ")
+                .transition(.scale(scale: 0.5).combined(with: .opacity))
+                .zIndex(1)
+            }
+        }
+        .padding(.trailing, 14)
+        .padding(.bottom, 12)
+        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: returnTo)
+        .animation(.snappy, value: awayFromBottom)
+    }
 
     /// The day: plain text, no background.
     private func dayLabel(_ date: Date) -> some View {
@@ -433,7 +517,11 @@ struct ToocRoomView: View {
                     quickLook = target
                 }
             },
-            showOriginal: { id in jump(to: id) },
+            showOriginal: { id in
+                // Up from this reply: 返信元へ brings you back to it.
+                returnTo = message.id
+                jump(to: id)
+            },
             addToAlbum: { addingToAlbum = message },
             openThread: { threadOf = message }
         )
@@ -1070,6 +1158,7 @@ struct ToocMessageRow: View {
     let actions: ToocMessageActions
     /// Where the reply quote is (a double tap there opens the tree instead).
     @State private var quoteFrame: CGRect = .zero
+    @State private var quoteTapped = 0
 
     @Environment(ToocStore.self) private var store
     @Environment(ToocRouter.self) private var router
@@ -1250,14 +1339,16 @@ struct ToocMessageRow: View {
                 .rotationEffect(.degrees(value.angle))
         } keyframes: { _ in
             KeyframeTrack(\.scale) {
-                SpringKeyframe(1.12, duration: 0.18)
-                SpringKeyframe(0.96, duration: 0.16)
+                SpringKeyframe(1.18, duration: 0.2)
+                SpringKeyframe(0.95, duration: 0.16)
+                SpringKeyframe(1.06, duration: 0.16)
                 SpringKeyframe(1.0, duration: 0.3)
             }
             KeyframeTrack(\.angle) {
-                CubicKeyframe(-3, duration: 0.09)
-                CubicKeyframe(3, duration: 0.12)
-                CubicKeyframe(-2, duration: 0.12)
+                CubicKeyframe(-4, duration: 0.09)
+                CubicKeyframe(4, duration: 0.12)
+                CubicKeyframe(-3, duration: 0.12)
+                CubicKeyframe(2, duration: 0.12)
                 CubicKeyframe(0, duration: 0.14)
             }
         }
@@ -1313,17 +1404,22 @@ struct ToocMessageRow: View {
             switch message.kind {
             case .text(let text):
                 let shape = ToocBubbleShape(mine: mine, tail: first, joinedAbove: joinedAbove, joinedBelow: joinedBelow)
-                VStack(alignment: .leading, spacing: 6) {
+                ToocBubbleStack(spacing: 6) {
                     if let quotedMessage = quoted {
                         quote(quotedMessage)
                             .contentShape(Rectangle())
                             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { quoteFrame = $0 }
                             // Twice: the 返信ツリー. Once: go to the message it answers.
                             .onTapGesture(count: 2) { actions.openThread() }
-                            .onTapGesture { actions.showOriginal(quotedMessage.id) }
+                            .onTapGesture {
+                                quoteTapped += 1
+                                actions.showOriginal(quotedMessage.id)
+                            }
+                            .sensoryFeedback(.impact(weight: .light), trigger: quoteTapped)
                             .accessibilityAddTraits(.isButton)
                             .accessibilityHint("返信元へ移動。ダブルタップで返信ツリー")
                             .accessibilityAction(named: "返信ツリー") { actions.openThread() }
+                            .layoutValue(key: ToocFillsWidth.self, value: true)
                     }
                     longText(text)
                 }
@@ -1544,8 +1640,33 @@ struct ToocMessageRow: View {
                 Text(quoted.preview).toocFont(.caption).lineLimit(1)
             }
             .foregroundStyle(mine ? Color.white.opacity(0.85) : Color.secondary)
+            Spacer(minLength: 0)
         }
         .fixedSize(horizontal: false, vertical: true)
+        .padding(.vertical, 5)
+        .padding(.leading, 6)
+        .padding(.trailing, 8)
+        .background((mine ? Color.white : theme.accent).opacity(0.14),
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        // Tapped: a quick press, the box lighting up.
+        .keyframeAnimator(initialValue: ToocQuotePress(), trigger: quoteTapped) { content, value in
+            content
+                .scaleEffect(value.scale)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill((mine ? Color.white : theme.accent).opacity(value.glow))
+                        .allowsHitTesting(false)
+                }
+        } keyframes: { _ in
+            KeyframeTrack(\.scale) {
+                SpringKeyframe(0.95, duration: 0.1)
+                SpringKeyframe(1.0, duration: 0.3)
+            }
+            KeyframeTrack(\.glow) {
+                LinearKeyframe(0.3, duration: 0.08)
+                LinearKeyframe(0, duration: 0.45)
+            }
+        }
     }
 
     // MARK: Reply swipe
@@ -1888,6 +2009,83 @@ struct ToocNudge {
     var angle = 0.0
 }
 
+/// A reply's quote being tapped.
+struct ToocQuotePress {
+    var scale = 1.0
+    var glow = 0.0
+}
+
+/// Marks the part of a bubble that stretches to the bubble's width without making it wider (a reply's quote).
+struct ToocFillsWidth: LayoutValueKey {
+    static let defaultValue = false
+}
+
+/// A bubble's column: as wide as its widest part, every part given that width (so a quote spans the bubble).
+struct ToocBubbleStack: Layout {
+    var spacing: CGFloat = 6
+
+    private func width(_ proposal: ProposedViewSize, _ subviews: Subviews) -> CGFloat {
+        subviews.map { subview in
+            if subview[ToocFillsWidth.self] {
+                let ideal = subview.sizeThatFits(.unspecified).width
+                return min(ideal, proposal.width ?? ideal)
+            }
+            return subview.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil)).width
+        }.max() ?? 0
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = width(proposal, subviews)
+        let heights = subviews.map { $0.sizeThatFits(ProposedViewSize(width: width, height: nil)).height }
+        return CGSize(width: width, height: heights.reduce(0, +) + spacing * CGFloat(max(0, subviews.count - 1)))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for subview in subviews {
+            let height = subview.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil)).height
+            subview.place(at: CGPoint(x: bounds.minX, y: y), anchor: .topLeading,
+                          proposal: ProposedViewSize(width: bounds.width, height: height))
+            y += height + spacing
+        }
+    }
+}
+
+/// Its content turned a quarter clockwise, taking the turned size (tall where the content is wide).
+struct ToocQuarterTurn<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        ToocQuarterTurnLayout {
+            content.rotationEffect(.degrees(90))
+        }
+    }
+}
+
+private struct ToocQuarterTurnLayout: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let size = subviews.first?.sizeThatFits(.unspecified) ?? .zero
+        return CGSize(width: size.height, height: size.width)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: CGPoint(x: bounds.midX, y: bounds.midY), anchor: .center, proposal: .unspecified)
+    }
+}
+
+/// 返信元へ coming out of 最下部へ under it: from its place, small and lying flat, turning upright as it rises.
+struct ToocSplitOff: Transition {
+    let distance: CGFloat
+
+    func body(content: Content, phase: TransitionPhase) -> some View {
+        content
+            .rotationEffect(.degrees(phase.isIdentity ? 0 : -90))
+            .scaleEffect(phase.isIdentity ? 1 : 0.45)
+            .offset(y: phase.isIdentity ? 0 : distance)
+            .opacity(phase.isIdentity ? 1 : 0)
+    }
+}
+
 /// Text on its way from the input field into its new bubble.
 struct ToocFlight: Identifiable {
     let id: UUID
@@ -2064,10 +2262,17 @@ struct ToocThreadView: View {
     }
 }
 
-/// A thin line from someone's message down to the つづき sent to it from the other side.
+/// A thin line from someone's message down to the つづき sent to it by someone else: across from one side to the
+/// other, or straight down when both are on the left (two other people in a group). Tap it for the 返信ツリー.
 struct ToocFollowLine: View {
-    /// The message above is yours (the line runs from the right to the left).
-    let fromMine: Bool
+    struct Sides: Equatable {
+        /// The message above is yours (on the right).
+        let fromMine: Bool
+        /// The つづき is yours.
+        let toMine: Bool
+    }
+
+    let sides: Sides
 
     var body: some View {
         GeometryReader { proxy in
@@ -2075,18 +2280,23 @@ struct ToocFollowLine: View {
             let height = proxy.size.height
             let left: CGFloat = 72
             let right = width - 36
-            let start = fromMine ? right : left
-            let end = fromMine ? left : right
-            let turn: CGFloat = end > start ? 8 : -8
+            let start = sides.fromMine ? right : left
+            let end = sides.toMine ? right : left
             Path { path in
                 path.move(to: CGPoint(x: start, y: 0))
-                path.addQuadCurve(to: CGPoint(x: start + turn, y: height / 2), control: CGPoint(x: start, y: height / 2))
-                path.addLine(to: CGPoint(x: end - turn, y: height / 2))
-                path.addQuadCurve(to: CGPoint(x: end, y: height), control: CGPoint(x: end, y: height / 2))
+                if start == end {
+                    path.addLine(to: CGPoint(x: end, y: height))
+                } else {
+                    let turn: CGFloat = end > start ? 8 : -8
+                    path.addQuadCurve(to: CGPoint(x: start + turn, y: height / 2), control: CGPoint(x: start, y: height / 2))
+                    path.addLine(to: CGPoint(x: end - turn, y: height / 2))
+                    path.addQuadCurve(to: CGPoint(x: end, y: height), control: CGPoint(x: end, y: height / 2))
+                }
             }
             .stroke(Color.secondary.opacity(0.45), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
         }
         .frame(height: 16)
-        .accessibilityHidden(true)
+        // Easy to hit: the whole strip takes the tap.
+        .contentShape(Rectangle())
     }
 }
