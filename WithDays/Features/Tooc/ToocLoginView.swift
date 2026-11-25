@@ -24,7 +24,7 @@ struct ToocLoginView: View {
                         Image("ToocLogo")
                             .resizable()
                             .scaledToFit()
-                            .frame(height: 64)
+                            .frame(height: 96)
                             .accessibilityLabel("tooc")
                         Text(creating ? "toocIDとパスワードを決めるだけではじめられます" : "toocID（またはメールアドレス）とパスワードでログイン")
                             .toocFont(.footnote)

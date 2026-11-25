@@ -179,28 +179,38 @@ struct ToocTalkRow: View {
                         .padding(.top, 3)
                         .frame(maxHeight: .infinity, alignment: .top)
                 }
-                // The count stays where it always is (under the time); あとで sits to its left without moving
-                // anything, or alone in the count's place.
+                // The count stays where it always is (under the time). The other marks line up to its left
+                // without moving anything (from the left: @, あとで, the count), or take its place when there's none.
                 if room.unread > 0 {
                     ToocCountBadge(count: room.unread, prominent: true)
                         .opacity(room.muted ? 0.45 : 1)
                         .overlay(alignment: .leading) {
-                            if store.hasLater(room.id) {
-                                ToocLaterMark(size: 22)
-                                    .fixedSize()
-                                    .alignmentGuide(.leading) { $0.width + 4 }
-                                    .transition(.scale.combined(with: .opacity))
-                            }
+                            sideMarks
+                                .fixedSize()
+                                .alignmentGuide(.leading) { $0.width + 4 }
                         }
-                } else if store.hasLater(room.id) {
-                    ToocLaterMark(size: 22)
-                        .transition(.scale.combined(with: .opacity))
+                } else {
+                    sideMarks
                 }
             }
             .fixedSize(horizontal: true, vertical: false)
         }
         .frame(height: Self.height)
         .contentShape(Rectangle())
+    }
+
+    /// @ (someone called you) and あとで, side by side.
+    private var sideMarks: some View {
+        HStack(spacing: 4) {
+            if room.mentioned {
+                ToocMentionMark()
+                    .transition(.scale.combined(with: .opacity))
+            }
+            if store.hasLater(room.id) {
+                ToocLaterMark(size: 22)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
     }
 
     private func openProfile() {
@@ -220,12 +230,6 @@ struct ToocTalkRow: View {
                 .lineLimit(1)
             if room.isGroup {
                 ToocCountBadge(count: room.memberIDs.count + 1)
-            }
-            if room.mentioned {
-                Image(systemName: "at.circle.fill")
-                    .toocFont(.system(size: 13, weight: .bold))
-                    .foregroundStyle(theme.accent)
-                    .accessibilityLabel("メンションがあります")
             }
             Group {
                 if !room.draft.isEmpty { Image(systemName: "pencil.circle.fill") }
@@ -309,5 +313,19 @@ struct ToocStartTalkText: View {
             .onAppear {
                 withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: false)) { phase = 1 }
             }
+    }
+}
+
+/// @ beside the unread count: someone called you in a message you haven't read.
+struct ToocMentionMark: View {
+    var size: CGFloat = 22
+
+    var body: some View {
+        Image(systemName: "at")
+            .font(.system(size: size * 0.55, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(Circle().fill(Color.toocBrand))
+            .accessibilityLabel("メンションがあります")
     }
 }

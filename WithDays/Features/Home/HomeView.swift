@@ -16,6 +16,7 @@ struct HomeView: View {
     @Environment(ToastCenter.self) private var toasts
     /// Plain state (saved on change) so switching can animate; @AppStorage updates don't carry the animation.
     @State private var mode = UserDefaults.standard.string(forKey: SettingsKey.homeMode) ?? HomeMode.calendar.rawValue
+    @Environment(\.scenePhase) private var scenePhase
 
     /// Pages are month offsets from the month the app launched in.
     private static let pageRange = -600...600
@@ -122,6 +123,12 @@ struct HomeView: View {
             modeContent
                 .animation(.snappy(duration: 0.35), value: mode)
                 .onChange(of: mode) { _, new in UserDefaults.standard.set(new, forKey: SettingsKey.homeMode) }
+                // Leaving the app closes whatever service is open: it comes back to the calendar.
+                .onChange(of: scenePhase) { _, phase in
+                    guard phase == .background, mode != HomeMode.calendar.rawValue else { return }
+                    holderSwap = false
+                    mode = HomeMode.calendar.rawValue
+                }
                 .toolbar { toolbar }
                 .navigationBarTitleDisplayMode(.inline)
                 .navigationDestination(for: HomeRoute.self) { route in

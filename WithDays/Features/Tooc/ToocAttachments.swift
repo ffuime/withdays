@@ -171,8 +171,6 @@ struct ToocAmidaEditor: View {
     @State private var entrants: [String] = []
     @State private var prizes: [String] = []
     @State private var loaded = false
-    @State private var hasDeadline = false
-    @State private var deadline = defaultDeadline()
 
     private var ready: Bool {
         entrants.count >= 2 && entrants.allSatisfy { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -203,15 +201,15 @@ struct ToocAmidaEditor: View {
                 } header: {
                     Text("結果")
                 }
-                ToocDeadlineSection(on: $hasDeadline, date: $deadline)
             }
             .navigationTitle("あみだくじ")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToocEditorToolbar(canSend: ready, dismiss: dismiss) {
                     let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    // No deadline: a draw is over as soon as it's drawn.
                     onSend(.amida(ToocAmida(title: name.isEmpty ? "あみだくじ" : name, entrants: entrants, prizes: prizes,
-                                            deadline: hasDeadline ? deadline : nil)))
+                                            deadline: nil)))
                 }
             }
             .onChange(of: entrants.count) { fitPrizes() }
@@ -514,7 +512,6 @@ struct ToocCardBubble: View {
             header("あみだくじ", "line.3.horizontal")
             Text(amida.title)
                 .toocFont(.headline)
-            deadline(amida.deadline)
             if amida.revealed {
                 ForEach(amida.entrants.indices, id: \.self) { index in
                     HStack {

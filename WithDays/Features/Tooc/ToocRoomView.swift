@@ -33,6 +33,8 @@ struct ToocRoomView: View {
     @State private var flightProgress: CGFloat = 0
     @State private var inputFrame: CGRect = .zero
     @State private var choosingUrgency = false
+    @State private var managingRoles = false
+    @State private var confirmDeleteGroup = false
     @State private var composer: ToocComposer?
     @State private var selecting: String?
     @State private var searching = false
@@ -87,6 +89,16 @@ struct ToocRoomView: View {
             }
             .toolbar { toolbar(room) }
             .background(theme.fill.ignoresSafeArea())
+            .sheet(isPresented: $managingRoles) { ToocGroupRolesView(roomID: roomID) }
+            .alert("グループを削除しますか？", isPresented: $confirmDeleteGroup) {
+                Button("キャンセル", role: .cancel) {}
+                Button("削除", role: .destructive) {
+                    dismiss()
+                    store.deleteGroup(roomID)
+                }
+            } message: {
+                Text("メンバー全員のトーク一覧から消え、元に戻せません。")
+            }
     }
 
     /// The talk with its bars, title and arrival; the sheets and covers are added in `body`.
@@ -656,7 +668,13 @@ struct ToocRoomView: View {
             Section {
                 if room.isGroup {
                     Button("メンバー", systemImage: "person.2") { showMembers = true }
-                    Button("グループプロフィールを編集", systemImage: "pencil") { editingGroup = true }
+                    // Only for those allowed to change something there (管理人, or an オペレーター handed it).
+                    if ToocGroupPermission.allCases.contains(where: { store.can($0, in: room) }) {
+                        Button("グループプロフィールを編集", systemImage: "pencil") { editingGroup = true }
+                    }
+                    Button(store.isAdmin(room) ? "管理人・権限" : "管理人", systemImage: "person.badge.key") {
+                        managingRoles = true
+                    }
                 } else if !room.isMynote, let other = room.memberIDs.first {
                     Button("プロフィール", systemImage: "person.crop.circle") { router.sheet = .profile(other) }
                 }
@@ -681,6 +699,9 @@ struct ToocRoomView: View {
                 if room.isGroup {
                     Button("グループを退会", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
                         confirmLeave = true
+                    }
+                    if store.isAdmin(room) {
+                        Button("グループを削除", systemImage: "trash.fill", role: .destructive) { confirmDeleteGroup = true }
                     }
                 }
             }
@@ -955,7 +976,18 @@ struct ToocMessageRow: View {
     private var later: Bool { store.isLater(message.id) || message.laterBy.contains(store.me.id) }
 
     var body: some View {
-        if message.isUnsent {
+        if message.system, case .text(let text) = message.kind {
+            // Written by tooc for the group (someone added or left).
+            Text(text)
+                .toocFont(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(theme.theirBubble, in: Capsule())
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+        } else if message.isUnsent {
             Text(mine ? "送信を取り消しました" : "\(store.displayName(message.senderID))が送信を取り消しました")
                 .toocFont(.caption)
                 .foregroundStyle(.secondary)

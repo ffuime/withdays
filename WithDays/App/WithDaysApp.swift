@@ -1,3 +1,4 @@
+import FirebaseAuth
 import FirebaseCore
 import MediaPlayer
 import SlidesFeature
@@ -5,13 +6,15 @@ import SwiftUI
 import UIKit
 import UserNotifications
 
-/// Only for the screen's orientation: portrait, except while Slides plays.
+/// The screen's orientation (portrait, except while Slides plays), and what Firebase's phone check needs from the app.
 final class WithDaysAppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         SlidesFonts.registerImportedFonts()
         // tooc's server: only when the build carries Firebase's settings.
         if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
             FirebaseApp.configure()
+            // The phone check first tries a silent push; without one it falls back to reCAPTCHA.
+            application.registerForRemoteNotifications()
         }
         // tooc's notifications open their talk when tapped.
         UNUserNotificationCenter.current().delegate = ToocNotificationDelegate.shared
@@ -20,6 +23,32 @@ final class WithDaysAppDelegate: NSObject, UIApplicationDelegate {
 
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         SlidesOrientation.supported
+    }
+
+    // MARK: Firebase phone check
+    // SwiftUI's app delegate isn't swizzled by Firebase, so the push token, the check's silent push and its
+    // reCAPTCHA link are handed over here (Firebase refuses to send the code otherwise).
+
+    private var firebase: Bool { FirebaseApp.app() != nil }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        guard firebase else { return }
+        Auth.auth().setAPNSToken(deviceToken, type: .unknown)
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {}
+
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        if firebase, Auth.auth().canHandleNotification(userInfo) {
+            completionHandler(.noData)
+            return
+        }
+        completionHandler(.noData)
+    }
+
+    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        firebase && Auth.auth().canHandle(url)
     }
 }
 

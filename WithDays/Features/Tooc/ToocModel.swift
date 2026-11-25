@@ -192,6 +192,8 @@ struct ToocMessage: Identifiable, Hashable, Codable {
     var laterBy: [String] = []
     /// How soon the sender hopes for an answer (温度感), if they said.
     var urgency: ToocUrgency?
+    /// Written by tooc for the group (someone added or left): shown small in the middle.
+    var system = false
 
     var preview: String {
         switch kind {
@@ -246,6 +248,7 @@ struct ToocMessage: Identifiable, Hashable, Codable {
 extension ToocMessage {
     enum CodingKeys: String, CodingKey {
         case id, senderID, kind, date, sending, readCount, replyTo, silent, scheduledAt, reactions, edited, mentions, urgency
+        case laterBy, system
     }
 
     /// Messages saved by an older version (scheduled ones) have no mentions yet.
@@ -263,6 +266,8 @@ extension ToocMessage {
         edited = try c.decodeIfPresent(Bool.self, forKey: .edited) ?? false
         mentions = try c.decodeIfPresent([String].self, forKey: .mentions) ?? []
         urgency = try c.decodeIfPresent(ToocUrgency.self, forKey: .urgency)
+        laterBy = try c.decodeIfPresent([String].self, forKey: .laterBy) ?? []
+        system = try c.decodeIfPresent(Bool.self, forKey: .system) ?? false
     }
 }
 
@@ -289,6 +294,12 @@ struct ToocRoom: Identifiable, Hashable, Codable {
     var backgroundURL: String?
     /// Messages pinned to the top of the talk (shared by everyone in it), newest pin first.
     var pinnedMessages: [ToocPin] = []
+    /// A group's 管理人 (toocIDs): they can do everything, including the roles. At least one.
+    var admins: [String] = []
+    /// A group's オペレーター and what each may do (toocID → permissions), set by the 管理人.
+    var operators: [String: Set<ToocGroupPermission>] = [:]
+    /// Whether 「◯◯を追加しました」/「◯◯が退会しました」 appear in the talk (the 管理人 chooses).
+    var announceMembership = true
 
     /// Sent (or arrived) messages, oldest first; scheduled ones wait apart.
     var sent: [ToocMessage] { messages.filter { $0.scheduledAt == nil } }
@@ -339,6 +350,28 @@ struct ToocNotice: Identifiable, Hashable, Codable {
     var userID: String?
     var roomID: String?
     var seen = false
+}
+
+/// What a group's 管理人 can hand to an オペレーター, one by one.
+enum ToocGroupPermission: String, CaseIterable, Codable, Identifiable {
+    case addMembers, removeMembers, editProfile
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .addMembers: "メンバーを追加"
+        case .removeMembers: "メンバーを削除"
+        case .editProfile: "グループプロフィールを変更"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .addMembers: "person.badge.plus"
+        case .removeMembers: "person.badge.minus"
+        case .editProfile: "pencil"
+        }
+    }
 }
 
 /// A message pinned to the top of a talk. The words and sender are kept with the pin, so it shows even when the

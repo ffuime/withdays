@@ -149,16 +149,21 @@ struct ToocRootView: View {
 
     var body: some View {
         let theme = store.theme
+        // Signing out (or deleting the account) fades and settles into the sign-in form, and back.
         Group {
             if store.signedIn {
                 main
+                    .transition(.asymmetric(insertion: .opacity,
+                                            removal: .opacity.combined(with: .scale(scale: 0.94))))
             } else if store.starting {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ToocLoginView(onCalendar: onCalendar)
+                    .transition(.asymmetric(insertion: .opacity.combined(with: .scale(scale: 1.04)), removal: .opacity))
             }
         }
+        .animation(.smooth(duration: 0.5), value: store.signedIn)
         .environment(store)
         .environment(router)
         .environment(\.toocTheme, theme)
@@ -232,10 +237,13 @@ struct ToocRootView: View {
         @Bindable var router = router
         return NavigationStack(path: $router.path) {
             tabs
+                .tint(store.theme.accent)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbar }
-                .navigationDestination(for: ToocRoute.self) { ToocDestination(route: $0) }
+                .navigationDestination(for: ToocRoute.self) { ToocDestination(route: $0).tint(store.theme.accent) }
         }
+        // The bar's own buttons (‹ back) in tooc's colour; the screens keep the theme's.
+        .tint(Color.toocBrand)
         .sheet(item: $router.sheet) { ToocSheetView(sheet: $0) }
         .alert(router.confirm?.title ?? "", isPresented: Binding(
             get: { router.confirm != nil }, set: { if !$0 { router.confirm = nil } }

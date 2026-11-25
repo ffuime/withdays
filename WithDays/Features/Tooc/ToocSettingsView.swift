@@ -52,9 +52,9 @@ struct ToocSettingsView: View {
 
 struct ToocAccountSettingsView: View {
     @Environment(ToocStore.self) private var store
+    @Environment(ToocRouter.self) private var router
     @State private var confirmLogOut = false
     @State private var confirmDelete = false
-    @State private var deleteError: String?
 
     var body: some View {
         List {
@@ -65,6 +65,11 @@ struct ToocAccountSettingsView: View {
                 NavigationLink("電話番号", value: ToocRoute.settingsPhone)
             }
             Section {
+                Button("アカウントを切り替え", systemImage: "person.2.circle") { router.sheet = .accounts }
+            } footer: {
+                Text("じぶんタブの長押しでも切り替えられます。ダブルタップで前のアカウントに戻ります。")
+            }
+            Section {
                 Button("ログアウト") { confirmLogOut = true }
             }
             Section {
@@ -73,28 +78,10 @@ struct ToocAccountSettingsView: View {
         }
         .navigationTitle("アカウント")
         .navigationBarTitleDisplayMode(.inline)
-        .alert("削除できませんでした", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(deleteError ?? "")
-        }
+        .fullScreenCover(isPresented: $confirmDelete) { ToocDeleteAccountView() }
         .alert("ログアウトしますか？", isPresented: $confirmLogOut) {
             Button("キャンセル", role: .cancel) {}
             Button("ログアウト", role: .destructive) { store.logOut() }
-        }
-        .alert("アカウントを削除しますか？", isPresented: $confirmDelete) {
-            Button("キャンセル", role: .cancel) {}
-            Button("削除", role: .destructive) {
-                Task {
-                    do {
-                        try await store.deleteAccount()
-                    } catch {
-                        deleteError = error.localizedDescription
-                    }
-                }
-            }
-        } message: {
-            Text("友だち・トーク・写真がすべて消え、元に戻せません。")
         }
     }
 }
@@ -302,7 +289,7 @@ struct ToocAboutView: View {
                     Image("ToocLogo")
                         .resizable()
                         .scaledToFit()
-                        .frame(height: 84)
+                        .frame(height: 110)
                         .accessibilityLabel("tooc")
                     Text(Self.summary)
                         .toocFont(.subheadline)

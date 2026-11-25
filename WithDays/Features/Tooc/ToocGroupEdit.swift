@@ -28,6 +28,9 @@ struct ToocGroupEditView: View {
     @State private var loaded = false
 
     private var room: ToocRoom? { store.room(roomID) }
+    private var canEditProfile: Bool { room.map { store.can(.editProfile, in: $0) } ?? false }
+    private var canAdd: Bool { room.map { store.can(.addMembers, in: $0) } ?? false }
+    private var canRemove: Bool { room.map { store.can(.removeMembers, in: $0) } ?? false }
 
     private var preview: ToocUser {
         var user = ToocUser(id: roomID, name: name.isEmpty ? "G" : name, bio: "", hue: ToocUser.hue(for: roomID))
@@ -51,11 +54,13 @@ struct ToocGroupEditView: View {
             Form {
                 Section {
                     header
+                        .allowsHitTesting(canEditProfile)
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets())
                 }
                 Section("グループ名") {
                     TextField("グループ名", text: $name)
+                        .disabled(!canEditProfile)
                 }
                 Section("メンバー（\(members.count + 1)）") {
                     HStack(spacing: 12) {
@@ -63,6 +68,7 @@ struct ToocGroupEditView: View {
                         Text("\(store.me.displayName)（あなた）")
                     }
                     ForEach(candidates) { user in
+                        let inGroup = room?.memberIDs.contains(user.id) == true
                         Button {
                             if members.contains(user.id) { members.remove(user.id) } else { members.insert(user.id) }
                         } label: {
@@ -77,6 +83,9 @@ struct ToocGroupEditView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        // Taking someone out needs メンバーを削除; bringing someone in needs メンバーを追加.
+                        .disabled(inGroup ? !canRemove : !canAdd)
+                        .opacity((inGroup ? canRemove : canAdd) ? 1 : 0.45)
                     }
                 }
             }
@@ -197,7 +206,7 @@ struct ToocWelcomeView: View {
                 Image("ToocLogo")
                     .resizable()
                     .scaledToFit()
-                    .frame(height: 62)
+                    .frame(height: 90)
                     .accessibilityLabel("tooc")
                     .scaleEffect(stage >= 1 ? 1 : 0.4)
                     .blur(radius: stage >= 1 ? 0 : 14)

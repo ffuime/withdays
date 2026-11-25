@@ -184,35 +184,45 @@ struct ToocMeView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            // Today's birthdays first, shown like the favourites, then the favourites.
+            if !store.birthdayFriends.isEmpty {
+                Divider().padding(.leading, 16)
+                friendRow("今日が誕生日", symbol: "birthday.cake.fill", tint: .pink, people: store.birthdayFriends)
+            }
             if !store.favorites.isEmpty {
                 Divider().padding(.leading, 16)
-                VStack(alignment: .leading, spacing: 10) {
-                    Label("お気に入り", systemImage: "star.fill")
-                        .toocFont(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    ScrollView(.horizontal) {
-                        HStack(spacing: 14) {
-                            ForEach(store.favorites) { friend in
-                                Button {
-                                    router.open(room: store.room(with: friend.id).id)
-                                } label: {
-                                    VStack(spacing: 5) {
-                                        ToocAvatar(user: friend, size: 52)
-                                        Text(friend.displayName)
-                                            .toocFont(.caption2)
-                                            .lineLimit(1)
-                                            .frame(width: 60)
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                    .scrollIndicators(.hidden)
-                }
-                .padding(16)
+                friendRow("お気に入り", symbol: "star.fill", tint: .secondary, people: store.favorites)
             }
         }
         .background(theme.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    /// A titled row of round icons; tap one to talk.
+    private func friendRow(_ title: String, symbol: String, tint: Color, people: [ToocUser]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(title, systemImage: symbol)
+                .toocFont(.caption.weight(.semibold))
+                .foregroundStyle(tint)
+            ScrollView(.horizontal) {
+                HStack(spacing: 14) {
+                    ForEach(people) { friend in
+                        Button {
+                            router.open(room: store.room(with: friend.id).id)
+                        } label: {
+                            VStack(spacing: 5) {
+                                ToocAvatar(user: friend, size: 52)
+                                Text(friend.displayName)
+                                    .toocFont(.caption2)
+                                    .lineLimit(1)
+                                    .frame(width: 60)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+        }
+        .padding(16)
     }
 }

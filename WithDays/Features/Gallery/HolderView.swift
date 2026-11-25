@@ -15,7 +15,7 @@ struct HolderView: View {
         ZStack {
             background
             if let image {
-                GalleryZoomableImage(image: image, zoomEnabled: settings.zoom, onLongPress: { showSettings = true })
+                GalleryZoomableImage(image: image, zoomEnabled: settings.zoom, onLongPress: openSettings)
             } else {
                 VStack(spacing: 10) {
                     Image(systemName: "rectangle.portrait.on.rectangle.portrait")
@@ -26,7 +26,7 @@ struct HolderView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
-                .onLongPressGesture(minimumDuration: 0.5) { showSettings = true }
+                .onLongPressGesture(minimumDuration: 0.5, perform: openSettings)
             }
         }
         .ignoresSafeArea()
@@ -47,8 +47,14 @@ struct HolderView: View {
                 }
             }
             .environment(store)
-            .presentationDetents([.medium, .large])
+            .presentationDetents([.large])
         }
+    }
+
+    /// A firm tap under the finger, and the settings straight up full height.
+    private func openSettings() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        showSettings = true
     }
 
     /// Around the photo.

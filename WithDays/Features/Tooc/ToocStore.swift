@@ -415,7 +415,9 @@ final class ToocStore {
     }
 
     /// Deletes the profile, the friend list and the sign-in. Talks stay with the others in them.
-    func deleteAccount() async throws {
+    /// Deletes the account on the server. With `leave: false` the screen stays as it is until `leaveDeleted()`
+    /// (so the goodbye animation can finish first).
+    func deleteAccount(leave: Bool = true) async throws {
         guard let user = Auth.auth().currentUser, let account else { return }
         do {
             for id in friendIDs.keys { try? await ToocServer.friends(account).document(id).delete() }
@@ -425,7 +427,18 @@ final class ToocStore {
         } catch {
             throw ToocError(ToocServer.describe(error))
         }
+        deletedAccount = account
+        if leave { leaveDeleted() }
+    }
+
+    @ObservationIgnored private var deletedAccount: String?
+
+    /// After deleting: forget the account on this device and go back to the sign-in form.
+    func leaveDeleted() {
+        guard let account = deletedAccount else { return }
+        deletedAccount = nil
         try? FileManager.default.removeItem(at: ToocLocal.file(account))
+        try? FileManager.default.removeItem(at: ToocMessageCache.folder(account))
         UserDefaults.standard.removeObject(forKey: Self.accountKey)
         forgetAccount(account)
         stop()
@@ -434,7 +447,8 @@ final class ToocStore {
     private func authChanged(_ user: FirebaseAuth.User?) {
         defer { starting = false }
         guard let user else {
-            if account != nil { stop() }
+            // A deleted account stays on screen until its goodbye has played (leaveDeleted).
+            if account != nil, deletedAccount == nil { stop() }
             return
         }
         guard account == nil else { return }
@@ -588,9 +602,20 @@ final class ToocStore {
             }
     }
 
+    /// A talk's messages. What this device already has comes from its own copy; only the newer messages (and the
+    /// last few it has, for reactions, reads and edits) come from the server. Photos load on their own when shown.
     private func listenToMessages(_ roomID: String) {
-        guard listeners["messages:\(roomID)"] == nil else { return }
-        listeners["messages:\(roomID)"] = ToocServer.messages(roomID).order(by: "date").limit(toLast: 300)
+        guard listeners["messages:\(roomID)"] == nil, let account else { return }
+        if serverMessages[roomID] == nil, let cached = ToocMessageCache.load(roomID, account: account) {
+            serverMessages[roomID] = cached.messages
+            for (id, readers) in cached.readBy { readBy[id] = readers }
+        }
+        let kept = serverMessages[roomID] ?? []
+        // From the last few kept messages on; without a copy, the last 300.
+        let since = kept.count > ToocMessageCache.overlap ? kept[kept.count - ToocMessageCache.overlap].date : nil
+        let query: Query = since.map { ToocServer.messages(roomID).whereField("date", isGreaterThanOrEqualTo: Timestamp(date: $0))
+            .order(by: "date") } ?? ToocServer.messages(roomID).order(by: "date").limit(toLast: 300)
+        listeners["messages:\(roomID)"] = query
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
                     guard let self else { return }
@@ -600,11 +625,17 @@ final class ToocStore {
                     }
                     guard let snapshot else { return }
                     let first = !self.loadedRooms.contains(roomID)
-                    var list: [ToocMessage] = []
+                    var fresh: [ToocMessage] = []
                     for doc in snapshot.documents {
-                        if let message = self.message(doc.documentID, doc.data()) { list.append(message) }
+                        if let message = self.message(doc.documentID, doc.data()) { fresh.append(message) }
                     }
+                    // The kept older ones, then what the server sent from `since` on (which replaces the rest).
+                    let older = since.map { since in (self.serverMessages[roomID] ?? []).filter { $0.date < since } } ?? []
+                    let list = older + fresh
                     self.serverMessages[roomID] = list
+                    if let account = self.account {
+                        ToocMessageCache.save(list, readBy: self.readBy, roomID: roomID, account: account)
+                    }
                     // Pending copies that reached the server are no longer needed.
                     let arrived = Set(list.map(\.id))
                     self.pending[roomID]?.removeAll { arrived.contains($0.id) }
@@ -699,6 +730,11 @@ final class ToocStore {
                             isGroup: data["isGroup"] as? Bool ?? false, isMynote: data["isMynote"] as? Bool ?? false)
         room.iconURL = data["iconURL"] as? String
         room.backgroundURL = data["backgroundURL"] as? String
+        // Groups from before there were roles: everyone in them is a 管理人 until one is chosen.
+        room.admins = data["admins"] as? [String] ?? (data["members"] as? [String] ?? [])
+        room.operators = (data["operators"] as? [String: [String]] ?? [:])
+            .mapValues { Set($0.compactMap(ToocGroupPermission.init(rawValue:))) }
+        room.announceMembership = data["announceMembership"] as? Bool ?? true
         room.pinnedMessages = (data["pins"] as? [String: [String: Any]] ?? [:]).compactMap { key, value in
             guard let id = UUID(uuidString: key) else { return nil }
             return ToocPin(messageID: id, senderID: value["sender"] as? String ?? "", text: value["text"] as? String ?? "",
@@ -735,6 +771,7 @@ final class ToocStore {
         message.mentions = data["mentions"] as? [String] ?? []
         message.laterBy = data["laterBy"] as? [String] ?? []
         message.urgency = (data["urgency"] as? Int).flatMap(ToocUrgency.init(rawValue:))
+        message.system = data["system"] as? Bool ?? false
         return message
     }
 
@@ -927,6 +964,15 @@ final class ToocStore {
     }
 
     var favorites: [ToocUser] { friends.filter(\.isFavorite) }
+    /// Friends whose birthday is today.
+    var birthdayFriends: [ToocUser] {
+        let today = Calendar.current.dateComponents([.month, .day], from: .now)
+        return friends.filter { friend in
+            guard let birthday = friend.birthday else { return false }
+            let day = Calendar.current.dateComponents([.month, .day], from: birthday)
+            return day.month == today.month && day.day == today.day
+        }
+    }
     var hiddenFriends: [ToocUser] {
         users.values.filter { $0.isFriend && $0.isHidden && !$0.isBlocked }.sorted { $0.displayName < $1.displayName }
     }
@@ -1081,6 +1127,8 @@ final class ToocStore {
             try? await ToocServer.room(id).setData([
                 "members": [account] + members, "memberUIDs": [mine] + uids, "isGroup": true, "isMynote": false,
                 "title": name, "updatedAt": Timestamp(date: .now),
+                // Whoever makes the group is its first 管理人.
+                "admins": [account], "announceMembership": true,
             ])
         }
         return room
@@ -1089,6 +1137,17 @@ final class ToocStore {
     func editGroup(_ id: String, name: String, iconFile: String?, backgroundFile: String?, members: [String]) {
         guard let account, let mine = Auth.auth().currentUser?.uid, let room = room(id) else { return }
         let uids = members.compactMap { users[$0]?.uid }
+        // Whoever was added or taken out, said in the talk if the 管理人 wants it.
+        let added = members.filter { !room.memberIDs.contains($0) }
+        let removed = room.memberIDs.filter { !members.contains($0) }
+        if room.announceMembership {
+            if !added.isEmpty {
+                send(.text("\(me.displayName)が\(added.map(displayName).joined(separator: "、"))を追加しました"), in: id, system: true)
+            }
+            if !removed.isEmpty {
+                send(.text("\(me.displayName)が\(removed.map(displayName).joined(separator: "、"))を削除しました"), in: id, system: true)
+            }
+        }
         Task {
             var fields: [String: Any] = [
                 "title": name.isEmpty ? (room.title ?? "") : name,
@@ -1106,13 +1165,93 @@ final class ToocStore {
     }
 
     func leave(_ id: String) {
-        guard let account, let mine = Auth.auth().currentUser?.uid, room(id)?.isGroup == true else { return }
+        guard let account, let mine = Auth.auth().currentUser?.uid, let room = room(id), room.isGroup else { return }
+        if room.announceMembership { send(.text("\(me.displayName)が退会しました"), in: id, system: true) }
+        var fields: [AnyHashable: Any] = [
+            "members": FieldValue.arrayRemove([account]),
+            "memberUIDs": FieldValue.arrayRemove([mine]),
+            "admins": FieldValue.arrayRemove([account]),
+            FieldPath(["operators", account]): FieldValue.delete(),
+        ]
+        // The last 管理人 leaving hands the group to someone still in it.
+        if room.admins == [account] || (room.admins.contains(account) && room.admins.count == 1),
+           let heir = room.memberIDs.first {
+            fields["admins"] = [heir]
+        }
+        serverRooms[id] = nil
+        rebuildRooms()
+        Task {
+            let waitFor = creating[id]
+            await waitFor?.value
+            try? await Task.sleep(for: .milliseconds(400))
+            try? await ToocServer.room(id).updateData(fields)
+        }
+    }
+
+    // MARK: Group roles
+
+    func isAdmin(_ room: ToocRoom) -> Bool { !room.isGroup || room.admins.contains(me.id) }
+
+    /// Whether you may do this in the group: 管理人 always; an オペレーター when handed it.
+    func can(_ permission: ToocGroupPermission, in room: ToocRoom) -> Bool {
+        isAdmin(room) || room.operators[me.id]?.contains(permission) == true
+    }
+
+    private func updateRoom(_ id: String, _ fields: [AnyHashable: Any], locally edit: (inout ToocRoom) -> Void) {
+        if var room = serverRooms[id] {
+            edit(&room)
+            serverRooms[id] = room
+            rebuildRooms()
+        }
+        Task { try? await ToocServer.room(id).updateData(fields) }
+    }
+
+    /// Makes someone a 管理人 too (sharing the role), or takes it back (never the last one).
+    func setAdmin(_ userID: String, _ on: Bool, in id: String) {
+        guard let room = room(id), isAdmin(room) else { return }
+        if !on, room.admins.filter({ $0 != userID }).isEmpty { return }
+        updateRoom(id, [
+            "admins": on ? FieldValue.arrayUnion([userID]) : FieldValue.arrayRemove([userID]),
+            FieldPath(["operators", userID]): FieldValue.delete(),
+        ]) { room in
+            room.admins.removeAll { $0 == userID }
+            if on { room.admins.append(userID) }
+            room.operators[userID] = nil
+        }
+    }
+
+    /// Hands your 管理人 role to someone else (you become a member).
+    func transferAdmin(to userID: String, in id: String) {
+        guard let room = room(id), isAdmin(room) else { return }
+        let next = room.admins.filter { $0 != me.id && $0 != userID } + [userID]
+        updateRoom(id, ["admins": next, FieldPath(["operators", userID]): FieldValue.delete()]) { room in
+            room.admins = next
+            room.operators[userID] = nil
+        }
+    }
+
+    /// Makes someone an オペレーター with these permissions (empty takes the role away).
+    func setOperator(_ userID: String, permissions: Set<ToocGroupPermission>?, in id: String) {
+        guard let room = room(id), isAdmin(room) else { return }
+        let value: Any
+        if let permissions { value = permissions.map(\.rawValue).sorted() } else { value = FieldValue.delete() }
+        updateRoom(id, [FieldPath(["operators", userID]): value]) { room in room.operators[userID] = permissions }
+    }
+
+    func setAnnounceMembership(_ on: Bool, in id: String) {
+        guard let room = room(id), isAdmin(room) else { return }
+        updateRoom(id, ["announceMembership": on]) { room in room.announceMembership = on }
+    }
+
+    /// Deletes the group for everyone (管理人 only): everyone is taken out, so it disappears from every list.
+    func deleteGroup(_ id: String) {
+        guard let room = room(id), room.isGroup, isAdmin(room) else { return }
         serverRooms[id] = nil
         rebuildRooms()
         Task {
             try? await ToocServer.room(id).updateData([
-                "members": FieldValue.arrayRemove([account]),
-                "memberUIDs": FieldValue.arrayRemove([mine]),
+                "members": [String](), "memberUIDs": [String](), "admins": [String](), "deleted": true,
+                "updatedAt": Timestamp(date: .now),
             ])
         }
     }
@@ -1260,11 +1399,12 @@ final class ToocStore {
 
     @discardableResult
     func send(_ kind: ToocMessage.Kind, in roomID: String, replyTo: UUID? = nil, silent: Bool = false, at time: Date? = nil,
-              mentions: [String] = [], urgency: ToocUrgency? = nil) -> UUID {
+              mentions: [String] = [], urgency: ToocUrgency? = nil, system: Bool = false) -> UUID {
         var message = ToocMessage(senderID: me.id, kind: kind, date: time ?? .now, sending: true, replyTo: replyTo,
                                   silent: silent, scheduledAt: time)
         message.mentions = mentions
         message.urgency = urgency
+        message.system = system
         if let time, time > .now {
             message.sending = false
             local.scheduled[roomID, default: []].append(message)
@@ -1273,7 +1413,7 @@ final class ToocStore {
             return message.id
         }
         // Saying something in the talk answers what was put off there.
-        clearLaters(in: roomID)
+        if !system { clearLaters(in: roomID) }
         message.scheduledAt = nil
         pending[roomID, default: []].append(message)
         if var prefs = local.rooms[roomID] {
@@ -1321,6 +1461,7 @@ final class ToocStore {
             if let reply = message.replyTo { fields["replyTo"] = reply.uuidString }
             if !message.mentions.isEmpty { fields["mentions"] = message.mentions }
             if let urgency = message.urgency { fields["urgency"] = urgency.rawValue }
+            if message.system { fields["system"] = true }
             do {
                 try await ToocServer.messages(roomID).document(message.id.uuidString).setData(fields)
                 // On the server: no longer "sending", even before the talk's listener hears of it.
