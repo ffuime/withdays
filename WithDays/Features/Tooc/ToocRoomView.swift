@@ -487,7 +487,7 @@ struct ToocRoomView: View {
                         .padding(.vertical, 8)
                         .background(theme.accent.opacity(0.5), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                         .contextMenu {
-                            Button("今すぐ送信", systemImage: "paperplane") {
+                            ToocMenuButton("今すぐ送信", systemImage: "paperplane") {
                                 withAnimation(.snappy) { store.sendNow(message.id, in: roomID) }
                             }
                             ToocDestructiveButton("送信予約を取り消す", systemImage: "xmark.circle") {
@@ -1337,7 +1337,7 @@ struct ToocMessageRow: View {
                 .background {
                     if !mine {
                         shape.fill(theme.theirBubble)
-                            .shadow(color: .black.opacity(0.12), radius: 3, x: 0, y: 1.5)
+                            .shadow(color: .black.opacity(0.09), radius: 3, x: 0, y: 1.5)
                     }
                 }
             case .photo(let file):
@@ -1386,22 +1386,22 @@ struct ToocMessageRow: View {
                     withAnimation(.snappy) { store.react(current == emoji ? nil : emoji, to: message.id, in: room.id) }
                 }
             }
-            Button("その他の絵文字", systemImage: "ellipsis", action: actions.moreReactions)
+            ToocMenuButton("その他の絵文字", systemImage: "ellipsis", action: actions.moreReactions)
         }
         .controlGroupStyle(.palette)
         .menuActionDismissBehavior(.enabled)
         if !canMarkLater && !inThread {
-            Button("返信", systemImage: "arrowshape.turn.up.left.fill", action: actions.reply)
+            ToocMenuButton("返信", systemImage: "arrowshape.turn.up.left.fill", action: actions.reply)
         } else {
         Menu {
-            Button("返信する", systemImage: "arrowshape.turn.up.left.fill", action: actions.reply)
+            ToocMenuButton("返信する", systemImage: "arrowshape.turn.up.left.fill", action: actions.reply)
             if canMarkLater {
-                Button(later ? "あとで返信を解除" : "あとで返信をマーク", systemImage: later ? "xmark.circle" : "hourglass") {
+                ToocMenuButton(later ? "あとで返信を解除" : "あとで返信をマーク", systemImage: later ? "xmark.circle" : "hourglass") {
                     toggleLater()
                 }
             }
             if inThread {
-                Button("返信ツリー", systemImage: "arrow.triangle.branch", action: actions.openThread)
+                ToocMenuButton("返信ツリー", systemImage: "arrow.triangle.branch", action: actions.openThread)
             }
         } label: {
             Label("返信", systemImage: "arrowshape.turn.up.left.fill")
@@ -1409,28 +1409,28 @@ struct ToocMessageRow: View {
         .tint(Color.primary)
         }
         if message.forwardable {
-            Button("転送", systemImage: "arrowshape.turn.up.right", action: actions.forward)
+            ToocMenuButton("転送", systemImage: "arrowshape.turn.up.right", action: actions.forward)
         }
         if isPhoto, !message.sending, !message.failed, !room.isMynote {
-            Button("アルバムに追加", systemImage: "photo.badge.plus", action: actions.addToAlbum)
+            ToocMenuButton("アルバムに追加", systemImage: "photo.badge.plus", action: actions.addToAlbum)
         }
         if pinned {
-            Button("ピン留めを解除", systemImage: "pin.slash") {
+            ToocMenuButton("ピン留めを解除", systemImage: "pin.slash") {
                 withAnimation(.snappy) { store.unpin(message.id, in: room.id) }
             }
         } else {
-            Button("ピン留め", systemImage: "pin") {
+            ToocMenuButton("ピン留め", systemImage: "pin") {
                 withAnimation(.snappy) { store.pin(message, in: room.id) }
             }
         }
         if case .sticker(let url) = message.kind, !store.stickers.contains(where: { $0.url == url }) {
-            Button("スタンプに追加", systemImage: "face.smiling") { store.saveSticker(url) }
+            ToocMenuButton("スタンプに追加", systemImage: "face.smiling") { store.saveSticker(url) }
         }
         if case .text(let text) = message.kind {
-            Button("コピー", systemImage: "doc.on.doc") { UIPasteboard.general.string = text }
-            Button("選択", systemImage: "selection.pin.in.out", action: actions.select)
+            ToocMenuButton("コピー", systemImage: "doc.on.doc") { UIPasteboard.general.string = text }
+            ToocMenuButton("選択", systemImage: "selection.pin.in.out", action: actions.select)
             if mine {
-                Button("編集", systemImage: "pencil", action: actions.edit)
+                ToocMenuButton("編集", systemImage: "pencil", action: actions.edit)
             }
         }
         Divider()

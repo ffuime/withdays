@@ -540,7 +540,7 @@ struct ToocNoteDetail: View {
             Spacer(minLength: 0)
         }
         .contextMenu {
-            Button("コピー", systemImage: "doc.on.doc") { UIPasteboard.general.string = comment.text }
+            ToocMenuButton("コピー", systemImage: "doc.on.doc") { UIPasteboard.general.string = comment.text }
             if comment.authorID == store.me.id {
                 ToocDestructiveButton("削除", systemImage: "trash") {
                     withAnimation(.snappy) { board.deleteComment(comment, on: noteID) }
@@ -910,7 +910,7 @@ struct ToocAlbumDetail: View {
 
     @ViewBuilder
     private func photoMenu(_ photo: ToocAlbumPhoto, in album: ToocAlbum) -> some View {
-        Button("保存", systemImage: "square.and.arrow.down") {
+        ToocMenuButton("保存", systemImage: "square.and.arrow.down") {
             Task {
                 if let image = await ToocFiles.remoteImage(photo.url) {
                     UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)

@@ -170,8 +170,9 @@ struct ToocQRView: View {
                 case .full(let image):
                     Image(image)
                         .resizable()
-                        .scaledToFit()
+                        .scaledToFill()
                         .frame(width: 52, height: 52)
+                        .clipShape(Circle())
                 case .symbol(let symbol, let background):
                     Image(systemName: symbol)
                         .toocFont(.system(size: 20, weight: .semibold))

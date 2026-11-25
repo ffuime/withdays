@@ -47,7 +47,8 @@ struct ToocContextMenuHost<Content: View, Preview: View>: UIViewControllerRepres
                 return host
             }, actionProvider: { _ in
                 UIMenu(children: parent.items.map { item in
-                    UIAction(title: item.title, image: UIImage(systemName: item.symbol),
+                    UIAction(title: item.title, image: UIImage(systemName: item.symbol)?
+                        .withTintColor(item.destructive ? .systemRed : .label, renderingMode: .alwaysOriginal),
                              attributes: item.destructive ? .destructive : []) { _ in item.action() }
                 })
             })
@@ -137,6 +138,16 @@ struct ToocRoomPreview: View {
 
 /// Watches tooc's tab bar for a long press or a double tap on a tab (the system's tab bar offers neither).
 struct ToocTabBarHook: UIViewControllerRepresentable {
+    /// A tab's symbol drawn into a plain picture (still taking the bar's colours), so the bar can't swap in its
+    /// filled version by itself.
+    static func tabImage(_ name: String) -> UIImage {
+        let config = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
+        guard let symbol = UIImage(systemName: name, withConfiguration: config)?
+            .withTintColor(.black, renderingMode: .alwaysOriginal) else { return UIImage() }
+        let picture = UIGraphicsImageRenderer(size: symbol.size).image { _ in symbol.draw(at: .zero) }
+        return picture.withRenderingMode(.alwaysTemplate)
+    }
+
     var onLongPress: (Int) -> Void
     var onDoubleTap: (Int) -> Void
     /// Each tab's symbol: outlined, and filled when chosen (set on the bar's items, where SwiftUI's label can't).
@@ -214,8 +225,8 @@ struct ToocTabBarHook: UIViewControllerRepresentable {
             guard let items = tabBar?.items else { return }
             for (index, item) in items.enumerated() where index < parent.symbols.count {
                 let name = parent.symbols[index]
-                item.image = UIImage(systemName: name)
-                item.selectedImage = UIImage(systemName: "\(name).fill")
+                item.image = ToocTabBarHook.tabImage(name)
+                item.selectedImage = ToocTabBarHook.tabImage("\(name).fill")
             }
         }
 

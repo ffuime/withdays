@@ -457,3 +457,29 @@ struct ToocDestructiveButton: View {
         }
     }
 }
+
+/// A menu item whose symbol is black in light and white in dark (menus otherwise colour them with the accent).
+struct ToocMenuButton: View {
+    let title: String
+    let symbol: String
+    let action: () -> Void
+
+    @Environment(\.colorScheme) private var scheme
+
+    init(_ title: String, systemImage: String, action: @escaping () -> Void) {
+        self.title = title
+        self.symbol = systemImage
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Label {
+                Text(title)
+            } icon: {
+                Image(uiImage: UIImage(systemName: symbol)?
+                    .withTintColor(scheme == .dark ? .white : .black, renderingMode: .alwaysOriginal) ?? UIImage())
+            }
+        }
+    }
+}

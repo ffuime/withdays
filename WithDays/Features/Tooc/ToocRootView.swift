@@ -173,6 +173,7 @@ struct ToocRootView: View {
                     .transition(.asymmetric(insertion: .opacity.combined(with: .scale(scale: 1.04)), removal: .opacity))
             }
         }
+        .id(scheme)
         .animation(.smooth(duration: 0.5), value: store.signedIn)
         .environment(store)
         .environment(router)
@@ -348,7 +349,7 @@ struct ToocRootView: View {
         Label {
             Text(title)
         } icon: {
-            Image(uiImage: UIImage(systemName: symbol) ?? UIImage())
+            Image(uiImage: ToocTabBarHook.tabImage(symbol))
                 .renderingMode(.template)
         }
         .environment(\.symbolVariants, .none)
