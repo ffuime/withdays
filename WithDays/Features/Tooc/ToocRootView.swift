@@ -145,6 +145,15 @@ struct ToocRootView: View {
     @State private var store = ToocStore()
     @State private var router = ToocRouter()
     @State private var welcome = false
+    /// The iPhone's own light / dark (for 自動).
+    @State private var systemDark = ToocRootView.deviceDark
+
+    static var deviceDark: Bool { UIScreen.main.traitCollection.userInterfaceStyle == .dark }
+
+    private var scheme: ColorScheme {
+        let chosen = store.signedIn ? store.settings.appearance.colorScheme : nil
+        return chosen ?? (systemDark ? .dark : .light)
+    }
     /// Who you were when a switch began, for the overlay's first face.
     @State private var switchFrom: ToocUser?
 
@@ -171,8 +180,13 @@ struct ToocRootView: View {
         .toocFont(.body)
         .environment(\.toocFontFamily, ToocFontLibrary.shared.family(store.settings.font))
         .tint(theme.accent)
-        // ライト・ダーク・自動: set on the window, so lists, bars and sheets all redraw in it together.
-        .background(ToocInterfaceStyle(scheme: store.signedIn ? store.settings.appearance.colorScheme : nil))
+        // ライト・ダーク・自動 decided here (自動 = the iPhone's own setting, read from the screen so nothing around
+        // tooc can change it), then given to SwiftUI and set on the window alike, so text, lists, bars and sheets agree.
+        .environment(\.colorScheme, scheme)
+        .background(ToocInterfaceStyle(scheme: scheme))
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            systemDark = Self.deviceDark
+        }
         // No scaling or blurring of the screen itself while switching: done to the whole TabView, it left the
         // tab bar and top bar laid out shrunk toward the middle. The overlay's own frosted layer covers it instead.
         .overlay {
@@ -690,6 +704,7 @@ struct ToocInterfaceStyle: UIViewRepresentable {
         var style: UIUserInterfaceStyle = .unspecified
         private weak var held: UIWindow?
         private var original: UIUserInterfaceStyle = .unspecified
+        private var originalRoot: UIUserInterfaceStyle = .unspecified
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
@@ -701,16 +716,20 @@ struct ToocInterfaceStyle: UIViewRepresentable {
             if held !== window {
                 held = window
                 original = window.overrideUserInterfaceStyle
+                originalRoot = window.rootViewController?.overrideUserInterfaceStyle ?? .unspecified
             }
-            guard window.overrideUserInterfaceStyle != style else { return }
+            let root = window.rootViewController
+            guard window.overrideUserInterfaceStyle != style || root?.overrideUserInterfaceStyle != style else { return }
             let next = style
             UIView.transition(with: window, duration: 0.3, options: [.transitionCrossDissolve, .allowUserInteraction]) {
                 window.overrideUserInterfaceStyle = next
+                root?.overrideUserInterfaceStyle = next
             }
         }
 
         func restore() {
             held?.overrideUserInterfaceStyle = original
+            held?.rootViewController?.overrideUserInterfaceStyle = originalRoot
         }
     }
 }

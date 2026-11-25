@@ -564,7 +564,7 @@ struct ToocNoteDetail: View {
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
                         .toocFont(.system(size: 32))
-                        .foregroundStyle(theme.accent)
+                        .foregroundStyle(Color.primary)
                 }
                 .padding(.bottom, 6)
                 .transition(.scale.combined(with: .opacity))

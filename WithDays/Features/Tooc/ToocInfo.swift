@@ -4,6 +4,12 @@ import Foundation
 /// not every small fix.
 enum ToocInfo {
     static let changelog: [AppInfo.Release] = [
+        AppInfo.Release(version: "1.1.2", date: "2026.11.25", notes: [
+            "相手のメッセージにほんのり影がついて、吹き出しが見やすくなりました。",
+            "返信しかできないメッセージは、長押しメニューの「返信」からすぐに返信できます。",
+            "ボタンやメニューのアイコンを白黒にそろえました。",
+            "軽微なバグを修正しました。",
+        ]),
         AppInfo.Release(version: "1.1.1", date: "2026.11.25", notes: [
             "更新履歴が tooc だけのものになりました。",
             "テーマ「空」の名前を「スカイ」に変えました。",

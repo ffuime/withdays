@@ -91,7 +91,7 @@ struct ToocPinBar: View {
                 HStack(spacing: 10) {
                     Image(systemName: "pin.fill")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.toocBrand)
+                        .foregroundStyle(Color.primary)
                         .rotationEffect(.degrees(35))
                         .frame(width: 30)
                     VStack(alignment: .leading, spacing: 2) {

@@ -952,7 +952,7 @@ struct ToocRoomView: View {
     private func sendButton(_ room: ToocRoom) -> some View {
         let icon = Image(systemName: editing == nil ? "arrow.up.circle.fill" : "checkmark.circle.fill")
             .toocFont(.system(size: 32))
-            .foregroundStyle(theme.accent)
+            .foregroundStyle(Color.primary)
         if editing != nil {
             Button { send() } label: { icon }
                 .accessibilityLabel("編集を保存")
@@ -1334,6 +1334,12 @@ struct ToocMessageRow: View {
                 .padding(mine ? .trailing : .leading, ToocBubbleShape.tail)
                 .background(shape.fill(mine ? theme.myBubble : theme.theirBubble))
                 .clipShape(shape)
+                .background {
+                    if !mine {
+                        shape.fill(theme.theirBubble)
+                            .shadow(color: .black.opacity(0.07), radius: 2.5, x: 0, y: 1)
+                    }
+                }
             case .photo(let file):
                 // A photo has no tail and never joins: just the picture with rounded corners.
                 ToocPhotoBubble(file: file, address: nil, open: actions.openPhoto)
@@ -1353,6 +1359,7 @@ struct ToocMessageRow: View {
                     .padding(mine ? .trailing : .leading, ToocBubbleShape.tail)
             }
         }
+        .tint(theme.accent)
         .opacity(message.sending || message.failed ? 0.6 : 1)
         .opacity(arriving ? 0 : 1)
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
@@ -1363,6 +1370,7 @@ struct ToocMessageRow: View {
             toggleLater()
         }, isEnabled: canMarkLater && !isPhoto)
         .sensoryFeedback(.impact(weight: .medium), trigger: later)
+        .tint(Color.primary)
         .contextMenu {
             if !message.sending && !message.failed { menu }
         }
@@ -1382,6 +1390,9 @@ struct ToocMessageRow: View {
         }
         .controlGroupStyle(.palette)
         .menuActionDismissBehavior(.enabled)
+        if !canMarkLater && !inThread {
+            Button("返信", systemImage: "arrowshape.turn.up.left.fill", action: actions.reply)
+        } else {
         Menu {
             Button("返信する", systemImage: "arrowshape.turn.up.left.fill", action: actions.reply)
             if canMarkLater {
@@ -1396,6 +1407,7 @@ struct ToocMessageRow: View {
             Label("返信", systemImage: "arrowshape.turn.up.left.fill")
         }
         .tint(Color.primary)
+        }
         if message.forwardable {
             Button("転送", systemImage: "arrowshape.turn.up.right", action: actions.forward)
         }
@@ -1914,6 +1926,7 @@ struct ToocFlyingBubble: View, Animatable {
         return ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: 18 + 4 * (1 - p), style: .continuous)
                 .fill(fill.opacity(fade))
+            // Laid out at the landing bubble's width the whole way, so it never shortens to …
             Text(text)
                 .toocFont(.system(size: size))
                 .foregroundStyle(Color.primary.opacity(1 - fade))
@@ -1921,8 +1934,10 @@ struct ToocFlyingBubble: View, Animatable {
                     Text(text)
                         .toocFont(.system(size: size))
                         .foregroundStyle(Color.white.opacity(fade))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .lineLimit(6)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: max(1, to.width - 26 - ToocBubbleShape.tail), alignment: .leading)
                 .padding(.horizontal, 13 + 3 * (1 - p))
         }
         .frame(width: rect.width, height: rect.height)
@@ -2020,7 +2035,7 @@ struct ToocThreadView: View {
                 Button { send(thread) } label: {
                     Image(systemName: "arrow.up.circle.fill")
                         .toocFont(.system(size: 32))
-                        .foregroundStyle(theme.accent)
+                        .foregroundStyle(Color.primary)
                 }
                 .padding(.bottom, 6)
                 .accessibilityLabel("送信")

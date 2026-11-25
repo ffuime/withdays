@@ -154,13 +154,21 @@ struct ToocTabBarHook: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: HookController, context: Context) {
         context.coordinator.parent = self
         // After SwiftUI has updated the bar for this change.
-        DispatchQueue.main.async { context.coordinator.applySymbols() }
+        context.coordinator.applySymbolsSoon()
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     final class HookController: UIViewController {
         weak var coordinator: Coordinator?
+
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            // Light / dark redraws the bar's items from SwiftUI's labels: put the symbols back after.
+            registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (controller: HookController, _: UITraitCollection) in
+                controller.coordinator?.applySymbolsSoon()
+            }
+        }
 
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
@@ -194,6 +202,12 @@ struct ToocTabBarHook: UIViewControllerRepresentable {
             double.delegate = self
             bar.addGestureRecognizer(press)
             bar.addGestureRecognizer(double)
+        }
+
+        /// Now, and again a moment later (SwiftUI may still be updating the bar).
+        func applySymbolsSoon() {
+            DispatchQueue.main.async { self.applySymbols() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.applySymbols() }
         }
 
         func applySymbols() {
