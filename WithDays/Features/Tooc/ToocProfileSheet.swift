@@ -89,7 +89,7 @@ struct ToocProfileSheet: View {
                         .accessibilityAddTraits(.isButton)
                     Button { path.append(.name) } label: {
                         HStack(spacing: 6) {
-                            Text(user.displayName)
+                            user.nameText
                                 .toocFont(.title2.bold())
                                 .lineLimit(1)
                             if user.nickname != nil {
@@ -207,7 +207,7 @@ struct ToocProfileSheet: View {
                             .submitLabel(.done)
                             .onSubmit(finishRename)
                     } else {
-                        Text(user.displayName)
+                        user.nameText
                             .toocFont(.largeTitle.bold())
                             .foregroundStyle(.white)
                     }

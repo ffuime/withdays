@@ -175,7 +175,14 @@ struct ToocRootView: View {
         // tab bar and top bar laid out shrunk toward the middle. The overlay's own frosted layer covers it instead.
         .overlay {
             if welcome {
-                ToocWelcomeView(name: store.me.name) { welcome = false }
+                ToocWelcomeView(name: greetingName) { welcome = false }
+                    .environment(\.toocTheme, store.theme)
+            }
+        }
+        .overlay {
+            if let user = store.farewell {
+                ToocGoodbyeView(user: user) { store.farewell = nil }
+                    .environment(store)
                     .environment(\.toocTheme, store.theme)
             }
         }
@@ -209,6 +216,8 @@ struct ToocRootView: View {
             if signedIn { welcome = true }
         }
         .onAppear {
+            // Opening tooc already signed in says hello too (as signing in does).
+            if store.signedIn { welcome = true }
             if store.settings.notifications { ToocNotifications.requestAuthorization() }
             if let room = ToocNotifications.takePendingRoom(), store.signedIn { router.open(room: room) }
             if let id = ToocNotifications.takePendingFriend(), store.signedIn { router.sheet = .find(id) }
@@ -229,15 +238,26 @@ struct ToocRootView: View {
 
     @Environment(\.colorScheme) private var colorScheme
 
+    /// The name to greet: the profile's once it has arrived, the one this device remembers before that.
+    private var greetingName: String {
+        if store.me.name != store.me.id { return store.me.name }
+        return ToocAccounts.saved.first { $0.id == store.me.id }?.name ?? store.me.name
+    }
+
 
     private var main: some View {
         @Bindable var router = router
         return NavigationStack(path: $router.path) {
             tabs
                 .tint(store.theme.accent)
+                .background(ToocNavigationBarTint().frame(width: 0, height: 0))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbar }
-                .navigationDestination(for: ToocRoute.self) { ToocDestination(route: $0).tint(store.theme.accent) }
+                .navigationDestination(for: ToocRoute.self) { route in
+                    ToocDestination(route: route)
+                        .tint(store.theme.accent)
+                        .background(ToocNavigationBarTint().frame(width: 0, height: 0))
+                }
         }
         // The bar's own buttons (‹ back) in tooc's colour; the screens keep the theme's.
         .tint(Color.toocBrand)
@@ -341,19 +361,12 @@ struct ToocRootView: View {
                 Button { router.path.append(.settings) } label: { ToocBarIcon("gearshape") }
                     .accessibilityLabel("設定")
             } else {
+                // ＋, 検索, 設定 (left to right); すべて既読 and 選択 live at the bottom of ＋.
+                ToocPlusMenu()
                 Button { router.path.append(.search) } label: { ToocBarIcon("magnifyingglass") }
                     .accessibilityLabel("検索")
-                ToocPlusMenu()
-                Menu {
-                    Button("toocを選択", systemImage: "checkmark.circle") {
-                        withAnimation(.snappy) { router.startSelecting() }
-                    }
-                    Button("すべて既読にする", systemImage: "checkmark.message") { store.markAllRead() }
-                    Button("設定", systemImage: "gearshape") { router.path.append(.settings) }
-                } label: {
-                    ToocBarIcon("ellipsis")
-                }
-                .accessibilityLabel("その他")
+                Button { router.path.append(.settings) } label: { ToocBarIcon("gearshape") }
+                    .accessibilityLabel("設定")
             }
         }
     }
@@ -443,6 +456,7 @@ private struct ToocSheetView: View {
 /// The ＋ menu: start a talk or a group, and the ways to add a friend.
 struct ToocPlusMenu: View {
     @Environment(ToocRouter.self) private var router
+    @Environment(ToocStore.self) private var store
 
     var body: some View {
         Menu {
@@ -451,6 +465,11 @@ struct ToocPlusMenu: View {
                 Button("グループを作成", systemImage: "person.2.badge.plus") { router.sheet = .newGroup }
             }
             ToocAddFriendSection()
+            Divider()
+            Button("すべて既読にする", systemImage: "checkmark.message") { store.markAllRead() }
+            Button("toocを選択", systemImage: "checkmark.circle") {
+                withAnimation(.snappy) { router.startSelecting() }
+            }
         } label: {
             ToocBarIcon("plus")
         }
@@ -565,5 +584,69 @@ private struct ToocBanner: View {
             }
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: store.banner?.id)
+    }
+}
+
+/// Colours the navigation bar's own ‹ back button in tooc's brand colour (the system draws it in the text colour,
+/// and SwiftUI's tint doesn't reach it).
+struct ToocNavigationBarTint: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> Controller { Controller() }
+    func updateUIViewController(_ controller: Controller, context: Context) { controller.apply() }
+
+    final class Controller: UIViewController {
+        override func didMove(toParent parent: UIViewController?) {
+            super.didMove(toParent: parent)
+            apply()
+        }
+
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            apply()
+        }
+
+        func apply() {
+            navigationController?.navigationBar.tintColor = UIColor(Color.toocBrand)
+        }
+    }
+}
+
+/// After logging out: your icon on tooc's colour says goodbye, shrinks away, and the sign-in form shows through.
+struct ToocGoodbyeView: View {
+    let user: ToocUser
+    var onDone: () -> Void
+
+    @Environment(\.toocTheme) private var theme
+    @State private var stage = 0
+
+    var body: some View {
+        ZStack {
+            theme.accent
+                .ignoresSafeArea()
+                .opacity(stage >= 1 ? 1 : 0)
+            VStack(spacing: 14) {
+                ToocAvatar(user: user, size: 96)
+                    .overlay { Circle().stroke(.white.opacity(0.9), lineWidth: 3) }
+                    .scaleEffect(stage >= 2 ? 0.15 : (stage >= 1 ? 1 : 0.7))
+                    .blur(radius: stage >= 2 ? 8 : 0)
+                    .opacity(stage == 1 ? 1 : 0)
+                Text("またね、\(user.name)")
+                    .toocFont(.headline)
+                    .foregroundStyle(.white)
+                    .opacity(stage == 1 ? 1 : 0)
+                    .offset(y: stage >= 1 ? 0 : 10)
+            }
+        }
+        .opacity(stage >= 3 ? 0 : 1)
+        .sensoryFeedback(.impact(weight: .light), trigger: stage) { _, new in new == 2 }
+        .task {
+            withAnimation(.easeOut(duration: 0.35)) { stage = 1 }
+            try? await Task.sleep(for: .milliseconds(1100))
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) { stage = 2 }
+            try? await Task.sleep(for: .milliseconds(380))
+            withAnimation(.easeIn(duration: 0.4)) { stage = 3 }
+            try? await Task.sleep(for: .milliseconds(420))
+            onDone()
+        }
+        .allowsHitTesting(stage < 3)
     }
 }

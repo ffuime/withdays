@@ -14,30 +14,36 @@ struct ToocPinBar: View {
 
     var body: some View {
         let pins = room.pinnedMessages
+        // Every pin shown is its own row (by its message), so one going away slides out on its own and the
+        // next moves up into its place instead of the text just changing.
+        let shown = expanded ? pins : Array(pins.prefix(1))
         VStack(spacing: 0) {
-            if let newest = pins.first {
-                HStack(spacing: 0) {
-                    row(newest)
-                    Button {
-                        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) { expanded.toggle() }
-                    } label: {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(Color.toocBrand)
-                            .rotationEffect(.degrees(expanded ? 180 : 0))
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
+            HStack(alignment: .top, spacing: 0) {
+                VStack(spacing: 0) {
+                    ForEach(shown) { pin in
+                        VStack(spacing: 0) {
+                            if pin.id != shown.first?.id { Divider().padding(.leading, 40) }
+                            row(pin)
+                        }
+                        .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .top)),
+                                                removal: .opacity.combined(with: .scale(scale: 0.97, anchor: .top))))
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(expanded ? "ピン留めを閉じる" : "すべてのピン留め（\(pins.count)件）")
                 }
+                Button {
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) { expanded.toggle() }
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Color.toocBrand)
+                        .rotationEffect(.degrees(expanded ? 180 : 0))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+                .accessibilityLabel(expanded ? "ピン留めを閉じる" : "すべてのピン留め（\(pins.count)件）")
             }
             if expanded {
-                ForEach(pins.dropFirst()) { pin in
-                    Divider().padding(.leading, 44)
-                    row(pin)
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
                 Divider()
                 Button(role: .destructive) {
                     confirmAll = true
@@ -55,14 +61,15 @@ struct ToocPinBar: View {
         }
         .padding(.leading, 4)
         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .animation(.smooth(duration: 0.35), value: pins)
         .padding(.horizontal, 12)
         .padding(.top, 4)
         .padding(.bottom, 6)
-        .onChange(of: pins.count) { _, count in if count <= 1 { withAnimation(.snappy) { expanded = false } } }
+        .onChange(of: pins.count) { _, count in if count <= 1 { withAnimation(.smooth) { expanded = false } } }
         .alert("すべてのピン留めを解除しますか？", isPresented: $confirmAll) {
             Button("キャンセル", role: .cancel) {}
             Button("解除", role: .destructive) {
-                withAnimation(.snappy) {
+                withAnimation(.smooth(duration: 0.35)) {
                     expanded = false
                     store.unpinAll(in: room.id)
                 }
@@ -75,7 +82,7 @@ struct ToocPinBar: View {
     /// One pin: the words (two lines at most) with the sender's name under them, small.
     private func row(_ pin: ToocPin) -> some View {
         ToocSwipeToUnpin {
-            withAnimation(.snappy) { store.unpin(pin.messageID, in: room.id) }
+            withAnimation(.smooth(duration: 0.35)) { store.unpin(pin.messageID, in: room.id) }
         } content: {
             Button {
                 withAnimation(.snappy) { expanded = false }
@@ -88,7 +95,7 @@ struct ToocPinBar: View {
                         .rotationEffect(.degrees(35))
                         .frame(width: 30)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(pin.text)
+                        Text(Self.label(pin.text))
                             .toocFont(.subheadline)
                             .foregroundStyle(.primary)
                             .lineLimit(2)
@@ -106,6 +113,13 @@ struct ToocPinBar: View {
             }
             .buttonStyle(.plain)
         }
+    }
+}
+
+extension ToocPinBar {
+    /// What a pin says: a ノート as 「ノート: …」 (pins made before used a full-width colon).
+    static func label(_ text: String) -> String {
+        text.hasPrefix("ノート：") ? "ノート: " + text.dropFirst(4) : text
     }
 }
 
@@ -140,11 +154,16 @@ struct ToocSwipeToUnpin<Content: View>: View {
                         armed = offset < -Self.threshold
                     }
                     .onEnded { _ in
-                        if armed {
-                            withAnimation(.snappy) { offset = -400 }
-                            onUnpin()
+                        guard armed else {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { offset = 0 }
+                            return
                         }
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        // Slides the rest of the way out first, then the pin goes (and the rows close up).
+                        withAnimation(.easeOut(duration: 0.2)) { offset = -480 }
+                        Task {
+                            try? await Task.sleep(for: .milliseconds(180))
+                            onUnpin()
+                            try? await Task.sleep(for: .milliseconds(500))
                             offset = 0
                             armed = false
                         }

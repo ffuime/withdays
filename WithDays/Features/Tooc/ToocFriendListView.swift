@@ -85,7 +85,7 @@ struct ToocFriendRow: View {
                 HStack(spacing: 12) {
                     ToocAvatar(user: friend, badge: friend.isFavorite ? "star.fill" : nil)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(friend.displayName)
+                        friend.nameText
                             .toocFont(.body.bold())
                             .lineLimit(1)
                         if !friend.bio.isEmpty {
@@ -128,7 +128,7 @@ struct ToocRequestRow: View {
                 HStack(spacing: 12) {
                     ToocAvatar(user: user)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(user.displayName)
+                        user.nameText
                             .toocFont(.body.bold())
                             .lineLimit(1)
                         Text("@\(user.id)")

@@ -46,6 +46,7 @@ struct ToocRoomView: View {
     @State private var confirmHide = false
     @State private var reactingTo: ToocMessage?
     @State private var forwarding: ToocMessage?
+    @State private var addingToAlbum: ToocMessage?
     @State private var showStickers = false
     /// People called with @ while typing (their name as typed → toocID).
     @State private var mentionPicks: [String: String] = [:]
@@ -154,6 +155,7 @@ struct ToocRoomView: View {
         }
         .sheet(isPresented: $showMembers) { ToocMembersView(roomID: roomID) }
         .sheet(item: $forwarding) { message in ToocForwardView(message: message) }
+        .sheet(item: $addingToAlbum) { message in ToocAddToAlbumSheet(roomID: roomID, message: message) }
         .onChange(of: focused) { _, focused in
             if focused { withAnimation(.snappy) { showStickers = false } }
         }
@@ -390,7 +392,7 @@ struct ToocRoomView: View {
                 transaction.disablesAnimations = true
                 withTransaction(transaction) {
                     viewing = ToocPhotoViewerItem(photos: photos.isEmpty ? [message] : photos, start: message.id,
-                                                  image: image, source: frame)
+                                                  image: image, source: frame, roomID: roomID)
                 }
             },
             openFile: { file in
@@ -407,7 +409,8 @@ struct ToocRoomView: View {
                     quickLook = target
                 }
             },
-            showOriginal: { id in jump(to: id) }
+            showOriginal: { id in jump(to: id) },
+            addToAlbum: { addingToAlbum = message }
         )
     }
 
@@ -938,6 +941,7 @@ struct ToocMessageActions {
     var openFile: (String) -> Void
     /// A reply's quote was tapped: go to the message it answers.
     var showOriginal: (UUID) -> Void
+    var addToAlbum: () -> Void = {}
 }
 
 struct ToocMessageRow: View {
@@ -1021,7 +1025,7 @@ struct ToocMessageRow: View {
             }
             VStack(alignment: .leading, spacing: 3) {
                 if first, room.isGroup, let sender {
-                    Text(sender.displayName)
+                    sender.nameText
                         .toocFont(.caption2)
                         .foregroundStyle(.secondary)
                         .padding(.leading, ToocBubbleShape.tail + 4)
@@ -1271,6 +1275,9 @@ struct ToocMessageRow: View {
         }
         if message.forwardable {
             Button("転送", systemImage: "arrowshape.turn.up.right", action: actions.forward)
+        }
+        if isPhoto, !message.sending, !message.failed, !room.isMynote {
+            Button("アルバムに追加", systemImage: "photo.badge.plus", action: actions.addToAlbum)
         }
         if pinned {
             Button("ピン留めを解除", systemImage: "pin.slash") {

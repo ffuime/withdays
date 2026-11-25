@@ -74,7 +74,7 @@ struct ToocGroupEditView: View {
                         } label: {
                             HStack(spacing: 12) {
                                 ToocAvatar(user: user, size: 36)
-                                Text(user.displayName).foregroundStyle(.primary)
+                                user.nameText.foregroundStyle(.primary)
                                 Spacer()
                                 Image(systemName: members.contains(user.id) ? "checkmark.circle.fill" : "circle")
                                     .toocFont(.title3)

@@ -225,7 +225,7 @@ struct ToocTalkRow: View {
 
     private var nameLine: some View {
         HStack(spacing: 5) {
-            Text(store.name(of: room))
+            store.nameText(of: room)
                 .toocFont(.body.bold())
                 .lineLimit(1)
             if room.isGroup {

@@ -24,6 +24,15 @@ enum ToocNotifications {
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: content, trigger: trigger))
     }
 
+    /// Takes a talk's notifications off the lock screen and Notification Centre once it has been read.
+    static func clearDelivered(roomID: String) {
+        let center = UNUserNotificationCenter.current()
+        center.getDeliveredNotifications { list in
+            let ids = list.filter { $0.request.content.threadIdentifier == roomID }.map(\.request.identifier)
+            if !ids.isEmpty { center.removeDeliveredNotifications(withIdentifiers: ids) }
+        }
+    }
+
     static func cancel(_ id: String) {
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: [id])

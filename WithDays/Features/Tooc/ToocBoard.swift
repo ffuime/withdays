@@ -416,7 +416,7 @@ struct ToocNoteCard: View {
                 ToocAvatar(user: author, size: 36)
                     .onTapGesture { router.sheet = .profile(author.id) }
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(author.displayName)
+                    author.nameText
                         .toocFont(.subheadline.bold())
                     Text("\(ToocTime.listLabel(note.date)) \(ToocTime.clock(note.date))")
                         .toocFont(.caption)
@@ -529,7 +529,7 @@ struct ToocNoteDetail: View {
             ToocAvatar(user: author, size: 32)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(author.displayName).toocFont(.subheadline.bold())
+                    author.nameText.toocFont(.subheadline.bold())
                     Text(ToocTime.listLabel(comment.date)).toocFont(.caption).foregroundStyle(.secondary)
                 }
                 Text(ToocLinks.attributed(comment.text))
@@ -1079,6 +1079,120 @@ struct ToocBoardCard: View {
         case .note(let id, _): router.sheet = .notes(roomID, id)
         case .album(let id, _, _): router.sheet = .albums(roomID, id)
         default: break
+        }
+    }
+}
+
+/// アルバムに追加: one photo from the talk into one of its albums, or into a new one.
+struct ToocAddToAlbumSheet: View {
+    let roomID: String
+    let message: ToocMessage
+
+    @Environment(ToocStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    @State private var board: ToocBoard
+    @State private var image: UIImage?
+    @State private var working = false
+    @State private var error: String?
+    @State private var naming = false
+    @State private var title = ""
+
+    init(roomID: String, message: ToocMessage, image: UIImage? = nil) {
+        self.roomID = roomID
+        self.message = message
+        _board = State(initialValue: ToocBoard(roomID: roomID))
+        _image = State(initialValue: image)
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Button {
+                        title = ""
+                        naming = true
+                    } label: {
+                        Label("新しいアルバム", systemImage: "plus.rectangle.on.rectangle")
+                            .foregroundStyle(Color.toocBrand)
+                    }
+                }
+                Section("このトークのアルバム") {
+                    if !board.loadedAlbums {
+                        ProgressView().frame(maxWidth: .infinity)
+                    } else if board.albums.isEmpty {
+                        Text("アルバムはまだありません")
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(board.albums) { album in
+                        Button { add(to: album) } label: {
+                            HStack {
+                                Label(album.title, systemImage: "photo.stack")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Text("\(album.photos.count)枚")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                    }
+                }
+            }
+            .toocFont(.body)
+            .disabled(working || image == nil)
+            .overlay { if working { ProgressView().controlSize(.large) } }
+            .navigationTitle("アルバムに追加")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(Color.toocBrand) }
+                        .accessibilityLabel("閉じる")
+                }
+            }
+            .alert("新しいアルバム", isPresented: $naming) {
+                TextField("アルバム名", text: $title)
+                Button("キャンセル", role: .cancel) {}
+                Button("作成して追加") { create() }
+            }
+            .alert("追加できませんでした", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(error ?? "")
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .task {
+            board.listenAlbums()
+            if image == nil { image = await ToocViewerPage.load(message) }
+        }
+        .onDisappear { board.stop() }
+    }
+
+    private func add(to album: ToocAlbum) {
+        guard let image else { return }
+        working = true
+        Task {
+            do {
+                try await board.add([image], to: album, store: store)
+                dismiss()
+            } catch {
+                self.error = error.localizedDescription
+            }
+            working = false
+        }
+    }
+
+    private func create() {
+        guard let image else { return }
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        working = true
+        Task {
+            do {
+                try await board.createAlbum(title: name.isEmpty ? "アルバム" : name, images: [image], store: store)
+                dismiss()
+            } catch {
+                self.error = error.localizedDescription
+            }
+            working = false
         }
     }
 }

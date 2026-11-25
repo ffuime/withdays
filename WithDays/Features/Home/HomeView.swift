@@ -17,6 +17,8 @@ struct HomeView: View {
     /// Plain state (saved on change) so switching can animate; @AppStorage updates don't carry the animation.
     @State private var mode = UserDefaults.standard.string(forKey: SettingsKey.homeMode) ?? HomeMode.calendar.rawValue
     @Environment(\.scenePhase) private var scenePhase
+    /// When the app last went to the background.
+    @State private var leftAt: Date?
 
     /// Pages are month offsets from the month the app launched in.
     private static let pageRange = -600...600
@@ -123,11 +125,26 @@ struct HomeView: View {
             modeContent
                 .animation(.snappy(duration: 0.35), value: mode)
                 .onChange(of: mode) { _, new in UserDefaults.standard.set(new, forKey: SettingsKey.homeMode) }
-                // Leaving the app closes whatever service is open: it comes back to the calendar.
+                // Leaving the app for a minute or more closes whatever service is open: it comes back to the
+                // calendar. Back within the minute, it's as it was. (Closed for good meanwhile, it opens on the
+                // calendar.)
                 .onChange(of: scenePhase) { _, phase in
-                    guard phase == .background, mode != HomeMode.calendar.rawValue else { return }
-                    holderSwap = false
-                    mode = HomeMode.calendar.rawValue
+                    switch phase {
+                    case .background:
+                        leftAt = .now
+                        UserDefaults.standard.set(HomeMode.calendar.rawValue, forKey: SettingsKey.homeMode)
+                    case .active:
+                        guard let left = leftAt else { return }
+                        leftAt = nil
+                        if Date.now.timeIntervalSince(left) < 60 || mode == HomeMode.calendar.rawValue {
+                            UserDefaults.standard.set(mode, forKey: SettingsKey.homeMode)
+                            return
+                        }
+                        holderSwap = false
+                        mode = HomeMode.calendar.rawValue
+                    default:
+                        break
+                    }
                 }
                 .toolbar { toolbar }
                 .navigationBarTitleDisplayMode(.inline)

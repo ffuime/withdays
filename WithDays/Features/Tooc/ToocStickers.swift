@@ -360,7 +360,7 @@ struct ToocMentionStrip: View {
                     Button { onPick(user) } label: {
                         HStack(spacing: 6) {
                             ToocAvatar(user: user, size: 26)
-                            Text(user.displayName)
+                            user.nameText
                                 .toocFont(.subheadline.weight(.semibold))
                                 .lineLimit(1)
                         }

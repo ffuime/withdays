@@ -211,7 +211,7 @@ struct ToocMeView: View {
                         } label: {
                             VStack(spacing: 5) {
                                 ToocAvatar(user: friend, size: 52)
-                                Text(friend.displayName)
+                                friend.nameText
                                     .toocFont(.caption2)
                                     .lineLimit(1)
                                     .frame(width: 60)

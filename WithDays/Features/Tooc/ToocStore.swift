@@ -263,6 +263,10 @@ final class ToocStore {
     @ObservationIgnored private var typingTimes: [String: [String: Date]] = [:]
     @ObservationIgnored private var listeners: [String: ListenerRegistration] = [:]
     @ObservationIgnored private var loadedRooms: Set<String> = []
+    /// Messages already told about (a listener starting again must not tell them twice).
+    @ObservationIgnored private var notified: Set<UUID> = []
+    /// Who just logged out, for the goodbye on screen.
+    var farewell: ToocUser?
     @ObservationIgnored private var lastTypingSent: Date = .distantPast
     @ObservationIgnored private var authHandle: AuthStateDidChangeListenerHandle?
     @ObservationIgnored private var saveTask: Task<Void, Never>?
@@ -356,6 +360,7 @@ final class ToocStore {
     /// Signs out; the account stays on this device's list for switching back.
     func logOut() {
         flush()
+        farewell = me
         if let account { ToocAccounts.previous = account }
         try? Auth.auth().signOut()
         UserDefaults.standard.removeObject(forKey: Self.accountKey)
@@ -422,7 +427,10 @@ final class ToocStore {
         do {
             for id in friendIDs.keys { try? await ToocServer.friends(account).document(id).delete() }
             try? await ToocServer.room("note_\(account)").delete()
-            try await ToocServer.user(account).delete()
+            // The profile stays (name, icon) marked deleted, so the others see who it was; its Mybio says so.
+            try await ToocServer.user(account).updateData([
+                "deletedAt": Timestamp(date: .now), "bio": ToocUser.deletedBio, "findable": false,
+            ])
             try await user.delete()
         } catch {
             throw ToocError(ToocServer.describe(error))
@@ -625,6 +633,8 @@ final class ToocStore {
                     }
                     guard let snapshot else { return }
                     let first = !self.loadedRooms.contains(roomID)
+                    // What was already here: only messages new to this device are told about.
+                    let known = Set((self.serverMessages[roomID] ?? []).map(\.id))
                     var fresh: [ToocMessage] = []
                     for doc in snapshot.documents {
                         if let message = self.message(doc.documentID, doc.data()) { fresh.append(message) }
@@ -643,7 +653,8 @@ final class ToocStore {
                         self.loadedRooms.insert(roomID)
                     } else {
                         for change in snapshot.documentChanges where change.type == .added {
-                            if let message = list.first(where: { $0.id.uuidString == change.document.documentID }) {
+                            if let message = list.first(where: { $0.id.uuidString == change.document.documentID }),
+                               !known.contains(message.id) {
                                 self.arrived(message, in: roomID)
                             }
                         }
@@ -722,6 +733,8 @@ final class ToocStore {
         user.birthday = (data["birthday"] as? Timestamp)?.dateValue()
         user.profileUpdatedAt = (data["updatedAt"] as? Timestamp)?.dateValue() ?? .distantPast
         user.findable = data["findable"] as? Bool ?? false
+        user.deletedAt = (data["deletedAt"] as? Timestamp)?.dateValue()
+        if user.isDeleted { user.bio = ToocUser.deletedBio }
         return user
     }
 
@@ -830,11 +843,18 @@ final class ToocStore {
 
     /// A message from someone else just arrived: count it, and tell (banner in front, the system's otherwise).
     private func arrived(_ message: ToocMessage, in roomID: String) {
-        guard message.senderID != account, openRoomID != roomID, let room = serverRooms[roomID] else { return }
+        guard let account, message.senderID != account, openRoomID != roomID, let room = serverRooms[roomID],
+              !message.system, !notified.contains(message.id) else { return }
+        // Already read (here or on another device), or from before the talk was last read, or old: no notice.
+        guard !(readBy[message.id] ?? []).contains(account),
+              message.date > (local.rooms[roomID]?.lastRead ?? .distantPast),
+              message.date > Date.now.addingTimeInterval(-600) else { return }
+        notified.insert(message.id)
+        if notified.count > 2000 { notified = [message.id] }
         if local.rooms[roomID]?.hidden == true { local.rooms[roomID]?.hidden = false }
         guard local.friends[message.senderID]?.blocked != true else { return }
         let who = displayName(message.senderID)
-        if let account, message.mentions.contains(account) {
+        if message.mentions.contains(account) {
             announce(ToocNotice(title: "\(who)があなたをメンションしました", body: message.preview, userID: message.senderID,
                                 roomID: roomID))
             return
@@ -876,6 +896,15 @@ final class ToocStore {
 
     var mynote: ToocRoom? { rooms.first(where: \.isMynote) }
 
+    /// The talk's name as shown in lists: a deleted person's with the red mark.
+    func nameText(of room: ToocRoom) -> Text {
+        if !room.isGroup, !room.isMynote, room.title == nil,
+           let other = room.memberIDs.compactMap({ user($0) }).first, other.isDeleted {
+            return other.nameText
+        }
+        return Text(name(of: room))
+    }
+
     func name(of room: ToocRoom) -> String {
         if room.isMynote { return "Mynote" }
         if let title = room.title { return title }
@@ -912,7 +941,7 @@ final class ToocStore {
     func fetchUser(_ id: String, bySearch: Bool = false) async -> ToocUser? {
         if id == account { return me }
         guard let snapshot = try? await ToocServer.user(id).getDocument(), let data = snapshot.data() else { return nil }
-        if bySearch, data["findable"] as? Bool != true, friendIDs[id] == nil { return nil }
+        if bySearch, data["findable"] as? Bool != true || data["deletedAt"] != nil, friendIDs[id] == nil { return nil }
         var user = Self.profile(id, data, keeping: users[id])
         user.isFriend = friendIDs[id] != nil
         watchUser(id)
@@ -1016,6 +1045,7 @@ final class ToocStore {
         save()
         if let index = rooms.firstIndex(where: { $0.id == id }), rooms[index].unread != 0 { rooms[index].unread = 0 }
         sendReadReceipts(id)
+        ToocNotifications.clearDelivered(roomID: id)
     }
 
     func markAllRead() { for room in rooms where room.unread > 0 { markRead(room.id) } }

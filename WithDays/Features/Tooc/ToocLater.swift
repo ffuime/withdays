@@ -164,7 +164,7 @@ struct ToocLaterView: View {
                         .foregroundStyle(.secondary)
                 }
                 if room.isGroup, let sender {
-                    Text(sender.displayName)
+                    sender.nameText
                         .toocFont(.caption)
                         .foregroundStyle(.secondary)
                 }

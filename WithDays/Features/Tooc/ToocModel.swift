@@ -34,8 +34,21 @@ struct ToocUser: Identifiable, Hashable, Codable {
     var backgroundURL: String?
     /// Whether others can find this person by typing the toocID.
     var findable = false
+    /// When the account was deleted (it stays readable for a while, with its name and a notice for a bio).
+    var deletedAt: Date?
 
     var displayName: String { nickname ?? name }
+    var isDeleted: Bool { deletedAt != nil }
+
+    /// What a deleted account's Mybio says, in place of its own.
+    static let deletedBio = "削除されたアカウントです。\nトークルームやすべてのデータは、7日後に削除されます。"
+
+    /// The name as shown: a deleted account's with a red mark before it.
+    var nameText: Text {
+        guard isDeleted else { return Text(displayName) }
+        let mark = Text(Image(systemName: "person.crop.circle.badge.xmark")).foregroundStyle(.red)
+        return Text("\(mark) \(displayName)")
+    }
     var color: Color { Color(hue: hue, saturation: 0.55, brightness: 0.85) }
     var initial: String { String(name.prefix(1)) }
 
@@ -205,7 +218,7 @@ struct ToocMessage: Identifiable, Hashable, Codable {
         case .datePoll(let poll): "日程調整：\(poll.title)"
         case .amida(let amida): "あみだくじ：\(amida.title)"
         case .sticker: "スタンプ"
-        case .note(_, let text): "ノート：\(text)"
+        case .note(_, let text): "ノート: \(text)"
         case .album(_, let title, let count): "アルバム「\(title)」に写真を\(count)枚追加"
         case .unsent: "送信が取り消されました"
         }

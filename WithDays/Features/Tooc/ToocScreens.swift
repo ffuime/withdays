@@ -65,7 +65,7 @@ struct ToocNewTalkView: View {
                         } label: {
                             HStack(spacing: 12) {
                                 ToocAvatar(user: friend, size: 40)
-                                Text(friend.displayName)
+                                friend.nameText
                                     .foregroundStyle(.primary)
                                 Spacer()
                                 if group {
@@ -202,7 +202,7 @@ struct ToocFindView: View {
         let current = store.user(user.id) ?? user
         return VStack(spacing: 12) {
             ToocAvatar(user: current, size: 84)
-            Text(current.displayName)
+            current.nameText
                 .toocFont(.title3.bold())
             Text("@\(current.id)")
                 .toocFont(.subheadline)
@@ -480,7 +480,7 @@ struct ToocSearchView: View {
                             HStack(spacing: 12) {
                                 ToocAvatar(user: friend, size: 40)
                                 VStack(alignment: .leading, spacing: 1) {
-                                    Text(friend.displayName).foregroundStyle(.primary)
+                                    friend.nameText.foregroundStyle(.primary)
                                     Text("@\(friend.id)").toocFont(.caption).foregroundStyle(.secondary)
                                 }
                             }

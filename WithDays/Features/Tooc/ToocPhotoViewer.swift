@@ -8,6 +8,7 @@ struct ToocPhotoViewerItem: Identifiable {
     let start: UUID
     let image: UIImage
     let source: CGRect
+    let roomID: String
 }
 
 /// The talk's photos full screen. Swipe sideways for the ones before and after, tap to hide the buttons,
@@ -29,6 +30,7 @@ struct ToocPhotoViewer: View {
     @State private var zoomed = false
     @State private var saved: Set<UUID> = []
     @State private var forwarding: ToocMessage?
+    @State private var addingToAlbum: ToocMessage?
 
     init(item: ToocPhotoViewerItem, onClose: @escaping () -> Void) {
         self.item = item
@@ -81,6 +83,9 @@ struct ToocPhotoViewer: View {
         .statusBarHidden(!chrome)
         .sensoryFeedback(.success, trigger: saved)
         .sheet(item: $forwarding) { ToocForwardView(message: $0) }
+        .sheet(item: $addingToAlbum) { photo in
+            ToocAddToAlbumSheet(roomID: item.roomID, message: photo, image: images[photo.id])
+        }
         .task(id: current) { preload() }
         .onAppear {
             withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) { progress = 1 } completion: {
@@ -186,6 +191,16 @@ struct ToocPhotoViewer: View {
                 .disabled(images[current] == nil || saved.contains(current))
                 .accessibilityLabel(saved.contains(current) ? "保存しました" : "保存")
                 Button {
+                    addingToAlbum = message
+                } label: {
+                    Image(systemName: "photo.badge.plus")
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 60, height: 48)
+                        .contentShape(Rectangle())
+                }
+                .disabled(message == nil || message?.sending == true)
+                .accessibilityLabel("アルバムに追加")
+                Button {
                     forwarding = message
                 } label: {
                     Image(systemName: "arrowshape.turn.up.right")
@@ -225,7 +240,7 @@ struct ToocPhotoViewer: View {
 }
 
 /// One photo in the viewer, zoomable.
-private struct ToocViewerPage: View {
+struct ToocViewerPage: View {
     let message: ToocMessage
     let image: UIImage?
     var onTap: () -> Void
