@@ -151,8 +151,9 @@ struct ToocRootView: View {
     static var deviceDark: Bool { UIScreen.main.traitCollection.userInterfaceStyle == .dark }
 
     private var scheme: ColorScheme {
-        let chosen = store.signedIn ? store.settings.appearance.colorScheme : nil
-        return chosen ?? (systemDark ? .dark : .light)
+        // Signed in, the theme decides; before that, the iPhone's own.
+        if store.signedIn { return store.settings.theme.colorScheme }
+        return systemDark ? .dark : .light
     }
     /// Who you were when a switch began, for the overlay's first face.
     @State private var switchFrom: ToocUser?
@@ -349,7 +350,7 @@ struct ToocRootView: View {
         Label {
             Text(title)
         } icon: {
-            Image(uiImage: ToocTabBarHook.tabImage(symbol))
+            Image(uiImage: ToocTabBarHook.tabImage("\(symbol).fill"))
                 .renderingMode(.template)
         }
         .environment(\.symbolVariants, .none)

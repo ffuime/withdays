@@ -217,6 +217,38 @@ struct ToocHiddenSettingsView: View {
 struct ToocTalkSettingsView: View {
     @Environment(ToocStore.self) private var store
 
+    /// Themes as tiny talks to choose from, three to a row.
+    private func themeGrid(_ themes: [ToocTheme], store: ToocStore) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 12) {
+            ForEach(themes) { option in
+                Button {
+                    withAnimation(.smooth) { store.settings.theme = option }
+                } label: {
+                    VStack(spacing: 6) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Capsule().fill(option.theirBubble).frame(width: 34, height: 12)
+                            Capsule().fill(option.myBubble).frame(width: 42, height: 12)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                        .padding(10)
+                        .frame(height: 64)
+                        .background(option.fill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(store.settings.theme == option ? option.accent : Color.secondary.opacity(0.25),
+                                              lineWidth: store.settings.theme == option ? 2.5 : 1)
+                        }
+                        Text(option.label)
+                            .toocFont(.caption.weight(store.settings.theme == option ? .bold : .regular))
+                            .foregroundStyle(store.settings.theme == option ? store.settings.theme.accent : Color.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
     var body: some View {
         @Bindable var store = store
         Form {
@@ -243,42 +275,14 @@ struct ToocTalkSettingsView: View {
                 }
             }
             Section {
-                Picker("外観", selection: $store.settings.appearance.animation(.smooth)) {
-                    ForEach(ToocAppearance.allCases) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .listRowSeparator(.hidden)
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 12) {
-                    ForEach(ToocTheme.allCases) { option in
-                        Button {
-                            withAnimation(.snappy) { store.settings.theme = option }
-                        } label: {
-                            VStack(spacing: 6) {
-                                // A tiny talk in that theme.
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Capsule().fill(option.theirBubble).frame(width: 34, height: 12)
-                                    Capsule().fill(option.myBubble).frame(width: 42, height: 12)
-                                        .frame(maxWidth: .infinity, alignment: .trailing)
-                                }
-                                .padding(10)
-                                .frame(height: 64)
-                                .background(option.fill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .strokeBorder(store.settings.theme == option ? option.accent : Color.secondary.opacity(0.25),
-                                                      lineWidth: store.settings.theme == option ? 2.5 : 1)
-                                }
-                                Text(option.label)
-                                    .toocFont(.caption.weight(store.settings.theme == option ? .bold : .regular))
-                                    .foregroundStyle(store.settings.theme == option ? option.accent : Color.secondary)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.vertical, 4)
+                themeGrid(ToocTheme.brightThemes, store: store)
             } header: {
-                Text("テーマ").toocFont(.footnote)
+                Text("明るいテーマ").toocFont(.footnote)
+            }
+            Section {
+                themeGrid(ToocTheme.darkThemes, store: store)
+            } header: {
+                Text("暗いテーマ").toocFont(.footnote)
             }
             Section {
                 Toggle("改行キーで送信", isOn: $store.settings.returnSends)

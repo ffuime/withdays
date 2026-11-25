@@ -497,10 +497,10 @@ struct ToocSettings: Hashable, Codable {
         }
         theme = try container.decodeIfPresent(ToocTheme.self, forKey: .theme) ?? defaults.theme
         appearance = try container.decodeIfPresent(ToocAppearance.self, forKey: .appearance) ?? defaults.appearance
-        // 夜 was a theme of its own: now tooc, in dark.
-        if theme == .night {
-            theme = .standard
-            if (try? container.decodeIfPresent(ToocAppearance.self, forKey: .appearance)) == nil { appearance = .dark }
+        // ライト・ダーク came before the dark themes: a theme chosen with ダーク becomes its night.
+        if appearance == .dark {
+            theme = theme.nightPair
+            appearance = .system
         }
         returnSends = try container.decodeIfPresent(Bool.self, forKey: .returnSends) ?? defaults.returnSends
         favoriteReactions = try container.decodeIfPresent([String].self, forKey: .favoriteReactions) ?? defaults.favoriteReactions

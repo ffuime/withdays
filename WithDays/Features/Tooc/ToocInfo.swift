@@ -4,6 +4,12 @@ import Foundation
 /// not every small fix.
 enum ToocInfo {
     static let changelog: [AppInfo.Release] = [
+        AppInfo.Release(version: "1.2.0", date: "2026.11.25", notes: [
+            "暗いテーマが6つ加わりました。ナイト・薄暮・深海・夜桜・森・洞窟から、夜にも目にやさしい色を選べます。",
+            "明るい・暗いはテーマを選ぶだけで切り替わるようになりました。",
+            "長押しメニューのアイコンを白黒にそろえました。",
+            "軽微なバグを修正しました。",
+        ]),
         AppInfo.Release(version: "1.1.2", date: "2026.11.25", notes: [
             "相手のメッセージにほんのり影がついて、吹き出しが見やすくなりました。",
             "返信しかできないメッセージは、長押しメニューの「返信」からすぐに返信できます。",

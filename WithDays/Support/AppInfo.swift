@@ -23,6 +23,10 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.29.0", date: "2026.11.25", notes: [
+            "tooc：暗いテーマ（ナイト・薄暮・深海・夜桜・森・洞窟）。明るい・暗いはテーマで選ぶように（自動・ライト・ダークの切り替えはなくした）",
+            "tooc：タブのアイコンは常に塗りつぶしに、LINE のマークを丸く、長押しメニューのアイコンを白黒に",
+        ]),
         Release(version: "1.28.2", date: "2026.11.25", notes: [
             "tooc：相手の吹き出しにうっすら影、返信しかできないときは長押しの「返信」ですぐ返信",
             "tooc：ボタンやメニューのアイコンをすべて白黒に",

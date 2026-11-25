@@ -4,76 +4,124 @@ import UIKit
 // MARK: - Theme
 
 /// tooc's look, drawn from its logo (violet into blue): the accent for buttons and text, a quiet background behind
-/// everything, your bubble (the accent under white text) and the other person's. Every theme has a light and a dark
-/// version; which one shows follows ライト・ダーク・自動 (ToocAppearance).
+/// everything, your bubble (the accent under white text) and the other person's. Six bright themes and six dark ones,
+/// each dark one the night of a bright one; choosing a theme also chooses light or dark.
 enum ToocTheme: String, CaseIterable, Identifiable, Codable {
     case standard, lavender, sky, sakura, mint, sand
-    /// 夜 from before themes had a dark version: read as tooc in dark.
-    case night
+    case night, dusk, deepSea, yozakura, forest, cave
     var id: String { rawValue }
 
-    static var allCases: [ToocTheme] { [.standard, .lavender, .sky, .sakura, .mint, .sand] }
+    static let brightThemes: [ToocTheme] = [.standard, .lavender, .sky, .sakura, .mint, .sand]
+    static let darkThemes: [ToocTheme] = [.night, .dusk, .deepSea, .yozakura, .forest, .cave]
 
     var label: String {
         switch self {
-        case .standard, .night: "tooc"
+        case .standard: "tooc"
         case .lavender: "ラベンダー"
         case .sky: "スカイ"
         case .sakura: "さくら"
         case .mint: "ミント"
         case .sand: "すな"
+        case .night: "ナイト"
+        case .dusk: "薄暮"
+        case .deepSea: "深海"
+        case .yozakura: "夜桜"
+        case .forest: "森"
+        case .cave: "洞窟"
         }
     }
 
-    /// The accent, bright enough to read on black in dark.
-    private func accentRGB(dark: Bool) -> ToocRGB {
+    var dark: Bool { Self.darkThemes.contains(self) }
+
+    /// The bright theme a dark one is the night of (itself when bright).
+    var brightPair: ToocTheme {
         switch self {
-        case .standard, .night: dark ? ToocRGB(0.5, 0.58, 1.0) : ToocRGB(0.29, 0.36, 1.0)
-        case .lavender: dark ? ToocRGB(0.69, 0.61, 1.0) : ToocRGB(0.49, 0.38, 0.96)
-        case .sky: dark ? ToocRGB(0.42, 0.74, 1.0) : ToocRGB(0.13, 0.56, 0.94)
-        case .sakura: dark ? ToocRGB(1.0, 0.58, 0.72) : ToocRGB(0.91, 0.38, 0.58)
-        case .mint: dark ? ToocRGB(0.35, 0.84, 0.72) : ToocRGB(0.12, 0.66, 0.55)
-        case .sand: dark ? ToocRGB(1.0, 0.71, 0.46) : ToocRGB(0.86, 0.53, 0.27)
+        case .night: .standard
+        case .dusk: .lavender
+        case .deepSea: .sky
+        case .yozakura: .sakura
+        case .forest: .mint
+        case .cave: .sand
+        default: self
         }
     }
 
-    var accent: Color { .tooc(light: accentRGB(dark: false).ui, dark: accentRGB(dark: true).ui) }
-
-    /// Behind lists and talks: barely tinted, so text stays easy to read. nil keeps the system's.
-    var background: Color? {
+    /// The dark theme for a bright one (itself when dark).
+    var nightPair: ToocTheme {
         switch self {
-        case .standard, .night: nil
-        case .lavender: .tooc(light: ToocRGB(0.975, 0.97, 1.0).ui, dark: ToocRGB(0.07, 0.06, 0.11).ui)
-        case .sky: .tooc(light: ToocRGB(0.965, 0.98, 1.0).ui, dark: ToocRGB(0.05, 0.075, 0.11).ui)
-        case .sakura: .tooc(light: ToocRGB(1.0, 0.972, 0.978).ui, dark: ToocRGB(0.1, 0.06, 0.075).ui)
-        case .mint: .tooc(light: ToocRGB(0.962, 0.988, 0.978).ui, dark: ToocRGB(0.05, 0.09, 0.08).ui)
-        case .sand: .tooc(light: ToocRGB(0.99, 0.978, 0.962).ui, dark: ToocRGB(0.1, 0.08, 0.06).ui)
+        case .standard: .night
+        case .lavender: .dusk
+        case .sky: .deepSea
+        case .sakura: .yozakura
+        case .mint: .forest
+        case .sand: .cave
+        default: self
         }
     }
 
-    /// Your bubble: the accent under white text (lighter in light, deeper in dark, so white reads on both).
+    var colorScheme: ColorScheme { dark ? .dark : .light }
+
+    /// The accent: the bright theme's colour, lighter in a dark theme so it reads on black.
+    private var accentRGB: ToocRGB {
+        switch self {
+        case .standard: ToocRGB(0.29, 0.36, 1.0)
+        case .lavender: ToocRGB(0.49, 0.38, 0.96)
+        case .sky: ToocRGB(0.13, 0.56, 0.94)
+        case .sakura: ToocRGB(0.91, 0.38, 0.58)
+        case .mint: ToocRGB(0.12, 0.66, 0.55)
+        case .sand: ToocRGB(0.86, 0.53, 0.27)
+        case .night: ToocRGB(0.5, 0.58, 1.0)
+        case .dusk: ToocRGB(0.69, 0.61, 1.0)
+        case .deepSea: ToocRGB(0.42, 0.74, 1.0)
+        case .yozakura: ToocRGB(1.0, 0.58, 0.72)
+        case .forest: ToocRGB(0.35, 0.84, 0.72)
+        case .cave: ToocRGB(1.0, 0.71, 0.46)
+        }
+    }
+
+    var accent: Color { Color(uiColor: accentRGB.ui) }
+
+    private var backgroundRGB: ToocRGB {
+        switch self {
+        case .standard: ToocRGB(1, 1, 1)
+        case .lavender: ToocRGB(0.975, 0.97, 1.0)
+        case .sky: ToocRGB(0.965, 0.98, 1.0)
+        case .sakura: ToocRGB(1.0, 0.972, 0.978)
+        case .mint: ToocRGB(0.962, 0.988, 0.978)
+        case .sand: ToocRGB(0.99, 0.978, 0.962)
+        case .night: ToocRGB(0.055, 0.06, 0.1)
+        case .dusk: ToocRGB(0.075, 0.06, 0.11)
+        case .deepSea: ToocRGB(0.035, 0.075, 0.11)
+        case .yozakura: ToocRGB(0.1, 0.055, 0.075)
+        case .forest: ToocRGB(0.045, 0.085, 0.07)
+        case .cave: ToocRGB(0.085, 0.08, 0.075)
+        }
+    }
+
+    /// Behind lists and talks: barely tinted, so text stays easy to read.
+    var background: Color? { Color(uiColor: backgroundRGB.ui) }
+
+    /// Your bubble: the accent under white text.
     var myBubble: Color {
-        let light = self == .standard || self == .night ? ToocRGB(0.42, 0.5, 1.0) : accentRGB(dark: false).mix(.white, 0.18)
-        let dark = accentRGB(dark: false).mix(.black, 0.12)
-        return .tooc(light: light.ui, dark: dark.ui)
+        if dark { return Color(uiColor: brightPair.accentRGB.mix(.black, 0.12).ui) }
+        if self == .standard { return Color(uiColor: ToocRGB(0.42, 0.5, 1.0).ui) }
+        return Color(uiColor: accentRGB.mix(.white, 0.18).ui)
     }
 
     var theirBubble: Color {
-        switch self {
-        case .standard, .night: Color(.secondarySystemBackground)
-        default: .tooc(light: .white, dark: UIColor(white: 1, alpha: 0.11))
-        }
+        if dark { return Color(uiColor: backgroundRGB.mix(.white, 0.12).ui) }
+        if self == .standard { return Color(uiColor: ToocRGB(0.949, 0.949, 0.969).ui) }
+        return .white
     }
 
     /// A card or box on the background.
     var card: Color {
-        switch self {
-        case .standard, .night: Color(.secondarySystemBackground)
-        default: .tooc(light: .white, dark: UIColor(white: 1, alpha: 0.08))
-        }
+        if dark { return Color(uiColor: backgroundRGB.mix(.white, 0.08).ui) }
+        if self == .standard { return Color(uiColor: ToocRGB(0.949, 0.949, 0.969).ui) }
+        return .white
     }
 
-    var fill: Color { background ?? Color(.systemBackground) }
+    var fill: Color { Color(uiColor: backgroundRGB.ui) }
 }
 
 /// ライト・ダーク, or the same as the iPhone (自動).

@@ -150,7 +150,7 @@ struct ToocTabBarHook: UIViewControllerRepresentable {
 
     var onLongPress: (Int) -> Void
     var onDoubleTap: (Int) -> Void
-    /// Each tab's symbol: outlined, and filled when chosen (set on the bar's items, where SwiftUI's label can't).
+    /// Each tab's symbol, filled (set on the bar's items, where SwiftUI's label can't).
     var symbols: [String] = []
     var selected = 0
     /// Only one hook adds the hold and double-tap.
@@ -225,7 +225,7 @@ struct ToocTabBarHook: UIViewControllerRepresentable {
             guard let items = tabBar?.items else { return }
             for (index, item) in items.enumerated() where index < parent.symbols.count {
                 let name = parent.symbols[index]
-                item.image = ToocTabBarHook.tabImage(name)
+                item.image = ToocTabBarHook.tabImage("\(name).fill")
                 item.selectedImage = ToocTabBarHook.tabImage("\(name).fill")
             }
         }
