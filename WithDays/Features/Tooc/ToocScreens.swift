@@ -211,6 +211,10 @@ struct ToocFindView: View {
                 Text("あなたのtoocIDです")
                     .toocFont(.footnote)
                     .foregroundStyle(.secondary)
+            } else if current.id == ToocStore.officialID {
+                Text("通報用のアカウントです。友だちには追加できません")
+                    .toocFont(.footnote)
+                    .foregroundStyle(.secondary)
             } else if current.isFriend && !current.isBlocked && !current.isHidden {
                 Button {
                     router.open(room: store.room(with: current.id).id)

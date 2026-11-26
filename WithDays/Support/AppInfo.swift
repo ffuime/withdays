@@ -23,6 +23,10 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.30.2", date: "2026.11.26", notes: [
+            "tooc：友だちの @toocID をタップでプロフィール、通報の送り先を @tooc.report に（友だち追加・メッセージ不可）",
+            "tooc：パスコード画面をテーマの明るさに合わせて、じぶんタブのアイコンをテーマに合わせて",
+        ]),
         Release(version: "1.30.1", date: "2026.11.26", notes: [
             "tooc：通報（プロフィールとグループ）、プロフィールの「…」からお気に入り、パスコード画面を全画面に（4桁か6桁）",
             "tooc：「ナイト」→「ミッドナイト」、「トワイライト」→「バイオレット」、じぶんタブのアイコン、日付をまたぐつづきの線",

@@ -243,6 +243,12 @@ struct ToocRootView: View {
             ToocLock.shared.onScreen = true
             lockIfNeeded()
         }
+        .onChange(of: store.settings.theme) { _, theme in
+            if store.signedIn { ToocLock.shared.theme = theme }
+        }
+        .onChange(of: store.signedIn) { _, signedIn in
+            if signedIn { ToocLock.shared.theme = store.settings.theme }
+        }
         .onReceive(NotificationCenter.default.publisher(for: ToocLock.forgotNotification)) { _ in
             // Passcode forgotten: signed out, and the lock lifted.
             if store.signedIn { store.logOut() }
@@ -267,7 +273,8 @@ struct ToocRootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     private func lockIfNeeded() {
-        ToocLock.shared.lockIfNeeded(theme: store.signedIn ? store.settings.theme : .standard)
+        if store.signedIn { ToocLock.shared.theme = store.settings.theme }
+        ToocLock.shared.lockIfNeeded()
     }
 
     /// The name to greet: the profile's once it has arrived, the one this device remembers before that.
@@ -334,7 +341,7 @@ struct ToocRootView: View {
             Tab(value: ToocTab.me) {
                 ToocMeView()
             } label: {
-                Label("じぶん", systemImage: "face.smiling")
+                Label("じぶん", systemImage: store.settings.theme.dark ? "face.smiling" : "face.smiling.fill")
             }
         }
         // Both symbols are named filled, chosen or not.

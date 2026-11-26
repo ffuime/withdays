@@ -383,6 +383,38 @@ struct ToocMentionStrip: View {
 
 extension ToocLinks {
     /// The text with its links made tappable and the @names it calls in bold (and in `color`, when given).
+    private static let profilePrefix = "tooc-profile:"
+    private static let idPattern = try? NSRegularExpression(pattern: "@([a-z0-9._]{4,20})")
+
+    /// @toocIDs made tappable (opening that profile), for the ones `allowed`; the rest stay plain text.
+    static func profiles(in attributed: AttributedString, text: String, allowed: (String) -> Bool) -> AttributedString {
+        guard let idPattern else { return attributed }
+        var result = attributed
+        let ns = text as NSString
+        for match in idPattern.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            var range = match.range(at: 1)
+            var id = ns.substring(with: range)
+            // A full stop after the ID isn't part of it.
+            while id.hasSuffix("."), !allowed(id) {
+                id.removeLast()
+                range.length -= 1
+            }
+            guard id.count >= 4, allowed(id), let url = URL(string: profilePrefix + id),
+                  let whole = Range(NSRange(location: range.location - 1, length: range.length + 1), in: text),
+                  let lower = AttributedString.Index(whole.lowerBound, within: result),
+                  let upper = AttributedString.Index(whole.upperBound, within: result) else { continue }
+            result[lower..<upper].link = url
+            result[lower..<upper].inlinePresentationIntent = .stronglyEmphasized
+        }
+        return result
+    }
+
+    static func profileID(_ url: URL) -> String? {
+        let string = url.absoluteString
+        guard string.hasPrefix(profilePrefix) else { return nil }
+        return String(string.dropFirst(profilePrefix.count))
+    }
+
     static func attributed(_ text: String, mentions names: [String], color: Color?) -> AttributedString {
         var result = attributed(text)
         for name in Set(names) where !name.isEmpty {

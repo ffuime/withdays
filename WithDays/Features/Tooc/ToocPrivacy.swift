@@ -16,6 +16,7 @@ final class ToocLock {
     private static let service = "com.ffuime.tooc.passcode"
     private static let faceIDKey = "toocLockFaceID"
     private static let installedKey = "toocLockInstalled"
+    private static let themeKey = "toocLockTheme"
     /// Asked by the lock screen when the code is forgotten: signing out lifts the lock.
     static let forgotNotification = Notification.Name("toocLockForgot")
 
@@ -26,6 +27,14 @@ final class ToocLock {
     }
     /// Not yet opened since launch or since leaving.
     var needsUnlock = true
+    /// The signed-in account's theme, for the lock screen (kept for the next launch, before the account loads).
+    var theme: ToocTheme = .standard {
+        didSet {
+            guard theme != oldValue else { return }
+            UserDefaults.standard.set(theme.rawValue, forKey: Self.themeKey)
+            window?.overrideUserInterfaceStyle = theme.colorScheme == .dark ? .dark : .light
+        }
+    }
     /// tooc is what's on screen (in WithDays it's one place among others).
     var onScreen = false
     @ObservationIgnored private var window: UIWindow?
@@ -53,6 +62,14 @@ final class ToocLock {
         if let stored = Self.stored() {
             enabled = true
             length = stored.length
+        }
+        theme = UserDefaults.standard.string(forKey: Self.themeKey).flatMap(ToocTheme.init(rawValue:)) ?? .standard
+        // The tooc app: locking the iPhone locks tooc too, however soon it's opened again.
+        if ToocNotifications.standalone {
+            NotificationCenter.default.addObserver(forName: UIApplication.protectedDataWillBecomeUnavailableNotification,
+                                                   object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { ToocLock.shared.needsUnlock = true }
+            }
         }
     }
 
@@ -132,14 +149,14 @@ final class ToocLock {
     // MARK: The lock screen
 
     /// Covers everything (sheets too) in a window of its own until the code is entered.
-    func lockIfNeeded(theme: ToocTheme) {
+    func lockIfNeeded() {
         guard enabled, needsUnlock, window == nil,
               let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
                 .first(where: { $0.activationState != .unattached }) else { return }
         let window = UIWindow(windowScene: scene)
         window.windowLevel = .alert + 1
         window.overrideUserInterfaceStyle = theme.colorScheme == .dark ? .dark : .light
-        let screen = ToocLockScreen(theme: theme) { [weak self] in self?.unlocked() }
+        let screen = ToocLockScreen { [weak self] in self?.unlocked() }
         window.rootViewController = UIHostingController(rootView: screen)
         window.makeKeyAndVisible()
         self.window = window
@@ -167,9 +184,11 @@ final class ToocLock {
 
 /// The loading screen with the passcode over it: a full-screen sheet that can't be closed.
 private struct ToocLockScreen: View {
-    let theme: ToocTheme
     let onUnlock: () -> Void
+    @State private var lock = ToocLock.shared
     @State private var asking = false
+
+    private var theme: ToocTheme { lock.theme }
 
     var body: some View {
         ZStack {

@@ -4,6 +4,13 @@ import Foundation
 /// not every small fix.
 enum ToocInfo {
     static let changelog: [AppInfo.Release] = [
+        AppInfo.Release(version: "1.3.2", date: "2026.11.26", notes: [
+            "メッセージの中の友だちの @toocID をタップすると、その場でプロフィールが開きます。",
+            "iPhone をロックしたら、すぐに開き直してもパスコードを求めるようにしました。",
+            "パスコードの画面が、使っているテーマの明るさに合うようになりました。",
+            "通報用アカウント（@tooc.report）には通報だけが届き、友だち追加やメッセージはできません。",
+            "軽微なバグを修正しました。",
+        ]),
         AppInfo.Release(version: "1.3.1", date: "2026.11.26", notes: [
             "プロフィールの右上の「…」から、お気に入りへの追加と通報ができるようになりました。グループはトークの「…」から通報できます。",
             "パスコードの入力画面を大きく見やすくしました。パスコードは4桁か6桁です。",

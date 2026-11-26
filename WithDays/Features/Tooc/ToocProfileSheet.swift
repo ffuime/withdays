@@ -155,6 +155,9 @@ struct ToocProfileSheet: View {
                     Image(systemName: "qrcode").foregroundStyle(.white)
                 }
                 .accessibilityLabel("MyQR")
+            } else if user.id == ToocStore.officialID {
+                // The report account: no talk, no friends.
+                EmptyView()
             } else if user.isFriend, !user.isBlocked {
                 Button {
                     router.open(room: store.room(with: user.id).id)

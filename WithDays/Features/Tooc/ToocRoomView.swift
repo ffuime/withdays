@@ -933,15 +933,20 @@ struct ToocRoomView: View {
 
     private func notFriendBar(_ user: ToocUser) -> some View {
         HStack(spacing: 12) {
-            Text("友だちになるまでメッセージは送れません")
+            // The report account only takes reports (sent from a profile's …).
+            Text(user.id == ToocStore.officialID
+                 ? "このアカウントには通報だけが届きます。メッセージは送れません"
+                 : "友だちになるまでメッセージは送れません")
                 .toocFont(.subheadline)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Button("友だちになる") {
-                withAnimation(.snappy) { store.addFriend(user) }
+            if user.id != ToocStore.officialID {
+                Button("友だちになる") {
+                    withAnimation(.snappy) { store.addFriend(user) }
+                }
+                .toocFont(.subheadline.weight(.semibold))
+                .buttonStyle(.glassProminent)
             }
-            .toocFont(.subheadline.weight(.semibold))
-            .buttonStyle(.glassProminent)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -1612,10 +1617,18 @@ struct ToocMessageRow: View {
     private func longText(_ text: String) -> some View {
         let color = mine ? Color.white : Color.primary
         return VStack(alignment: .leading, spacing: 6) {
-            Text(ToocLinks.attributed(text, mentions: mentionNames, color: mine ? nil : theme.accent))
+            Text(ToocLinks.profiles(in: ToocLinks.attributed(text, mentions: mentionNames, color: mine ? nil : theme.accent),
+                                    text: text, allowed: canOpenProfile))
                 .toocFont(.system(size: textSize))
                 .foregroundStyle(color)
                 .tint(mine ? Color.white : theme.accent)
+                .environment(\.openURL, OpenURLAction { url in
+                    if let id = ToocLinks.profileID(url) {
+                        router.sheet = .profile(id)
+                        return .handled
+                    }
+                    return .systemAction
+                })
                 .lineLimit(14)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { shownHeight = $0 }
                 // The whole text at the same width, unseen, to tell whether anything was cut.
@@ -1655,6 +1668,14 @@ struct ToocMessageRow: View {
     }
 
     /// The names the people called go by, as they may have been typed.
+    /// Whose @toocID opens their profile: friends (and you); in the report account's talk, anyone's.
+    private func canOpenProfile(_ id: String) -> Bool {
+        if id == store.me.id || room.memberIDs.contains(ToocStore.officialID) || store.me.id == ToocStore.officialID {
+            return true
+        }
+        return store.user(id)?.isFriend == true
+    }
+
     private var mentionNames: [String] {
         message.mentions.flatMap { id -> [String] in
             guard let user = store.user(id) else { return [] }

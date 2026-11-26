@@ -1125,7 +1125,7 @@ final class ToocStore {
     // MARK: Changes on the server
 
     func addFriend(_ found: ToocUser) {
-        guard let account, found.id != account else { return }
+        guard let account, found.id != account, found.id != Self.officialID else { return }
         friendIDs[found.id] = .now
         friendPrefs(found.id) { $0.hidden = false; $0.blocked = false }
         watchUser(found.id)
