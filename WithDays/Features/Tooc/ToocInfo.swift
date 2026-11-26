@@ -4,6 +4,11 @@ import Foundation
 /// not every small fix.
 enum ToocInfo {
     static let changelog: [AppInfo.Release] = [
+        AppInfo.Release(version: "1.4.0", date: "2026.11.26", notes: [
+            "通報が専用のカードで届くようになり、「受付済み」「対応済み」が分かるようになりました。対応が済むとお知らせが届きます。",
+            "通報用アカウント（@tooc.report）に公式の印が付きました。",
+            "軽微なバグを修正しました。",
+        ]),
         AppInfo.Release(version: "1.3.2", date: "2026.11.26", notes: [
             "メッセージの中の友だちの @toocID をタップすると、その場でプロフィールが開きます。",
             "iPhone をロックしたら、すぐに開き直してもパスコードを求めるようにしました。",

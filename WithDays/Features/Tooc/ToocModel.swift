@@ -157,6 +157,27 @@ struct ToocAmida: Hashable, Codable {
     func result(for entrant: Int) -> Int { walk(from: entrant).last ?? entrant }
 }
 
+/// One report: the reason, who or which group, and whether the report account has dealt with it.
+struct ToocReportRecord: Hashable, Codable {
+    var reason: String
+    var userID: String?
+    var userName: String?
+    var groupID: String?
+    var groupName: String?
+    var done = false
+
+    var reasonLabel: String { ToocReportReason(rawValue: reason)?.label ?? reason }
+
+    /// Who or what was reported, in words.
+    var targetLabel: String {
+        if let userID { return "\(userName ?? userID)（@\(userID)）" }
+        return "グループ「\(groupName ?? "")」"
+    }
+
+    /// The same one reported (for counting reports about it).
+    var targetKey: String { userID.map { "u:" + $0 } ?? "g:" + (groupID ?? "") }
+}
+
 struct ToocMessage: Identifiable, Hashable, Codable {
     enum Kind: Hashable, Codable {
         case text(String)
@@ -179,6 +200,8 @@ struct ToocMessage: Identifiable, Hashable, Codable {
         case album(id: String, title: String, count: Int)
         /// What's left after unsending.
         case unsent
+        /// 通報, sent to the report account: why, about whom, and whether it has been dealt with.
+        case report(ToocReportRecord)
     }
 
     var id = UUID()
@@ -224,6 +247,7 @@ struct ToocMessage: Identifiable, Hashable, Codable {
         case .note(_, let text): "ノート: \(text)"
         case .album(_, let title, let count): "アルバム「\(title)」に写真を\(count)枚追加"
         case .unsent: "送信が取り消されました"
+        case .report(let record): "通報：\(record.reasonLabel)"
         }
     }
 
@@ -238,6 +262,7 @@ struct ToocMessage: Identifiable, Hashable, Codable {
         case .sticker: "face.smiling"
         case .note: "note.text"
         case .album: "photo.stack"
+        case .report: "flag.fill"
         case .text, .unsent: nil
         }
     }

@@ -324,7 +324,9 @@ struct ToocRootView: View {
         let selection = Binding(get: { router.tab }, set: { tab in withAnimation(.snappy) { router.tab = tab } })
         return TabView(selection: selection) {
             Tab(value: ToocTab.talk) {
-                ToocTalkListView()
+                Group {
+                    if store.isOfficial { ToocReportInbox() } else { ToocTalkListView() }
+                }
                     // じぶん: hold for the accounts, double-tap for the one used before.
                     .background(
                         ToocTabBarHook(
@@ -334,9 +336,13 @@ struct ToocRootView: View {
                         .frame(width: 0, height: 0)
                     )
             } label: {
-                Label("トーク", systemImage: "message.fill")
+                if store.isOfficial {
+                    Label("受付箱", systemImage: "tray.full.fill")
+                } else {
+                    Label("トーク", systemImage: "message.fill")
+                }
             }
-            .badge(store.unreadTotal)
+            .badge(store.isOfficial ? store.openReports : store.unreadTotal)
 
             Tab(value: ToocTab.me) {
                 ToocMeView()
@@ -372,24 +378,29 @@ struct ToocRootView: View {
                     Button(action: onCalendar) { ToocBarIcon("chevron.left") }
                         .accessibilityLabel("カレンダーに戻る")
                 }
-                if router.tab == .talk { ToocTalkSortMenu() }
+                if router.tab == .talk && !store.isOfficial { ToocTalkSortMenu() }
             }
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
             if router.selecting {
                 selectionActions
             } else if router.tab == .me {
-                Menu {
-                    ToocAddFriendSection()
-                } label: {
-                    ToocBarIcon("plus")
+                if !store.isOfficial {
+                    Menu {
+                        ToocAddFriendSection()
+                    } label: {
+                        ToocBarIcon("plus")
+                    }
+                    .tint(Color.primary)
+                    .accessibilityLabel("友だち追加")
                 }
-                .tint(Color.primary)
-                .accessibilityLabel("友だち追加")
                 Button { router.path.append(.notices) } label: {
                     ToocBarIcon(store.unseenNotices > 0 ? "bell.badge" : "bell")
                 }
                 .accessibilityLabel("お知らせ")
+                Button { router.path.append(.settings) } label: { ToocBarIcon("gearshape") }
+                    .accessibilityLabel("設定")
+            } else if store.isOfficial {
                 Button { router.path.append(.settings) } label: { ToocBarIcon("gearshape") }
                     .accessibilityLabel("設定")
             } else {

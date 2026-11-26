@@ -936,11 +936,12 @@ struct ToocRoomView: View {
             // The report account only takes reports (sent from a profile's …).
             Text(user.id == ToocStore.officialID
                  ? "このアカウントには通報だけが届きます。メッセージは送れません"
+                 : store.isOfficial ? "通報への返事は、受付箱の「対応済みにする」から送られます"
                  : "友だちになるまでメッセージは送れません")
                 .toocFont(.subheadline)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if user.id != ToocStore.officialID {
+            if user.id != ToocStore.officialID && !store.isOfficial {
                 Button("友だちになる") {
                     withAnimation(.snappy) { store.addFriend(user) }
                 }
@@ -1490,6 +1491,9 @@ struct ToocMessageRow: View {
                     .padding(mine ? .trailing : .leading, ToocBubbleShape.tail)
             case .note, .album:
                 ToocBoardCard(message: message, roomID: room.id, mine: mine)
+                    .padding(mine ? .trailing : .leading, ToocBubbleShape.tail)
+            case .report(let record):
+                ToocReportCard(record: record, messageID: message.id, roomID: room.id)
                     .padding(mine ? .trailing : .leading, ToocBubbleShape.tail)
             default:
                 ToocCardBubble(message: message, room: room, mine: mine, openFile: actions.openFile)

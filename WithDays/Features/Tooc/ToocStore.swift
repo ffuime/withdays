@@ -1624,7 +1624,7 @@ final class ToocStore {
     }
 
     private func sendReadReceipts(_ roomID: String) {
-        guard let account else { return }
+        guard let account, account != Self.officialID else { return }
         let unread = (serverMessages[roomID] ?? []).filter { $0.senderID != account && !(readBy[$0.id] ?? []).contains(account) }
         guard !unread.isEmpty else { return }
         for message in unread { readBy[message.id, default: []].append(account) }
@@ -1725,15 +1725,41 @@ final class ToocStore {
 
     /// 通報: a message to tooc's account saying who (or which group) and why. The one reported isn't told.
     func report(_ target: ToocReportSheet.Target, reason: ToocReportReason) {
-        var lines = ["【通報】", "理由：\(reason.label)"]
+        var record = ToocReportRecord(reason: reason.rawValue)
         switch target {
         case .user(let id):
-            lines.append("相手：\(displayName(id))（@\(id)）")
+            record.userID = id
+            record.userName = user(id)?.name ?? id
         case .group(let roomID):
-            let name = room(roomID).map { self.name(of: $0) } ?? ""
-            lines.append("グループ：\(name)（\(roomID)）")
+            record.groupID = roomID
+            record.groupName = room(roomID).map { self.name(of: $0) }
         }
         let official = room(with: Self.officialID)
-        send(.text(lines.joined(separator: "\n")), in: official.id)
+        send(.report(record), in: official.id)
+    }
+
+    /// Signed in as the report account (its 受付箱 instead of talks).
+    var isOfficial: Bool { account == Self.officialID }
+
+    /// Every report that has reached the report account, newest first, with the talk it came in.
+    var reports: [ToocReportItem] {
+        rooms.flatMap { room in
+            room.messages.compactMap { message -> ToocReportItem? in
+                guard message.senderID != account, case .report(let record) = message.kind else { return nil }
+                return ToocReportItem(message: message, roomID: room.id, record: record)
+            }
+        }
+        .sorted { $0.message.date > $1.message.date }
+    }
+
+    var openReports: Int { reports.filter { !$0.record.done }.count }
+
+    /// 対応済み: the report is marked so (the one who sent it sees it), and they're told.
+    func closeReport(_ id: UUID, in roomID: String) {
+        guard let message = room(roomID)?.messages.first(where: { $0.id == id }),
+              case .report(var record) = message.kind, !record.done else { return }
+        record.done = true
+        change(id, in: roomID, ["kind": ToocServer.encode(.report(record))])
+        send(.text("通報を確認し、対応しました。ご協力ありがとうございました。"), in: roomID)
     }
 }

@@ -94,6 +94,9 @@ struct ToocProfileSheet: View {
                             user.nameText
                                 .toocFont(.title2.bold())
                                 .lineLimit(1)
+                            if user.id == ToocStore.officialID {
+                                ToocOfficialMark()
+                            }
                             if user.nickname != nil {
                                 Image(systemName: "pencil")
                                     .toocFont(.subheadline.weight(.semibold))

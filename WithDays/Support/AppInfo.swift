@@ -23,6 +23,10 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.31.0", date: "2026.11.26", notes: [
+            "tooc：通報をカードで送信（受付済み・対応済み）、@tooc.report 用の受付箱（未対応・対応済み・理由で絞り込み、同じ相手への件数、対応済みにすると通報者へ返事）",
+            "tooc：@tooc.report に公式の印、受付箱のアカウントでは友だち追加・トーク作成・既読を出さない",
+        ]),
         Release(version: "1.30.2", date: "2026.11.26", notes: [
             "tooc：友だちの @toocID をタップでプロフィール、通報の送り先を @tooc.report に（友だち追加・メッセージ不可）",
             "tooc：パスコード画面をテーマの明るさに合わせて、じぶんタブのアイコンをテーマに合わせて",
