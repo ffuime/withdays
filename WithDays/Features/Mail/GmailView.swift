@@ -8,6 +8,8 @@ struct GmailView: View {
     @State private var store = GmailStore.shared
     @State private var toasts = ToastCenter()
     @State private var sidebar = false
+    /// How far the finger has dragged the sidebar (opening from the left edge, or closing it).
+    @State private var sidebarDrag: CGFloat = 0
     @State private var showAccounts = false
     @State private var selecting = false
     @State private var selection = Set<String>()
@@ -214,7 +216,7 @@ struct GmailView: View {
         HStack(spacing: 2) {
             Button {
                 searchFocused = false
-                sidebar = true
+                setSidebar(true)
             } label: {
                 Image(systemName: "sidebar.squares.left")
                     .font(.system(size: 19, weight: .medium))
@@ -292,28 +294,79 @@ struct GmailView: View {
 
     // MARK: Sidebar
 
-    @ViewBuilder
+    private static let sidebarWidth: CGFloat = 304
+
+    /// How much of the sidebar is out (0 … its width), following the finger while dragging.
+    private var sidebarShown: CGFloat {
+        let width = Self.sidebarWidth
+        return sidebar ? max(0, width + min(0, sidebarDrag)) : max(0, min(width, sidebarDrag))
+    }
+
+    private func setSidebar(_ open: Bool) {
+        withAnimation(.snappy(duration: 0.3)) {
+            sidebar = open
+            sidebarDrag = 0
+        }
+    }
+
+    /// From the left edge: the sidebar comes out under the finger.
+    private var openDrag: some Gesture {
+        DragGesture(minimumDistance: 8, coordinateSpace: .global)
+            .onChanged { value in
+                searchFocused = false
+                sidebarDrag = max(0, value.translation.width)
+            }
+            .onEnded { value in
+                setSidebar(value.predictedEndTranslation.width > Self.sidebarWidth / 2)
+            }
+    }
+
+    /// Pushing the open sidebar back to the left.
+    private var closeDrag: some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .global)
+            .onChanged { value in
+                sidebarDrag = min(0, value.translation.width)
+            }
+            .onEnded { value in
+                setSidebar(value.predictedEndTranslation.width > -Self.sidebarWidth / 2)
+            }
+    }
+
     private var sidebarLayer: some View {
-        ZStack(alignment: .leading) {
-            if sidebar {
-                Color.black.opacity(0.3)
+        let shown = sidebarShown
+        let width = Self.sidebarWidth
+        return ZStack(alignment: .leading) {
+            Color.black.opacity(0.3 * shown / width)
+                .ignoresSafeArea()
+                .allowsHitTesting(sidebar)
+                .onTapGesture { setSidebar(false) }
+                .gesture(closeDrag)
+
+            GmailSidebar(store: store) { folder in
+                store.folder = folder
+                setSidebar(false)
+            } onClose: {
+                setSidebar(false)
+                onClose()
+            }
+            // Fully off screen (shadow too) when closed.
+            .offset(x: shown > 0 ? shown - width : -width - 40)
+            .allowsHitTesting(sidebar)
+            .accessibilityHidden(!sidebar)
+            .gesture(closeDrag)
+
+            // The strip along the left edge that pulls the sidebar out (not inside a mail, where
+            // the edge swipe goes back, nor while selecting).
+            if !sidebar && opened == nil && !selecting {
+                Color.clear
+                    .frame(width: 18)
+                    .frame(maxHeight: .infinity)
+                    .contentShape(Rectangle())
                     .ignoresSafeArea()
-                    .onTapGesture { sidebar = false }
-                    .transition(.opacity)
-                GmailSidebar(store: store) { folder in
-                    store.folder = folder
-                    sidebar = false
-                } onClose: {
-                    sidebar = false
-                    onClose()
-                }
-                .gesture(DragGesture(minimumDistance: 20).onEnded { value in
-                    if value.translation.width < -60 { sidebar = false }
-                })
-                .transition(.move(edge: .leading))
+                    .gesture(openDrag)
+                    .accessibilityHidden(true)
             }
         }
-        .animation(.snappy(duration: 0.3), value: sidebar)
     }
 
     // MARK: Actions

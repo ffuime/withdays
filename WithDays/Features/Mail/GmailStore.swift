@@ -47,7 +47,8 @@ enum GmailFolder: String, CaseIterable, Identifiable {
     /// Gmail's own search words for the mailbox.
     var query: String {
         switch self {
-        case .allInboxes: "in:inbox"
+        // Every account's inbox, without ソーシャル・プロモーション・新着 (and フォーラム).
+        case .allInboxes: "in:inbox -category:social -category:promotions -category:updates -category:forums"
         case .primary: "in:inbox category:primary"
         case .social: "in:inbox category:social"
         case .promotions: "in:inbox category:promotions"
@@ -486,7 +487,7 @@ final class GmailStore {
         var counts: [GmailFolder: Int] = [:]
         var all = 0
         for account in accounts {
-            if let count = try? await unreadCount(account.email, query: "in:inbox is:unread") { all += count }
+            if let count = try? await unreadCount(account.email, query: GmailFolder.allInboxes.query + " is:unread") { all += count }
         }
         counts[.allInboxes] = all
         if let email = currentEmail, let count = try? await unreadCount(email, query: "in:inbox category:primary is:unread") {
@@ -496,15 +497,11 @@ final class GmailStore {
     }
 
     private func unreadCount(_ email: String, query: String) async throws -> Int {
-        if query == "in:inbox is:unread" {
-            struct Label: Decodable { let messagesUnread: Int? }
-            let data = try await api(email, "labels/INBOX")
-            return try JSONDecoder().decode(Label.self, from: data).messagesUnread ?? 0
-        }
         let data = try await api(email, "messages", query: [URLQueryItem(name: "q", value: query),
-                                                            URLQueryItem(name: "maxResults", value: "1")])
+                                                            URLQueryItem(name: "maxResults", value: "500")])
+        // Counted from the ids (the estimate is rough); up to 500.
         let list = try JSONDecoder().decode(ListResponse.self, from: data)
-        return list.messages == nil ? 0 : (list.resultSizeEstimate ?? 0)
+        return list.messages?.count ?? 0
     }
 
     // MARK: Changes
