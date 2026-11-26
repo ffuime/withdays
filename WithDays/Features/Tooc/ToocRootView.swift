@@ -334,7 +334,7 @@ struct ToocRootView: View {
             Tab(value: ToocTab.me) {
                 ToocMeView()
             } label: {
-                Label("じぶん", systemImage: "face.smiling.inverse")
+                Label("じぶん", systemImage: "face.smiling")
             }
         }
         // Both symbols are named filled, chosen or not.

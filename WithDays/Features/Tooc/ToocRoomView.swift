@@ -49,7 +49,9 @@ struct ToocRoomView: View {
     @State private var awayFromBottom = false
     /// The reply whose quote was tapped to go up to what it answers (the 返信元へ button takes you back).
     @State private var returnTo: UUID?
-    @State private var position = ScrollPosition(edge: .bottom)
+    /// Far up the talk (最下部へ first jumps most of the way, then scrolls the rest).
+    @State private var farFromBottom = false
+    @State private var reporting = false
     @State private var showMembers = false
     @State private var editingGroup = false
     @State private var confirmClear = false
@@ -102,6 +104,7 @@ struct ToocRoomView: View {
             .toolbar { toolbar(room) }
             .background(theme.fill.ignoresSafeArea())
             .sheet(isPresented: $managingRoles) { ToocGroupRolesView(roomID: roomID) }
+            .sheet(isPresented: $reporting) { ToocReportSheet(target: .group(roomID)) }
             .alert("グループを削除しますか？", isPresented: $confirmDeleteGroup) {
                 Button("キャンセル", role: .cancel) {}
                 Button("削除", role: .destructive) {
@@ -248,6 +251,8 @@ struct ToocRoomView: View {
         let followsFar: Bool
         /// A つづき of someone else's message right above: a thin line links them.
         let link: ToocFollowLine.Sides?
+        /// The つづき is the day's first message and its message was the day before.
+        let acrossDay: Bool
         var id: UUID { message.id }
     }
 
@@ -279,7 +284,10 @@ struct ToocRoomView: View {
                         ? ToocFollowLine.Sides(fromMine: previous.senderID == store.me.id,
                                                toMine: message.senderID == store.me.id)
                         : nil
-                }
+                },
+                acrossDay: previous.map { previous in
+                    message.follows == previous.id && !calendar.isDate(previous.date, inSameDayAs: message.date)
+                } ?? false
             )
             let day = calendar.startOfDay(for: message.date)
             if days.last?.date == day {
@@ -309,7 +317,9 @@ struct ToocRoomView: View {
                                 }
                                 if let link = item.link {
                                     // Tap the line: the 返信ツリー the two are part of.
-                                    ToocFollowLine(sides: link)
+                                    ToocFollowLine(sides: link,
+                                                   through: item.acrossDay ? ToocTime.day(day.date) : nil,
+                                                   above: item.acrossDay ? Self.dayLabelHeight : 0)
                                         .onTapGesture { threadOf = item.message }
                                         .accessibilityAddTraits(.isButton)
                                         .accessibilityLabel("返信ツリーを開く")
@@ -350,7 +360,6 @@ struct ToocRoomView: View {
                 .animation(.snappy, value: typer?.id)
                 .scrollTargetLayout()
             }
-            .scrollPosition($position)
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
             .onScrollGeometryChange(for: Bool.self) { geometry in
@@ -362,8 +371,13 @@ struct ToocRoomView: View {
                     if !away { returnTo = nil }
                 }
             }
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentSize.height - geometry.visibleRect.maxY > geometry.containerSize.height * 1.5
+            } action: { _, far in
+                farFromBottom = far
+            }
             .overlay(alignment: .bottomTrailing) {
-                scrollButtons(reader)
+                scrollButtons(reader, ids: list.map(\.id))
             }
             .overlay {
                 if list.isEmpty && waiting.isEmpty {
@@ -398,7 +412,7 @@ struct ToocRoomView: View {
 
     /// 最下部へ (scrolled up a little), and above it, after going up from a reply's quote, 返信元へ: standing upright
     /// (turned a quarter clockwise), as wide as 最下部へ, coming out of it.
-    private func scrollButtons(_ reader: ScrollViewProxy) -> some View {
+    private func scrollButtons(_ reader: ScrollViewProxy, ids: [UUID]) -> some View {
         VStack(spacing: 10) {
             if awayFromBottom, let back = returnTo {
                 Button {
@@ -428,11 +442,17 @@ struct ToocRoomView: View {
             if awayFromBottom {
                 Button {
                     returnTo = nil
-                    withAnimation(.smooth(duration: 0.45)) { position.scrollTo(edge: .bottom) }
-                    // Rows drawn on the way can make the end move: settle on it once more.
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(480))
-                        withAnimation(.snappy) { position.scrollTo(edge: .bottom) }
+                    // A long way up: straight to a little above the end first, so the scroll that shows is short
+                    // (a long animated one draws rows as it goes and stutters).
+                    if farFromBottom, ids.count > 8 {
+                        reader.scrollTo(ids[ids.count - 8], anchor: .top)
+                    }
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(40))
+                        withAnimation(.smooth(duration: 0.35)) { reader.scrollTo("bottom", anchor: .bottom) }
+                        // Rows drawn on the way can move the end: settle on it.
+                        try? await Task.sleep(for: .milliseconds(420))
+                        reader.scrollTo("bottom", anchor: .bottom)
                     }
                 } label: {
                     Image(systemName: "arrow.down")
@@ -877,6 +897,11 @@ struct ToocRoomView: View {
                         store.update(roomID) { $0.muted.toggle() }
                     }
                     Button("非表示", systemImage: "eye.slash") { confirmHide = true }
+                }
+            }
+            if room.isGroup {
+                Section {
+                    Button("通報", systemImage: "exclamationmark.bubble") { reporting = true }
                 }
             }
             Section {
@@ -2276,7 +2301,8 @@ struct ToocThreadView: View {
 }
 
 /// A thin line from someone's message down to the つづき sent to it by someone else: across from one side to the
-/// other, or straight down when both are on the left (two other people in a group). Tap it for the 返信ツリー.
+/// other, or straight down when both are on the same side. Across a change of day it starts above the day's label
+/// and runs through it, leaving room for the words. Tap it for the 返信ツリー.
 struct ToocFollowLine: View {
     struct Sides: Equatable {
         /// The message above is yours (on the right).
@@ -2286,11 +2312,19 @@ struct ToocFollowLine: View {
     }
 
     let sides: Sides
+    /// The day's label the line runs through (and leaves a gap for).
+    var through: String? = nil
+    /// How far above the line starts (the day label's height).
+    var above: CGFloat = 0
+
+    private static let height: CGFloat = 16
+    private static let radius: CGFloat = 8
 
     var body: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let height = proxy.size.height
+            let middle = above > 0 ? above / 2 : height / 2
             let left: CGFloat = 72
             let right = width - 36
             let start = sides.fromMine ? right : left
@@ -2300,15 +2334,34 @@ struct ToocFollowLine: View {
                 if start == end {
                     path.addLine(to: CGPoint(x: end, y: height))
                 } else {
-                    let turn: CGFloat = end > start ? 8 : -8
-                    path.addQuadCurve(to: CGPoint(x: start + turn, y: height / 2), control: CGPoint(x: start, y: height / 2))
-                    path.addLine(to: CGPoint(x: end - turn, y: height / 2))
-                    path.addQuadCurve(to: CGPoint(x: end, y: height), control: CGPoint(x: end, y: height / 2))
+                    let turn: CGFloat = end > start ? Self.radius : -Self.radius
+                    path.addLine(to: CGPoint(x: start, y: max(0, middle - Self.radius)))
+                    path.addQuadCurve(to: CGPoint(x: start + turn, y: middle), control: CGPoint(x: start, y: middle))
+                    path.addLine(to: CGPoint(x: end - turn, y: middle))
+                    path.addQuadCurve(to: CGPoint(x: end, y: min(height, middle + Self.radius)),
+                                      control: CGPoint(x: end, y: middle))
+                    path.addLine(to: CGPoint(x: end, y: height))
                 }
             }
             .stroke(Color.secondary.opacity(0.45), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+            .mask {
+                // A gap where the day's words are.
+                ZStack {
+                    Rectangle()
+                    if let through {
+                        Text(through)
+                            .toocFont(.caption.weight(.semibold))
+                            .padding(.horizontal, 12)
+                            .opacity(0)
+                            .background(Rectangle().blendMode(.destinationOut))
+                            .position(x: width / 2, y: middle)
+                    }
+                }
+                .compositingGroup()
+            }
         }
-        .frame(height: 16)
+        .frame(height: Self.height + above)
+        .padding(.top, -above)
         // Easy to hit: the whole strip takes the tap.
         .contentShape(Rectangle())
     }

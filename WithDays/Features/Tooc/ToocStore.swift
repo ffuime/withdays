@@ -1719,4 +1719,21 @@ final class ToocStore {
     }
 
     static let emojis = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🎉", "🔥"]
+
+    /// tooc's own account (reports are sent to it).
+    static let officialID = "tooc"
+
+    /// 通報: a message to tooc's account saying who (or which group) and why. The one reported isn't told.
+    func report(_ target: ToocReportSheet.Target, reason: ToocReportReason) {
+        var lines = ["【通報】", "理由：\(reason.label)"]
+        switch target {
+        case .user(let id):
+            lines.append("相手：\(displayName(id))（@\(id)）")
+        case .group(let roomID):
+            let name = room(roomID).map { self.name(of: $0) } ?? ""
+            lines.append("グループ：\(name)（\(roomID)）")
+        }
+        let official = room(with: Self.officialID)
+        send(.text(lines.joined(separator: "\n")), in: official.id)
+    }
 }

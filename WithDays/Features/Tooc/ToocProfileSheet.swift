@@ -13,6 +13,7 @@ struct ToocProfileSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var path: [ToocProfilePage] = []
     @State private var showQR = false
+    @State private var reporting = false
     @State private var editing = false
     @State private var clear = false
     @State private var renaming = false
@@ -39,6 +40,7 @@ struct ToocProfileSheet: View {
             main
                 .containerBackground(.clear, for: .navigation)
                 .toolbar { toolbar }
+                .sheet(isPresented: $reporting) { ToocReportSheet(target: .user(userID)) }
                 .navigationDestination(for: ToocProfilePage.self) { page in
                     detail(page)
                         .containerBackground(.clear, for: .navigation)
@@ -167,6 +169,23 @@ struct ToocProfileSheet: View {
                     Image(systemName: "person.badge.plus").foregroundStyle(.white)
                 }
                 .accessibilityLabel("友だち追加")
+            }
+            if !isMe {
+                Menu {
+                    if user.isFriend {
+                        ToocMenuButton(user.isFavorite ? "お気に入りから削除" : "お気に入りに追加",
+                                       systemImage: user.isFavorite ? "star.slash" : "star") {
+                            store.toggleFavorite(user.id)
+                        }
+                    }
+                    if user.id != ToocStore.officialID {
+                        ToocMenuButton("通報", systemImage: "exclamationmark.bubble") { reporting = true }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis").foregroundStyle(.white)
+                }
+                .tint(Color.primary)
+                .accessibilityLabel("その他")
             }
         }
     }

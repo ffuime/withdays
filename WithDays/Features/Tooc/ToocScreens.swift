@@ -164,7 +164,7 @@ struct ToocFindView: View {
                 }
                 .padding(.horizontal, 16)
                 .frame(height: Self.fieldHeight)
-                .background(theme.card, in: Capsule())
+                .background(Color.primary.opacity(0.07), in: Capsule())
                 // As tall as the field.
                 Button(action: search) {
                     Image(systemName: "magnifyingglass")

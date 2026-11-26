@@ -6,7 +6,7 @@ import UIKit
 
 // MARK: - Passcode lock
 
-/// パスコードロック: a 4–6 digit code kept on this device only (in the keychain, as a hash), asked for on opening tooc
+/// パスコードロック: a 4- or 6-digit code kept on this device only (in the keychain, as a hash), asked for on opening tooc
 /// and on coming back after a minute or more away, in a sheet over the loading screen. Face ID can open it too.
 @MainActor
 @Observable
@@ -165,7 +165,7 @@ final class ToocLock {
     }
 }
 
-/// The loading screen with the passcode sheet over it.
+/// The loading screen with the passcode over it: a full-screen sheet that can't be closed.
 private struct ToocLockScreen: View {
     let theme: ToocTheme
     let onUnlock: () -> Void
@@ -186,15 +186,15 @@ private struct ToocLockScreen: View {
             try? await Task.sleep(for: .milliseconds(150))
             asking = true
         }
-        .sheet(isPresented: $asking) {
+        .fullScreenCover(isPresented: $asking) {
             ToocUnlockView {
                 asking = false
                 onUnlock()
             }
             .environment(\.toocTheme, theme)
             .tint(theme.accent)
+            .background(theme.fill.ignoresSafeArea())
             .interactiveDismissDisabled()
-            .presentationDetents([.height(600)])
         }
     }
 }
@@ -208,23 +208,17 @@ private struct ToocUnlockView: View {
     @State private var confirmForgot = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Spacer()
-                Button("忘れた場合") { confirmForgot = true }
-                    .toocFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            ToocPasscodePad(
-                title: "パスコードを入力",
-                code: $code,
-                slots: lock.length,
-                shake: shake,
-                biometry: lock.faceID ? lock.biometrySymbol : nil,
-                onBiometry: { Task { await tryBiometry() } }
-            )
+        ToocPasscodePad(
+            title: "パスコードを入力",
+            code: $code,
+            slots: lock.length,
+            shake: shake,
+            biometry: lock.faceID ? lock.biometrySymbol : nil,
+            onBiometry: { Task { await tryBiometry() } }
+        ) {
+            Button("パスコードを忘れた場合") { confirmForgot = true }
+                .toocFont(.footnote)
+                .foregroundStyle(.secondary)
         }
         .onChange(of: code) { _, new in
             guard new.count == lock.length else { return }
@@ -252,39 +246,45 @@ private struct ToocUnlockView: View {
     }
 }
 
-/// The keypad: plain digits with no background, Face ID at the bottom left and delete at the bottom right.
-struct ToocPasscodePad: View {
+/// The keypad: plain digits with no background across most of the width, Face ID at the bottom left and delete at
+/// the bottom right; something of its own (a button) under it.
+struct ToocPasscodePad<Below: View>: View {
     let title: String
     var message: String? = nil
     @Binding var code: String
-    /// How many dots (the code's length, or 4–6 while choosing one).
+    /// How many dots (the code's length, or 4 / 6 while choosing one).
     let slots: Int
     var maxLength = 6
     var shake = 0
     var biometry: String? = nil
     var onBiometry: () -> Void = {}
-    /// While choosing a code of 4–6 digits: 決定, once there are enough.
-    var onDone: (() -> Void)? = nil
+    /// A small line under the dots (how long a code can be).
+    var note: String? = nil
+    @ViewBuilder var below: Below
 
-    private static let keySize = CGSize(width: 80, height: 64)
+    private static var keyHeight: CGFloat { 68 }
 
     var body: some View {
-        VStack(spacing: 22) {
+        VStack(spacing: 20) {
+            Spacer(minLength: 12)
             VStack(spacing: 6) {
-                Text(title).toocFont(.headline)
+                Text(title).toocFont(.title3.weight(.semibold))
                 Text(message ?? " ")
                     .toocFont(.footnote)
                     .foregroundStyle(.secondary)
             }
-            HStack(spacing: 16) {
+            HStack(spacing: 18) {
                 ForEach(0..<max(slots, code.count), id: \.self) { index in
-                    Circle()
-                        .fill(index < code.count ? Color.primary : Color.clear)
-                        .overlay(Circle().strokeBorder(Color.primary.opacity(0.6), lineWidth: 1.5))
-                        .frame(width: 14, height: 14)
+                    // Entered: one solid colour; not yet: an outline.
+                    if index < code.count {
+                        Circle().fill(Color.primary).frame(width: 14, height: 14)
+                    } else {
+                        Circle().strokeBorder(Color.primary.opacity(0.45), lineWidth: 1.5).frame(width: 14, height: 14)
+                    }
                 }
             }
             .animation(.snappy(duration: 0.15), value: code)
+            .animation(.snappy(duration: 0.2), value: slots)
             .keyframeAnimator(initialValue: 0.0, trigger: shake) { content, x in
                 content.offset(x: x)
             } keyframes: { _ in
@@ -297,37 +297,30 @@ struct ToocPasscodePad: View {
                 }
             }
             .frame(height: 20)
+            Text(note ?? " ")
+                .toocFont(.caption)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 12)
 
-            Group {
-                if let onDone {
-                    Button("決定", action: onDone)
-                        .toocFont(.subheadline.weight(.semibold))
-                        .disabled(code.count < 4)
-                        .opacity(code.count < 4 ? 0.35 : 1)
-                } else {
-                    Color.clear
-                }
-            }
-            .frame(height: 22)
-
-            VStack(spacing: 10) {
+            VStack(spacing: 8) {
                 ForEach([["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"]], id: \.self) { row in
-                    HStack(spacing: 24) {
+                    HStack(spacing: 0) {
                         ForEach(row, id: \.self) { key($0) }
                     }
                 }
-                HStack(spacing: 24) {
+                HStack(spacing: 0) {
                     if let biometry {
                         Button(action: onBiometry) {
                             Image(systemName: biometry)
                                 .font(.system(size: 28))
-                                .frame(width: Self.keySize.width, height: Self.keySize.height)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: Self.keyHeight)
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("生体認証で解除")
                     } else {
-                        Color.clear.frame(width: Self.keySize.width, height: Self.keySize.height)
+                        Color.clear.frame(maxWidth: .infinity).frame(height: Self.keyHeight)
                     }
                     key("0")
                     Button {
@@ -335,7 +328,8 @@ struct ToocPasscodePad: View {
                     } label: {
                         Image(systemName: "delete.left")
                             .font(.system(size: 24))
-                            .frame(width: Self.keySize.width, height: Self.keySize.height)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: Self.keyHeight)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -343,10 +337,14 @@ struct ToocPasscodePad: View {
                 }
             }
             .foregroundStyle(Color.primary)
+            .padding(.horizontal, 20)
+
+            below
+                .padding(.horizontal, 24)
+                .frame(minHeight: 50)
         }
-        .padding(.top, 12)
-        .padding(.bottom, 24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sensoryFeedback(.selection, trigger: code)
         .sensoryFeedback(.error, trigger: shake)
     }
@@ -356,15 +354,16 @@ struct ToocPasscodePad: View {
             if code.count < maxLength { code.append(digit) }
         } label: {
             Text(digit)
-                .font(.system(size: 32, weight: .regular, design: .rounded))
-                .frame(width: Self.keySize.width, height: Self.keySize.height)
+                .font(.system(size: 34, weight: .regular, design: .rounded))
+                .frame(maxWidth: .infinity)
+                .frame(height: Self.keyHeight)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 }
 
-/// Setting, changing or turning off the code.
+/// Setting, changing or turning off the code. A new code is 4 digits, or 6 when more than 4 are typed.
 struct ToocPasscodeSetup: View {
     enum Mode: String, Identifiable {
         case create, change, remove
@@ -387,16 +386,35 @@ struct ToocPasscodeSetup: View {
         _step = State(initialValue: mode == .create ? .new : .current)
     }
 
+    private var slots: Int {
+        switch step {
+        case .current: lock.length
+        case .confirm: chosen.count
+        case .new: code.count > 4 ? 6 : 4
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ToocPasscodePad(
                 title: title,
                 message: message,
                 code: $code,
-                slots: step == .current ? lock.length : (step == .confirm ? chosen.count : 4),
+                slots: slots,
                 shake: shake,
-                onDone: step == .new ? { choose() } : nil
-            )
+                note: step == .new ? "4桁を超えて入力すると、6桁のパスコードになります" : nil
+            ) {
+                if step == .new {
+                    Button { choose() } label: {
+                        Text("決定")
+                            .toocFont(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .disabled(code.count != 4)
+                }
+            }
             .id(step)
             .transition(.push(from: .trailing))
             .navigationTitle(mode == .remove ? "パスコードをオフ" : "パスコード")
@@ -407,14 +425,13 @@ struct ToocPasscodeSetup: View {
                 }
             }
         }
-        .presentationDetents([.height(640)])
         .onChange(of: code) { _, new in entered(new) }
     }
 
     private var title: String {
         switch step {
         case .current: "いまのパスコード"
-        case .new: "新しいパスコード（4〜6桁）"
+        case .new: "新しいパスコード"
         case .confirm: "もう一度入力"
         }
     }
@@ -449,7 +466,7 @@ struct ToocPasscodeSetup: View {
     }
 
     private func choose() {
-        guard (4...6).contains(code.count) else { return }
+        guard code.count == 4 || code.count == 6 else { return }
         chosen = code
         advance(to: .confirm, message: nil)
     }
@@ -498,7 +515,7 @@ struct ToocPrivacySettingsView: View {
                     }
                 }
             } footer: {
-                Text("tooc を開くときと、1分以上ほかのアプリにいて戻ったときに、4〜6桁のパスコードを入力します。パスコードはこの iPhone の中だけに保存されます。").toocFont(.footnote)
+                Text("tooc を開くときと、1分以上ほかのアプリにいて戻ったときに、4桁または6桁のパスコードを入力します。パスコードはこの iPhone の中だけに保存されます。").toocFont(.footnote)
             }
             Section {
                 Toggle("toocIDによる検索を許可", isOn: Binding(get: { store.me.findable }, set: { store.setFindable($0) }))
