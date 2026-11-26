@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFA048"/><stop offset="1" stop-color="#FF3D2E"/></linearGradient>
+<linearGradient id="bw" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#FFF1E8"/></linearGradient>
+<radialGradient id="glow" cx="0.3" cy="0.2" r="0.9"><stop offset="0" stop-color="#fff" stop-opacity="0.28"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+<filter id="sh" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#0A1E3C" flood-opacity="0.22"/></filter>
+<filter id="sh2" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0A1E3C" flood-opacity="0.22"/></filter>
+<linearGradient id="bar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF9A4D"/><stop offset="1" stop-color="#FF4A2E"/></linearGradient><linearGradient id="play" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF7A3D"/><stop offset="1" stop-color="#FF2E2E"/></linearGradient>
+</defs>
+<rect width="1024" height="1024" fill="url(#bg)"/>
+<rect width="1024" height="1024" fill="url(#glow)"/>
+<circle cx="900" cy="130" r="230" fill="#fff" opacity="0.08"/>
+<circle cx="90" cy="960" r="260" fill="#fff" opacity="0.07"/>
+
+<rect x="300" y="196" width="520" height="330" rx="48" fill="#fff" opacity="0.22" transform="rotate(11 560 361)"/>
+<rect x="252" y="244" width="540" height="350" rx="50" fill="#fff" opacity="0.42" transform="rotate(5 522 419)"/>
+<g filter="url(#sh)"><rect x="176" y="316" width="660" height="440" rx="62" fill="url(#bw)"/></g>
+<path d="M238 340 H774" stroke="#fff" stroke-width="8" stroke-linecap="round"/>
+<rect x="240" y="384" width="270" height="38" rx="19" fill="#FFB38A"/>
+<rect x="240" y="442" width="180" height="28" rx="14" fill="#FFD6C2"/>
+<rect x="250" y="590" width="48" height="104" rx="14" fill="url(#bar)"/>
+<rect x="318" y="548" width="48" height="146" rx="14" fill="url(#bar)"/>
+<rect x="386" y="508" width="48" height="186" rx="14" fill="url(#bar)"/>
+<rect x="454" y="568" width="48" height="126" rx="14" fill="url(#bar)" opacity="0.55"/>
+<g filter="url(#sh2)">
+<circle cx="700" cy="640" r="112" fill="url(#play)" stroke="#fff" stroke-width="16"/>
+<path d="M672 588 L672 692 L756 640 Z" fill="#fff" stroke="#fff" stroke-width="18" stroke-linejoin="round"/>
+</g>
+</svg>

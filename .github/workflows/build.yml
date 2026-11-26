@@ -11,8 +11,8 @@ permissions:
   contents: write
 
 env:
-  # WithDays isn't being shipped for now: only tooc.ipa is built.
-  BUILD_WITHDAYS: "false"
+  # Both WithDays.ipa and tooc.ipa are built.
+  BUILD_WITHDAYS: "true"
 
 jobs:
   build:

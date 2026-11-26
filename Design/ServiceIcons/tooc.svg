@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8A6CFF"/><stop offset="1" stop-color="#1FA8FF"/></linearGradient>
+<linearGradient id="bw" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#EAF0FF"/></linearGradient>
+<radialGradient id="glow" cx="0.3" cy="0.2" r="0.9"><stop offset="0" stop-color="#fff" stop-opacity="0.28"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+<filter id="sh" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#0A1E3C" flood-opacity="0.22"/></filter>
+<filter id="sh2" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0A1E3C" flood-opacity="0.22"/></filter>
+<linearGradient id="back" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5B8CFF"/><stop offset="1" stop-color="#2D5BFF"/></linearGradient><linearGradient id="dot" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7B61FF"/><stop offset="1" stop-color="#2F7BFF"/></linearGradient>
+</defs>
+<rect width="1024" height="1024" fill="url(#bg)"/>
+<rect width="1024" height="1024" fill="url(#glow)"/>
+<circle cx="900" cy="130" r="230" fill="#fff" opacity="0.08"/>
+<circle cx="90" cy="960" r="260" fill="#fff" opacity="0.07"/>
+
+<g filter="url(#sh2)" opacity="0.95">
+<path d="M560 214 H760 A120 120 0 0 1 760 454 H720 L752 520 L660 454 H560 A120 120 0 0 1 560 214 Z" fill="url(#back)"/>
+<circle cx="600" cy="334" r="16" fill="#fff" opacity="0.9"/><circle cx="660" cy="334" r="16" fill="#fff" opacity="0.9"/>
+<path d="M710 320 h60" stroke="#fff" stroke-width="22" stroke-linecap="round" opacity="0.9"/>
+</g>
+<g filter="url(#sh)">
+<path d="M300 380 H640 A170 170 0 0 1 640 720 H420 C370 720 300 780 236 790 C258 760 254 712 220 670 A170 170 0 0 1 300 380 Z" fill="url(#bw)"/>
+</g>
+<path d="M300 404 H640 A146 146 0 0 1 766 476" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round"/>
+<circle cx="360" cy="550" r="36" fill="url(#dot)"/>
+<circle cx="470" cy="550" r="36" fill="url(#dot)" opacity="0.75"/>
+<circle cx="580" cy="550" r="36" fill="url(#dot)" opacity="0.5"/>
+<path d="M800 600 l12 -26 l12 26 l26 12 l-26 12 l-12 26 l-12 -26 l-26 -12 Z" fill="#fff" opacity="0.9"/>
+</svg>

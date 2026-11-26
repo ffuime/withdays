@@ -7,7 +7,7 @@ enum HomeRoute: Hashable {
 }
 
 enum HomeMode: String {
-    case calendar, todo, go, mo, notes, slides, tooc, subs, gallery, holder
+    case calendar, todo, go, mo, notes, slides, tooc, subs, gallery, holder, gmail
 }
 
 struct HomeView: View {
@@ -46,6 +46,9 @@ struct HomeView: View {
     @State private var todayPulse = 0
     /// The bottom glass buttons' size, so Cal's ＋ (drawn by CalFab) matches them.
     @State private var barButtonSize: CGFloat = 56
+    /// Holding ＋: the list of services, zooming out of ＋.
+    @State private var showServices = false
+    @Namespace private var fabZoom
 
     init() {
         let stored = UserDefaults.standard.double(forKey: SettingsKey.lastMonth)
@@ -70,13 +73,15 @@ struct HomeView: View {
     /// Gallery and Holder are laid over everything too.
     private var isGallery: Bool { mode == HomeMode.gallery.rawValue }
     private var isHolder: Bool { mode == HomeMode.holder.rawValue }
+    /// Gmail is laid over everything like tooc.
+    private var isGmail: Bool { mode == HomeMode.gmail.rawValue }
     /// Gallery ⇄ Holder: a cross-fade, not Gallery sliding away.
     @State private var holderSwap = false
     private var galleryTransition: AnyTransition {
         holderSwap ? .opacity : .move(edge: .bottom).combined(with: .opacity)
     }
     /// Go, Planner and Notes bring their own bars; the calendar's toolbar and buttons stay out of them.
-    private var isOwnScreen: Bool { isGo || isMo || isNotes || isSlides || isTooc || isSubs || isGallery || isHolder }
+    private var isOwnScreen: Bool { isGo || isMo || isNotes || isSlides || isTooc || isSubs || isGallery || isHolder || isGmail }
 
     private var displayedMonth: Date {
         let id = page ?? 0
@@ -86,7 +91,7 @@ struct HomeView: View {
     /// The screen for the current mode; split out so the body type-checks in reasonable time.
     private var modeContent: some View {
         ZStack {
-            if isSlides || isTooc || isSubs || isGallery || isHolder {
+            if isSlides || isTooc || isSubs || isGallery || isHolder || isGmail {
                 Color(uiColor: .systemBackground)
             } else if isNotes {
                 NotesView {
@@ -197,6 +202,16 @@ struct HomeView: View {
             }
             .animation(.snappy(duration: 0.35), value: isSubs)
             .overlay {
+                if isGmail {
+                    GmailView {
+                        withAnimation(.snappy) { mode = HomeMode.calendar.rawValue }
+                    }
+                    .background(Color(uiColor: .systemBackground))
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.snappy(duration: 0.35), value: isGmail)
+            .overlay {
                 if isGallery {
                     GalleryView {
                         holderSwap = false
@@ -267,6 +282,13 @@ struct HomeView: View {
             }
             .spanDialog($spanRequest)
             .errorAlert($errorMessage)
+            .fullScreenCover(isPresented: $showServices) {
+                ServicePicker { target in
+                    showServices = false
+                    withAnimation(.snappy(duration: 0.35)) { mode = target.rawValue }
+                }
+                .navigationTransition(.zoom(sourceID: CalFab.zoomID, in: fabZoom))
+            }
             .onOpenURL(perform: open)
             // ショートカット: open one of the apps straight away.
             .onReceive(NotificationCenter.default.publisher(for: HomeModeRequest.notification)) { note in
@@ -525,7 +547,7 @@ struct HomeView: View {
     @ViewBuilder
     private var toastLayer: some View {
         // Mo shows the toast above its own tab bar.
-        if let toast = toasts.current, !isMo, !isNotes, !isSlides, !isTooc, !isSubs, !isGallery, !isHolder {
+        if let toast = toasts.current, !isMo, !isNotes, !isSlides, !isTooc, !isSubs, !isGallery, !isHolder, !isGmail {
             UndoToastView(toast: toast) { toasts.performUndo() }
                 .padding(.horizontal, isTodo ? 20 : 20 + 56 + 10)
                 .padding(.bottom, isTodo ? 20 + 56 + 12 : 20)
@@ -564,12 +586,13 @@ struct HomeView: View {
                     size: barButtonSize,
                     menuEnabled: relocation == nil,
                     disabled: relocation?.targets.isEmpty ?? false,
+                    zoom: fabZoom,
                     onTap: {
                         if relocation != nil { confirmRelocation() } else { openEditor(.new) }
                     },
-                    onOpenMenu: closeTray,
-                    onPick: { target in
-                        withAnimation(.snappy(duration: 0.35)) { mode = target.rawValue }
+                    onOpenMenu: {
+                        closeTray()
+                        showServices = true
                     }
                 )
             }

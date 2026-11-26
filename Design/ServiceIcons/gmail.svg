@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E9EDF2"/></linearGradient>
+<filter id="sh" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#3C4043" flood-opacity="0.18"/></filter></defs>
+<rect width="1024" height="1024" fill="url(#bg)"/>
+<circle cx="900" cy="130" r="230" fill="#4285F4" opacity="0.04"/>
+<circle cx="90" cy="960" r="260" fill="#EA4335" opacity="0.04"/>
+<g filter="url(#sh)" transform="translate(160 247) scale(2.75)"><path d="M58.18 192.05V93.14L27.51 65.08 0 49.5v125.09c0 9.66 7.83 17.46 17.45 17.46h40.73z" fill="#4285F4"/>
+<path d="M197.82 192.05h40.73c9.66 0 17.45-7.83 17.45-17.46V49.51l-31.16 17.84-27.02 25.79v98.91z" fill="#34A853"/>
+<path d="M58.18 93.14l-4.17-38.65 4.17-36.99L128 69.87l69.82-52.37 4.67 34.99-4.67 40.65L128 145.51z" fill="#EA4335"/>
+<path d="M197.82 17.5v75.64L256 49.51V26.24c0-21.58-24.64-33.88-41.89-20.94l-16.29 12.2z" fill="#FBBC04"/>
+<path d="M0 49.51l26.76 20.07L58.18 93.14V17.5L41.89 5.3C24.61-7.64 0 4.67 0 26.24v23.27z" fill="#C5221F"/></g>
+</svg>

@@ -3,7 +3,7 @@ import Foundation
 
 /// The apps inside WithDays, for the ショートカット app and Siri.
 enum WithDaysScreen: String, AppEnum {
-    case calendar, todo, tooc, slides, notes, go, planner, subscribes, gallery, holder
+    case calendar, todo, tooc, slides, notes, go, planner, subscribes, gallery, holder, gmail
 
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "アプリ"
 
@@ -18,6 +18,7 @@ enum WithDaysScreen: String, AppEnum {
         .subscribes: DisplayRepresentation(title: "Subscribes", image: .init(systemName: "creditcard")),
         .gallery: DisplayRepresentation(title: "Gallery", image: .init(systemName: "photo.on.rectangle")),
         .holder: DisplayRepresentation(title: "Holder", image: .init(systemName: "rectangle.portrait.on.rectangle.portrait")),
+        .gmail: DisplayRepresentation(title: "Gmail", image: .init(systemName: "envelope")),
     ]
 
     var mode: HomeMode {
@@ -32,13 +33,14 @@ enum WithDaysScreen: String, AppEnum {
         case .subscribes: .subs
         case .gallery: .gallery
         case .holder: .holder
+        case .gmail: .gmail
         }
     }
 }
 
 struct OpenScreenIntent: AppIntent {
     static let title: LocalizedStringResource = "WithDaysのアプリを開く"
-    static let description = IntentDescription("Calendar・ToDo・tooc・Slides・Notes・Go・Planner・Subscribes・Gallery・Holder を直接開きます。")
+    static let description = IntentDescription("Calendar・ToDo・tooc・Slides・Notes・Go・Planner・Subscribes・Gallery・Holder・Gmail を直接開きます。")
     static let openAppWhenRun: Bool = true
 
     @Parameter(title: "アプリ")
