@@ -61,7 +61,7 @@ struct ToocReportSheet: View {
                 } header: {
                     Text("通報の理由").toocFont(.footnote)
                 } footer: {
-                    Text("通報は tooc の公式アカウント（@\(ToocStore.officialID)）へのトークとして送られます。通報したことは相手には伝わりません。")
+                    Text("通報は tooc の通報用アカウント（@\(ToocStore.officialID)）へのトークとして送られます。通報したことは相手には伝わりません。")
                         .toocFont(.footnote)
                 }
             }

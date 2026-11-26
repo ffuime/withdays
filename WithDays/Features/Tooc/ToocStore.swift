@@ -1720,8 +1720,8 @@ final class ToocStore {
 
     static let emojis = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🎉", "🔥"]
 
-    /// tooc's own account (reports are sent to it).
-    static let officialID = "tooc"
+    /// tooc's account for reports (they're sent to it as messages).
+    static let officialID = "tooc.report"
 
     /// 通報: a message to tooc's account saying who (or which group) and why. The one reported isn't told.
     func report(_ target: ToocReportSheet.Target, reason: ToocReportReason) {
