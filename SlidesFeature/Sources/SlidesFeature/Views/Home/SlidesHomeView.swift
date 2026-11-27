@@ -5,7 +5,7 @@ import SwiftUI
 public struct SlidesHomeView: View {
     private let onClose: (() -> Void)?
 
-    /// `onClose` adds a button (top right) for leaving the feature.
+    /// `onClose` adds a back button (top left) for leaving the feature.
     public init(onClose: (() -> Void)? = nil) {
         self.onClose = onClose
     }
@@ -96,13 +96,14 @@ struct SlidesRoot: View {
                 .navigationBarTitleDisplayMode(.large)
                 .toolbar {
                     if let onClose {
-                        ToolbarItem(placement: .topBarTrailing) {
+                        ToolbarItem(placement: .topBarLeading) {
                             Button(action: onClose) {
-                                Image(systemName: "calendar")
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 15, weight: .semibold))
                                     .foregroundStyle(.primary)
                             }
                             .tint(.primary)
-                            .accessibilityLabel("カレンダーに戻る")
+                            .accessibilityLabel("WithDaysに戻る")
                         }
                     }
                 }

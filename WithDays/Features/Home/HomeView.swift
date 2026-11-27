@@ -102,6 +102,9 @@ struct HomeView: View {
                 MoView {
                     withAnimation(.snappy) { mode = HomeMode.calendar.rawValue }
                 }
+                .environment(\.backToWithDays, {
+                    withAnimation(.snappy) { mode = HomeMode.calendar.rawValue }
+                })
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             } else if isGo {
                 GoView {
@@ -372,6 +375,14 @@ struct HomeView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
+        // ToDo and Go: back to WithDays, top left. (Planner and Notes put it in their own bars.)
+        if isTodo || isGo {
+            ToolbarItem(placement: .topBarLeading) {
+                WithDaysBackButton {
+                    withAnimation(.snappy) { mode = HomeMode.calendar.rawValue }
+                }
+            }
+        }
         ToolbarItem(placement: .topBarLeading) {
             // Go keeps a clean screen; its calendar button is in the presets sheet.
             if isTodo {
@@ -403,14 +414,6 @@ struct HomeView: View {
         ToolbarItemGroup(placement: .topBarTrailing) {
             // Go keeps a clean screen; Mo's tabs and Notes bring their own buttons.
             if !isOwnScreen {
-                // Only ToDo has this: back to the calendar. ToDo itself opens from ＋'s menu.
-                if isTodo {
-                    Button {
-                        withAnimation(.snappy) { mode = HomeMode.calendar.rawValue }
-                    } label: {
-                        Image(systemName: "calendar")
-                    }
-                }
                 if !isTodo {
                     NavigationLink(value: HomeRoute.search) {
                         Image(systemName: "magnifyingglass")

@@ -126,6 +126,9 @@ struct NotesView: View {
         .animation(.snappy, value: notes.state.folders)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
+                WithDaysBackButton(action: onCalendar)
+            }
+            ToolbarItem(placement: .topBarLeading) {
                 Button {
                     folder = nil
                 } label: {
@@ -155,9 +158,6 @@ struct NotesView: View {
                 } label: {
                     Image(systemName: searching ? "xmark" : "magnifyingglass")
                         .contentTransition(.symbolEffect(.replace))
-                }
-                Button(action: onCalendar) {
-                    Image(systemName: "calendar")
                 }
             }
         }

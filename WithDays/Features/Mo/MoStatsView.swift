@@ -4,6 +4,7 @@ import SwiftUI
 /// A month's balance and where the money went / came from. Swipe sideways (or use the arrows) for other months.
 /// A month runs from the start day set in Settings (every month on day x) to the day before it next month.
 struct MoStatsView: View {
+    @Environment(\.backToWithDays) private var backToWithDays
     @AppStorage(SettingsKey.moMonthStart) private var startDay = 1
     @State private var offset = 0
 
@@ -20,6 +21,7 @@ struct MoStatsView: View {
         .sensoryFeedback(.selection, trigger: offset)
         // The same bar as the calendar's: month on the left, arrows on the right.
         .toolbar {
+            WithDaysBackItem(action: backToWithDays)
             ToolbarItem(placement: .topBarLeading) {
                 Text(title(period(offset)))
                     .font(.system(size: 20, weight: .bold))

@@ -23,6 +23,11 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.32.1", date: "2026.11.27", notes: [
+            "どのサービスでも左上の ‹ から WithDays に戻れるように（Gmail はサイドバーから）",
+            "サービスのアイコンを tooc と揃ったデザインに",
+            "サービス一覧の選択・並び替えをなめらかに",
+        ]),
         Release(version: "1.32.0", date: "2026.11.27", notes: [
             "＋の長押しで、アイコン・名前・説明つきのサービス一覧を全画面で表示（並び替え・お気に入り、右へスワイプでもお気に入り）",
             "すべてのサービスに新しいアイコン",

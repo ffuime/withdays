@@ -4,6 +4,7 @@ import SwiftUI
 /// Holding the categories opens their list to edit, delete and reorder them.
 struct MoInputView: View {
     @Binding var kind: MoKind
+    @Environment(\.backToWithDays) private var backToWithDays
 
     @Environment(MoStore.self) private var mo
     @Environment(ToastCenter.self) private var toasts
@@ -42,6 +43,7 @@ struct MoInputView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .contentShape(Rectangle())
         .onTapGesture { memoFocused = false }
+        .toolbar { WithDaysBackItem(action: backToWithDays) }
         .sensoryFeedback(.success, trigger: saved)
         .sensoryFeedback(.error, trigger: shake)
         .sensoryFeedback(.impact(weight: .medium), trigger: showCategoryList) { _, new in new }

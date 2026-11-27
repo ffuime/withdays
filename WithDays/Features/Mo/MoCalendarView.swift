@@ -3,6 +3,7 @@ import SwiftUI
 /// The month with each day's spending (red) and income (green); the chosen day's records below.
 /// Swipe a record left to delete it, right to edit it.
 struct MoCalendarView: View {
+    @Environment(\.backToWithDays) private var backToWithDays
     @Environment(MoStore.self) private var mo
     @Environment(ToastCenter.self) private var toasts
     @AppStorage(SettingsKey.weekStart, store: AppGroup.defaults) private var weekStart = 1
@@ -36,6 +37,7 @@ struct MoCalendarView: View {
         }
         .sensoryFeedback(.selection, trigger: selectedDate)
         .toolbar {
+            WithDaysBackItem(action: backToWithDays)
             ToolbarItem(placement: .topBarLeading) {
                 Text(Fmt.monthTitle(month(offset)))
                     .font(.system(size: 20, weight: .bold))

@@ -75,6 +75,39 @@ final class ServiceShelf {
     }
 }
 
+extension EnvironmentValues {
+    /// Leaves the open service for WithDays (the calendar); set by Home for screens deep inside a service.
+    @Entry var backToWithDays: (() -> Void)? = nil
+}
+
+/// The top-left ‹ every service has (tooc's style): back to WithDays. Next to other buttons there,
+/// it is the first one in their pill.
+struct WithDaysBackButton: View {
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.primary)
+        }
+        .accessibilityLabel("WithDaysに戻る")
+    }
+}
+
+/// The ‹ for a screen inside a service that gets the way back from the environment.
+struct WithDaysBackItem: ToolbarContent {
+    let action: (() -> Void)?
+
+    var body: some ToolbarContent {
+        if let action {
+            ToolbarItem(placement: .topBarLeading) {
+                WithDaysBackButton(action: action)
+            }
+        }
+    }
+}
+
 /// A service's icon: square art with the rounded corners of an app icon.
 struct ServiceIcon: View {
     let name: String
@@ -101,8 +134,10 @@ struct ServicePicker: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var shelf = ServiceShelf.shared
-    @State private var selecting = false
+    @State private var editMode = EditMode.inactive
     @State private var selection = Set<String>()
+
+    private var selecting: Bool { editMode.isEditing }
 
     private var allSelectedFavorite: Bool {
         !selection.isEmpty && selection.allSatisfy(shelf.isFavorite)
@@ -123,7 +158,8 @@ struct ServicePicker: View {
                         .onMove { shelf.move(favorites: false, from: $0, to: $1) }
                 }
             }
-            .environment(\.editMode, .constant(selecting ? .active : .inactive))
+            // The list's own edit mode: selection circles and reorder handles slide in natively.
+            .environment(\.editMode, $editMode)
             .animation(.snappy, value: shelf.order)
             .animation(.snappy, value: shelf.favorites)
             .navigationTitle(selecting ? (selection.isEmpty ? "選択" : "\(selection.count)件選択") : "サービス")
@@ -140,8 +176,8 @@ struct ServicePicker: View {
                         }
                         .disabled(selection.isEmpty)
                         Button("完了", systemImage: "checkmark.circle.fill") {
-                            withAnimation(.snappy) {
-                                selecting = false
+                            withAnimation {
+                                editMode = .inactive
                                 selection = []
                             }
                         }
@@ -149,7 +185,7 @@ struct ServicePicker: View {
                 } else {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("選択", systemImage: "checkmark.circle") {
-                            withAnimation(.snappy) { selecting = true }
+                            withAnimation { editMode = .active }
                         }
                     }
                 }
@@ -161,18 +197,14 @@ struct ServicePicker: View {
     @ViewBuilder
     private func row(_ service: WithDaysService) -> some View {
         let favorite = shelf.isFavorite(service.id)
-        Group {
-            if selecting {
-                rowContent(service, favorite: favorite)
-            } else {
-                Button {
-                    onPick(service.mode)
-                } label: {
-                    rowContent(service, favorite: favorite)
-                }
-                .buttonStyle(.plain)
-            }
+        // One row view in both modes (no swapping), so the list can animate into editing smoothly.
+        // While editing, a tap selects the row (the list takes it) instead of opening the service.
+        Button {
+            if !selecting { onPick(service.mode) }
+        } label: {
+            rowContent(service, favorite: favorite)
         }
+        .buttonStyle(.plain)
         .tag(service.id)
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             Button(favorite ? "外す" : "お気に入り", systemImage: favorite ? "star.slash.fill" : "star.fill") {
