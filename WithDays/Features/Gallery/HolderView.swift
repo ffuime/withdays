@@ -92,12 +92,6 @@ struct HolderSettingsSheet: View {
         @Bindable var store = store
         return NavigationStack {
             Form {
-                Section {
-                    Button(action: onGallery) {
-                        Label("Galleryに戻る", systemImage: "photo.on.rectangle")
-                            .font(.system(size: 16, weight: .semibold))
-                    }
-                }
                 Section("写真") {
                     Button {
                         choosing = true
@@ -138,6 +132,15 @@ struct HolderSettingsSheet: View {
             .navigationTitle("Holder")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // Back to Gallery, top left like every service's way back.
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: onGallery) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Color.primary)
+                    }
+                    .accessibilityLabel("Galleryに戻る")
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button { dismiss() } label: { Image(systemName: "checkmark") }
                         .accessibilityLabel("閉じる")

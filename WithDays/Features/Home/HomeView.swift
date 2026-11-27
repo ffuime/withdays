@@ -384,7 +384,7 @@ struct HomeView: View {
             }
         }
         ToolbarItem(placement: .topBarLeading) {
-            // Go keeps a clean screen; its calendar button is in the presets sheet.
+            // Go keeps a clean screen apart from ‹ (above).
             if isTodo {
                 Text("ToDo")
                     .font(.system(size: 20, weight: .bold))

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Go: the next target time of the selected preset and how long is left, centred on the screen.
-/// Hold anywhere for the presets (whose top-right button goes back to the calendar); swipe up or down for brightness.
+/// Hold anywhere for the presets (whose top-left ‹ goes back to WithDays, like the one on this screen); swipe up or down for brightness.
 /// With something playing in the Music app, a music row is laid over the bottom (never moving the countdown), and a
 /// swipe left or right anywhere skips to the next or previous song.
 struct GoView: View {

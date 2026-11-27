@@ -68,16 +68,14 @@ struct GoPresetSheet: View {
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
+                // One pill top left: back to WithDays first, then close.
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    WithDaysBackButton {
                         dismiss()
                         onCalendar()
-                    } label: {
-                        Image(systemName: "calendar")
                     }
+                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("閉じる")
                 }
             }
             .overlay(alignment: .bottom) {
