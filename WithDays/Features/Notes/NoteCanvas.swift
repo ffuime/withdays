@@ -67,7 +67,7 @@ extension NoteToolSettings {
 
     /// The ink's colour for PencilKit: invisible when the line is thinner than PencilKit can draw, so only the thin
     /// line the page draws shows (never a thick one that thins on lifting).
-    static func toolColor(_ hex: String, _ width: Double, _ ink: PKInkingTool.InkType) -> UIColor {
+    static func toolColor(_ hex: Int, _ width: Double, _ ink: PKInkingTool.InkType) -> UIColor {
         let color = UIColor(notesHex: hex)
         return CGFloat(width) < ink.validWidthRange.lowerBound - 0.01 ? color.withAlphaComponent(0.01) : color
     }
