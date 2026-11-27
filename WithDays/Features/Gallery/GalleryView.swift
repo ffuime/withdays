@@ -198,6 +198,58 @@ struct GalleryGridScreen: View {
             }
             .buttonStyle(.plain)
             .matchedTransitionSource(id: item.id, in: zoom)
+            .contextMenu {
+                cellMenu(item)
+            } preview: {
+                GalleryThumb(item: item)
+                    .frame(width: 300, height: 300)
+                    .clipped()
+            }
+        }
+    }
+
+    /// Holding a photo: what the selection bar does, for this one.
+    @ViewBuilder
+    private func cellMenu(_ item: GalleryItem) -> some View {
+        ShareLink(item: store.url(item)) {
+            Label("共有", systemImage: "square.and.arrow.up")
+        }
+        Button {
+            store.setFavorite([item.id], !item.favorite)
+        } label: {
+            Label(item.favorite ? "お気に入りから外す" : "お気に入り", systemImage: item.favorite ? "heart.slash" : "heart")
+        }
+        Button {
+            addingToAlbum = [item.id]
+        } label: {
+            Label("アルバムに追加", systemImage: "rectangle.stack.badge.plus")
+        }
+        if let albumID {
+            Button {
+                withAnimation(.snappy) { store.remove([item.id], from: albumID) }
+            } label: {
+                Label("アルバムから外す", systemImage: "rectangle.stack.badge.minus")
+            }
+        }
+        if !item.isVideo {
+            Button {
+                store.holder.item = item.id
+            } label: {
+                Label("Holderに設定", systemImage: "rectangle.portrait.on.rectangle.portrait")
+            }
+        }
+        Button {
+            selecting = true
+            selected = [item.id]
+        } label: {
+            Label("選択", systemImage: "checkmark.circle")
+        }
+        Divider()
+        Button(role: .destructive) {
+            selected = [item.id]
+            confirmDelete = true
+        } label: {
+            Label("削除", systemImage: "trash")
         }
     }
 

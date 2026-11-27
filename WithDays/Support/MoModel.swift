@@ -214,6 +214,26 @@ enum MoFormat {
         formatter.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 
+    private static let shortDayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.calendar = CalendarMath.calendar
+        formatter.dateFormat = "M/d(E)"
+        return formatter
+    }()
+
+    /// Axis labels: 3,000 / 1.2万.
+    static func compact(_ value: Int) -> String {
+        guard value >= 10_000 else { return amount(value) }
+        let man = Double(value) / 10_000
+        return man == man.rounded() ? "\(Int(man))万" : String(format: "%.1f万", man)
+    }
+
+    /// 11/26(水)
+    static func shortDay(_ date: Date) -> String {
+        shortDayFormatter.string(from: date)
+    }
+
     /// Rounded system digits for amounts and the keypad.
     static func number(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
         .system(size: size, weight: weight, design: .rounded)

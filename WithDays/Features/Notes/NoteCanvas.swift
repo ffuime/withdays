@@ -59,17 +59,24 @@ final class NoteCanvasController {
 }
 
 extension NoteToolSettings {
-    /// The width PencilKit draws with: it has a thinnest width for each ink, and thinner strokes
-    /// are thinned to the asked-for width once they're drawn.
+    /// The width PencilKit draws with: it has a thinnest width for each ink. Thinner lines are drawn by the page
+    /// itself while the finger moves (PencilKit's own stroke is kept invisible), then stored at the width asked for.
     static func toolWidth(_ width: Double, _ ink: PKInkingTool.InkType) -> CGFloat {
         max(CGFloat(width), ink.validWidthRange.lowerBound)
+    }
+
+    /// The ink's colour for PencilKit: invisible when the line is thinner than PencilKit can draw, so only the thin
+    /// line the page draws shows (never a thick one that thins on lifting).
+    static func toolColor(_ hex: String, _ width: Double, _ ink: PKInkingTool.InkType) -> UIColor {
+        let color = UIColor(notesHex: hex)
+        return CGFloat(width) < ink.validWidthRange.lowerBound - 0.01 ? color.withAlphaComponent(0.01) : color
     }
 
     /// The PencilKit tool for the pen, highlighter and eraser; selecting, tape and text aren't PencilKit's.
     func pkTool(_ tool: NoteTool) -> (any PKTool)? {
         switch tool {
-        case .pen: PKInkingTool(.pen, color: UIColor(notesHex: pen.color), width: Self.toolWidth(pen.width, .pen))
-        case .marker: PKInkingTool(.marker, color: UIColor(notesHex: marker.color), width: Self.toolWidth(marker.width, .marker))
+        case .pen: PKInkingTool(.pen, color: Self.toolColor(pen.color, pen.width, .pen), width: Self.toolWidth(pen.width, .pen))
+        case .marker: PKInkingTool(.marker, color: Self.toolColor(marker.color, marker.width, .marker), width: Self.toolWidth(marker.width, .marker))
         case .eraser: eraserWhole ? PKEraserTool(.vector) : PKEraserTool(.bitmap, width: eraserWidth)
         case .select, .tape, .text: nil
         }
@@ -287,6 +294,9 @@ final class NotePageView: UIView, UIGestureRecognizerDelegate, NoteOverlayHost {
         let width: CGFloat
         /// What PencilKit draws with; wider than `width` when that's thinner than the ink allows.
         let toolWidth: CGFloat
+
+        /// Thinner than PencilKit draws: the page draws the line live and stores it at `width`.
+        var isThin: Bool { width < toolWidth - 0.01 }
     }
 
     private var lineInk: LineInk?
@@ -471,9 +481,10 @@ final class NotePageView: UIView, UIGestureRecognizerDelegate, NoteOverlayHost {
         commit()
     }
 
-    /// Strokes just drawn with a width thinner than PencilKit's thinnest are redrawn at the width asked for.
+    /// Strokes just drawn with a width thinner than PencilKit's thinnest are stored at the width asked for,
+    /// in the ink's real colour (PencilKit drew them invisible; the page showed the thin line meanwhile).
     private func thinNewStrokes() {
-        guard let ink = lineInk, ink.width < ink.toolWidth - 0.01 else { return }
+        guard let ink = lineInk, ink.isThin else { return }
         var strokes = canvas.drawing.strokes
         let known = current.drawing.strokes.count
         guard strokes.count > known else { return }
@@ -488,6 +499,7 @@ final class NotePageView: UIView, UIGestureRecognizerDelegate, NoteOverlayHost {
                 )
             }
             strokes[index].path = PKStrokePath(controlPoints: points, creationDate: path.creationDate)
+            strokes[index].ink = PKInk(ink.type, color: ink.color)
         }
         restoring = true
         canvas.drawing = PKDrawing(strokes: strokes)
@@ -673,6 +685,8 @@ final class NotePageView: UIView, UIGestureRecognizerDelegate, NoteOverlayHost {
         }
         travelled += hypot(current.x - last.x, current.y - last.y)
         strokePoints.append(current)
+        // A line thinner than PencilKit draws: shown at its own width as it's drawn.
+        if ink.isThin { overlay.showPreview(strokePoints, width: ink.width, color: previewColor(ink)) }
         if hypot(point.x - holdAnchor.x, point.y - holdAnchor.y) > 6 {
             // Still moving: the hold starts over from here.
             holdAnchor = point
@@ -702,6 +716,7 @@ final class NotePageView: UIView, UIGestureRecognizerDelegate, NoteOverlayHost {
         }
         erasing = false
         strokePoints = []
+        if lineInk?.isThin == true, vertices == nil { overlay.hidePreview() }
         guard let corners = vertices else { return }
         vertices = nil
         overlay.hidePreview()

@@ -157,7 +157,7 @@ struct SubsState: Codable {
 }
 
 enum SubsData {
-    static let defaultCategories = ["動画", "音楽", "ゲーム", "ツール", "クラウド", "ニュース", "ヘルスケア", "教育", "その他"]
+    static let defaultCategories = ["動画", "音楽", "ファンクラブ", "ゲーム", "ツール", "クラウド", "ニュース", "ヘルスケア", "教育", "その他"]
 
     private static var url: URL {
         let base = AppGroup.identifier.flatMap { FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: $0) }

@@ -76,8 +76,10 @@ private struct TodoContent: View {
     @State private var deletePulse = 0
     /// Deleted rows leave the list at once, before the store finishes.
     @State private var hiddenIDs: Set<String> = []
-    /// Where the row being edited is, so a tap anywhere else only ends editing.
-    @State private var editingFrame: CGRect = .zero
+    /// Where the row being edited is, so a tap anywhere else only ends editing. Kept in a box only the tap catcher
+    /// reads, so the row moving (the keyboard coming up, the list scrolling) doesn't redraw the list around the
+    /// text field mid-typing.
+    @State private var editingFrame = TodoEditingFrame()
     @State private var completedPulse = 0
     @State private var categorySheet: CategorySheet?
     @State private var errorMessage: String?
@@ -158,12 +160,10 @@ private struct TodoContent: View {
             if editingID != nil {
                 GeometryReader { geo in
                     let origin = geo.frame(in: .global).origin
-                    Color.black.opacity(0.001)
-                        .contentShape(HoleShape(hole: editingFrame.offsetBy(dx: -origin.x, dy: -origin.y)), eoFill: true)
-                        .onTapGesture {
-                            focus = nil
-                            commitEditing()
-                        }
+                    TodoTapCatcher(frame: editingFrame, origin: origin) {
+                        focus = nil
+                        commitEditing()
+                    }
                 }
             }
         }
@@ -223,7 +223,7 @@ private struct TodoContent: View {
                         onTap: { startEditing(row.item) },
                         onIndent: indentEditing,
                         onOutdent: outdentEditing,
-                        onEditingFrame: { editingFrame = $0 }
+                        onEditingFrame: { editingFrame.rect = $0 }
                     )
                     .listRowSeparator(editing ? .hidden : .automatic)
                     .swipeActions(edge: .trailing) {
@@ -238,7 +238,7 @@ private struct TodoContent: View {
                         checked: false, isEditing: true,
                         draftTitle: $draftTitle, draftNotes: $draftNotes, focus: $focus,
                         onToggle: {}, onFold: {}, onTap: {}, onIndent: indentEditing, onOutdent: outdentEditing,
-                        onEditingFrame: { editingFrame = $0 }
+                        onEditingFrame: { editingFrame.rect = $0 }
                     )
                     .listRowSeparator(.hidden)
                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -260,8 +260,10 @@ private struct TodoContent: View {
         .listStyle(.plain)
         // Room for the 実行済み pill and ＋ so the last rows can scroll clear of them.
         .contentMargins(.bottom, 96, for: .scrollContent)
-        // Only the visible page measures; its neighbours just reuse the height.
-        .tracksFillerHeight(isCurrent ? $fillerHeight : .constant(fillerHeight))
+        // Only the visible page measures; its neighbours just reuse the height. Not while a row is being edited:
+        // the keyboard growing as typing starts (the candidate bar) would resize the list under the text field and
+        // commit the first character before it can be converted.
+        .tracksFillerHeight(isCurrent && editingID == nil ? $fillerHeight : .constant(fillerHeight))
         .animation(.snappy, value: todos.rows(for: id))
     }
 
@@ -583,6 +585,25 @@ struct CountBadge: View {
             .padding(.horizontal, 5)
             .frame(minWidth: 18, minHeight: 18)
             .background(Capsule().fill(color))
+    }
+}
+
+@MainActor
+@Observable
+private final class TodoEditingFrame {
+    var rect: CGRect = .zero
+}
+
+/// Covers the screen while editing, except over the row being edited.
+private struct TodoTapCatcher: View {
+    let frame: TodoEditingFrame
+    let origin: CGPoint
+    var onTap: () -> Void
+
+    var body: some View {
+        Color.black.opacity(0.001)
+            .contentShape(HoleShape(hole: frame.rect.offsetBy(dx: -origin.x, dy: -origin.y)), eoFill: true)
+            .onTapGesture(perform: onTap)
     }
 }
 

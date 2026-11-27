@@ -412,12 +412,10 @@ struct HomeView: View {
         .sharedBackgroundVisibility(.hidden)
 
         ToolbarItemGroup(placement: .topBarTrailing) {
-            // Go keeps a clean screen; Mo's tabs and Notes bring their own buttons.
-            if !isOwnScreen {
-                if !isTodo {
-                    NavigationLink(value: HomeRoute.search) {
-                        Image(systemName: "magnifyingglass")
-                    }
+            // Go keeps a clean screen; Mo's tabs and Notes bring their own buttons; ToDo has none.
+            if !isOwnScreen && !isTodo {
+                NavigationLink(value: HomeRoute.search) {
+                    Image(systemName: "magnifyingglass")
                 }
                 NavigationLink(value: HomeRoute.settings) {
                     Image(systemName: "gearshape")

@@ -42,13 +42,13 @@ struct SubsView: View {
         return NavigationStack(path: $router.path) {
             TabView(selection: $tab) {
                 Tab("リスト", systemImage: "list.bullet.indent", value: SubsTab.list) {
-                    SubsListView()
+                    SubsListView().modifier(SubsTabEntrance(mine: .list, selected: tab))
                 }
                 Tab("更新日", systemImage: "arrow.trianglehead.clockwise.rotate.90", value: SubsTab.renewals) {
-                    SubsRenewalsView()
+                    SubsRenewalsView().modifier(SubsTabEntrance(mine: .renewals, selected: tab))
                 }
                 Tab("解約シミュ", systemImage: "scissors", value: SubsTab.simulate) {
-                    SubsSimView()
+                    SubsSimView().modifier(SubsTabEntrance(mine: .simulate, selected: tab))
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -89,18 +89,17 @@ struct SubsView: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         // On the dark cards of リスト and 解約シミュ the pills are tinted and their symbols white.
+        // リスト: ‹ and 過去の記録 share one pill; the other tabs have ‹ alone.
         ToolbarItem(placement: .topBarLeading) {
-            SubsPill(symbol: "chevron.left", onCard: tab != .renewals, action: onCalendar)
-                .accessibilityLabel("カレンダーに戻る")
+            SubsPillGroup(onCard: tab != .renewals, buttons: tab == .list ? [
+                SubsPillButton(symbol: "chevron.left", label: "WithDaysに戻る", action: onCalendar),
+                SubsPillButton(symbol: "backward", label: "過去の記録") { router.path.append(.history) },
+            ] : [
+                SubsPillButton(symbol: "chevron.left", label: "WithDaysに戻る", action: onCalendar),
+            ])
+            .animation(.snappy, value: tab)
         }
         .sharedBackgroundVisibility(.hidden)
-        if tab == .list {
-            ToolbarItem(placement: .topBarLeading) {
-                SubsPill(symbol: "backward", onCard: true) { router.path.append(.history) }
-                    .accessibilityLabel("過去の記録")
-            }
-            .sharedBackgroundVisibility(.hidden)
-        }
     }
 }
 
@@ -123,6 +122,60 @@ struct SubsPill: View {
         .buttonStyle(.plain)
         .glassEffect(onCard ? .regular.tint(SubsListView.cardColors[0].opacity(0.55)).interactive() : .regular.interactive(), in: .circle)
         .animation(.snappy, value: onCard)
+    }
+}
+
+struct SubsPillButton: Identifiable {
+    let symbol: String
+    let label: String
+    var action: () -> Void
+    var id: String { symbol }
+}
+
+/// Several top-bar buttons in one glass pill (one button: a circle, like SubsPill).
+struct SubsPillGroup: View {
+    var onCard = false
+    let buttons: [SubsPillButton]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(buttons) { button in
+                Button(action: button.action) {
+                    Image(systemName: button.symbol)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(onCard ? Color.white : Color.primary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(button.label)
+                .transition(.opacity.combined(with: .scale(scale: 0.6)))
+            }
+        }
+        .glassEffect(onCard ? .regular.tint(SubsListView.cardColors[0].opacity(0.55)).interactive() : .regular.interactive(), in: .capsule)
+        .animation(.snappy, value: onCard)
+    }
+}
+
+/// Switching tabs: the tab's screen rises and sharpens into place instead of cutting in.
+/// (Only on a switch, not when coming back from a pushed screen.)
+struct SubsTabEntrance: ViewModifier {
+    let mine: SubsTab
+    let selected: SubsTab
+    @State private var shown = true
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown ? 0 : 14)
+            .blur(radius: shown ? 0 : 6)
+            .onChange(of: selected) { _, new in
+                guard new == mine else { return }
+                shown = false
+                Task { @MainActor in
+                    withAnimation(.snappy(duration: 0.35)) { shown = true }
+                }
+            }
     }
 }
 

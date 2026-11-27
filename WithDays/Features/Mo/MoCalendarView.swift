@@ -33,6 +33,10 @@ struct MoCalendarView: View {
             .tabViewStyle(.page(indexDisplayMode: .never))
             .frame(height: Self.rowHeight * 6)
 
+            monthTotals
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+
             dayList
         }
         .sensoryFeedback(.selection, trigger: selectedDate)
@@ -67,6 +71,39 @@ struct MoCalendarView: View {
             offset = 0
             selectedDate = CalendarMath.startOfDay(.now)
         }
+    }
+
+    /// The shown month's 支出 / 収入 / 収支 in one strip under the grid.
+    private var monthTotals: some View {
+        let start = month(offset)
+        let records = mo.records(from: start, to: CalendarMath.addMonths(1, to: start))
+        let expense = records.filter { $0.kind == .expense }.reduce(0) { $0 + $1.amount }
+        let income = records.filter { $0.kind == .income }.reduce(0) { $0 + $1.amount }
+        let balance = income - expense
+        return HStack(spacing: 0) {
+            monthTotal("支出", "¥\(MoFormat.amount(expense))", .moExpense)
+            monthTotal("収入", "¥\(MoFormat.amount(income))", .moIncome)
+            monthTotal("収支", "\(balance > 0 ? "+" : balance < 0 ? "-" : "")¥\(MoFormat.amount(abs(balance)))",
+                       balance >= 0 ? .moIncome : .moExpense)
+        }
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(.secondarySystemBackground)))
+        .animation(.snappy, value: offset)
+    }
+
+    private func monthTotal(_ title: String, _ value: String, _ color: Color) -> some View {
+        VStack(spacing: 1) {
+            Text(title)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(MoFormat.number(15))
+                .monospacedDigit()
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var dayList: some View {

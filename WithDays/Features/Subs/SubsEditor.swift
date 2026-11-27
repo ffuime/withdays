@@ -253,8 +253,8 @@ struct SubsEditor: View {
 
     private func apply(_ preset: SubsPreset) {
         sub.name = preset.name
-        priceText = "\(preset.price)"
-        sub.price = preset.price
+        priceText = preset.price.map { "\($0)" } ?? ""
+        sub.price = preset.price ?? 0
         sub.cycle = preset.cycle
         sub.category = preset.category
         sub.symbol = preset.symbol

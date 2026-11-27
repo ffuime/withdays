@@ -2,7 +2,8 @@ import SwiftUI
 
 struct SubsPreset: Identifiable, Hashable {
     let name: String
-    let price: Int
+    /// nil when the usual fee isn't published (some fan clubs): the user fills it in.
+    let price: Int?
     var cycle = SubsCycle.monthly
     let category: String
     let symbol: String
@@ -48,7 +49,13 @@ struct SubsPopularView: View {
                                     .font(.system(size: 15, weight: .semibold))
                                     .foregroundStyle(.primary)
                                 Spacer(minLength: 8)
-                                SubsPriceText(price: preset.price, suffix: preset.cycle.suffix, size: 15)
+                                if let price = preset.price {
+                                    SubsPriceText(price: price, suffix: preset.cycle.suffix, size: 15)
+                                } else {
+                                    Text("料金は入力")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }
@@ -56,7 +63,7 @@ struct SubsPopularView: View {
             }
             Section {
             } footer: {
-                Text("料金は2026年11月時点の目安です。プランや支払い方法（アプリ内課金など）で変わるので、追加したあと実際の金額に直してください。")
+                Text("料金は2026年11月時点の目安です。プランや支払い方法（アプリ内課金など）で変わるので、追加したあと実際の金額に直してください。ファンクラブで料金が出ていないものは、入会したプランの金額を入れてください。")
             }
         }
         .searchable(text: $query, prompt: "サービスを検索")
@@ -97,6 +104,24 @@ struct SubsPopularView: View {
         SubsPreset(name: "LINE MUSIC", price: 980, category: "音楽", symbol: "music.note", tint: 0x06C755, appID: 966142320),
         SubsPreset(name: "AWA", price: 980, category: "音楽", symbol: "music.note", tint: 0x111111, appID: 980578855),
         SubsPreset(name: "Audible", price: 1500, category: "音楽", symbol: "headphones", tint: 0xF7991C, appID: 379693831),
+        // ファンクラブ (official names; fees where the club publishes them, otherwise left for the user)
+        SubsPreset(name: "Mrs. GREEN APPLE「Ringo Jam」", price: 550, category: "ファンクラブ", symbol: "heart.fill", tint: 0x6BBF3A, appID: 6470959295),
+        SubsPreset(name: "Official髭男dism「Stand By You」", price: 4950, cycle: SubsCycle(unit: .year), category: "ファンクラブ", symbol: "heart.fill", tint: 0x1F1F1F),
+        SubsPreset(name: "Official髭男dism「BROTHERS」", price: nil, category: "ファンクラブ", symbol: "heart.fill", tint: 0x1F1F1F),
+        SubsPreset(name: "YOASOBI「YOA'S」", price: nil, category: "ファンクラブ", symbol: "heart.fill", tint: 0x2B2B5E),
+        SubsPreset(name: "SEKAI NO OWARI「S.N.O.W.S」", price: nil, cycle: SubsCycle(unit: .year), category: "ファンクラブ", symbol: "heart.fill", tint: 0x3E6FB0),
+        SubsPreset(name: "King Gnu「CLUB GNU」", price: 440, category: "ファンクラブ", symbol: "heart.fill", tint: 0x111111),
+        SubsPreset(name: "back number「one room」Gold Key", price: 5800, cycle: SubsCycle(unit: .year), category: "ファンクラブ", symbol: "heart.fill", tint: 0xC9A227, appID: 1304228982),
+        SubsPreset(name: "back number「one room」Silver Key", price: 550, category: "ファンクラブ", symbol: "heart.fill", tint: 0x9AA0A6, appID: 1304228982),
+        SubsPreset(name: "Vaundy「VAWS」", price: nil, category: "ファンクラブ", symbol: "heart.fill", tint: 0x222222),
+        SubsPreset(name: "Vaundy「VAWS premium」", price: 8800, cycle: SubsCycle(unit: .year), category: "ファンクラブ", symbol: "heart.fill", tint: 0x222222),
+        SubsPreset(name: "Ado「Adoのドキドキ秘密基地」", price: nil, category: "ファンクラブ", symbol: "heart.fill", tint: 0x1D3A8A),
+        SubsPreset(name: "Mr.Children「FATHER&MOTHER」", price: nil, cycle: SubsCycle(unit: .year), category: "ファンクラブ", symbol: "heart.fill", tint: 0x8C1D2C),
+        SubsPreset(name: "ONE OK ROCK「PRIMAL FOOTMARK」", price: 4000, cycle: SubsCycle(unit: .year), category: "ファンクラブ", symbol: "heart.fill", tint: 0x111111),
+        SubsPreset(name: "あいみょん「AIM」", price: nil, category: "ファンクラブ", symbol: "heart.fill", tint: 0xE8A33D, appID: 1435033402),
+        SubsPreset(name: "Perfume「P.T.A.」", price: 4500, cycle: SubsCycle(unit: .year), category: "ファンクラブ", symbol: "heart.fill", tint: 0xE4007F),
+        SubsPreset(name: "Creepy Nuts「CLUB Creepy Nuts」", price: nil, category: "ファンクラブ", symbol: "heart.fill", tint: 0x111111),
+        SubsPreset(name: "RADWIMPS「ボクンチ」", price: nil, category: "ファンクラブ", symbol: "heart.fill", tint: 0x333333, appID: 1576305045),
         // ゲーム
         SubsPreset(name: "Nintendo Switch Online", price: 400, category: "ゲーム", symbol: "gamecontroller.fill", tint: 0xE60012, appID: 1234806557),
         SubsPreset(name: "Nintendo Switch Online（年）", price: 3000, cycle: SubsCycle(unit: .year), category: "ゲーム", symbol: "gamecontroller.fill", tint: 0xE60012, appID: 1234806557),

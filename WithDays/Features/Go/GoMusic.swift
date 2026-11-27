@@ -85,9 +85,12 @@ final class GoMusic {
         haptic += 1
     }
 
-    /// Shuffles what's already queued (the queue stays) and plays.
+    /// Shuffle-plays the playlist (the queue) that's playing: shuffle on, the queue dealt again, and on to a song
+    /// picked at random, even if it was shuffling already.
     func shuffleQueue() {
+        player.shuffleMode = .off
         player.shuffleMode = .songs
+        player.skipToNextItem()
         player.play()
         shuffleOn = true
         isPlaying = true
@@ -116,8 +119,8 @@ struct GoMusicBar: View {
     @State private var flashTask: Task<Void, Never>?
 
     static let artworkSize: CGFloat = 48
-    /// Shuffle off: black, or grey in dark mode where black wouldn't show.
-    private static let shuffleOff = Color(uiColor: UIColor(light: 0x000000, dark: 0x8E8E93))
+    /// Shuffle off: grey.
+    private static let shuffleOff = Color(uiColor: .systemGray)
 
     var body: some View {
         HStack(spacing: 12) {
@@ -232,31 +235,22 @@ struct MarqueeText: View {
             .overlay(alignment: .leading) {
                 if overflows {
                     TimelineView(.animation) { context in
+                        let x = offset(at: context.date)
                         HStack(spacing: Self.gap) {
                             label
                             label
                         }
-                        .offset(x: -offset(at: context.date))
+                        .offset(x: -x)
+                        .frame(width: boxWidth, alignment: .leading)
+                        // The right edge always fades; the left only once it has scrolled (still at the start,
+                        // the first letters stay clear), coming in over the first few points.
+                        .mask { edgeFade(leading: min(Self.fade, x)) }
                     }
                 } else {
                     label
                 }
             }
-            .mask {
-                if overflows {
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .black, location: Self.fade / max(boxWidth, 1)),
-                            .init(color: .black, location: 1 - Self.fade / max(boxWidth, 1)),
-                            .init(color: .clear, location: 1),
-                        ],
-                        startPoint: .leading, endPoint: .trailing
-                    )
-                } else {
-                    Rectangle()
-                }
-            }
+            .clipped()
             .background {
                 // The text's own width, measured apart from the box.
                 label
@@ -266,6 +260,19 @@ struct MarqueeText: View {
             .onChange(of: text) { _, _ in started = .now }
             .accessibilityElement()
             .accessibilityLabel(text)
+    }
+
+    private func edgeFade(leading: CGFloat) -> some View {
+        let width = max(boxWidth, 1)
+        return LinearGradient(
+            stops: [
+                .init(color: leading > 0.5 ? .clear : .black, location: 0),
+                .init(color: .black, location: max(leading, 0.5) / width),
+                .init(color: .black, location: 1 - Self.fade / width),
+                .init(color: .clear, location: 1),
+            ],
+            startPoint: .leading, endPoint: .trailing
+        )
     }
 
     private var label: some View {
