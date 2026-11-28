@@ -1,0 +1,51 @@
+name: Trending words
+
+# Keykie's trending-words dictionary (trending/trending.json), rebuilt every day from Wikipedia's page views.
+on:
+  schedule:
+    # 01:30 UTC = 10:30 JST: the previous day's page views are out by then.
+    - cron: "30 1 * * *"
+  push:
+    branches: [main]
+    paths:
+      - "trending/build_trending.py"
+      - "trending/requirements.txt"
+      - ".github/workflows/trending.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: trending
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -r trending/requirements.txt
+
+      - name: Test
+        working-directory: trending
+        run: python -m pytest -q
+
+      - name: Build
+        run: python trending/build_trending.py --out trending/trending.json
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add trending/trending.json trending/trending.csv
+          git diff --cached --quiet && exit 0
+          git commit -m "Update trending words ($(date -u +%F))"
+          git pull --rebase origin main
+          git push origin HEAD:main

@@ -106,6 +106,10 @@ struct RootView: View {
             // Access may have been granted in the Settings app while we were away.
             if phase == .active { store.refreshStatus() }
         }
+        // Keykie's trending words, on the interval set in its settings.
+        .task {
+            if KeykieDictionary.trendingIsDue { try? await KeykieDictionary.updateTrending() }
+        }
     }
 }
 

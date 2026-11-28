@@ -7,7 +7,7 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "1.33.0"
+    MARKETING_VERSION: "1.34.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
   # Release is built for size: optimised for size, symbols stripped from the binaries (CI builds with
@@ -31,6 +31,10 @@ packages:
   Firebase:
     url: https://github.com/firebase/firebase-ios-sdk
     from: 12.0.0
+  # Keykie's kana-kanji converter with its bundled dictionary (MIT). Pinned: 0.x minors can break the API.
+  AzooKeyKanaKanjiConverter:
+    url: https://github.com/azooKey/AzooKeyKanaKanjiConverter
+    exactVersion: 0.11.2
 
 targets:
   WithDays:
@@ -40,6 +44,8 @@ targets:
       - path: WithDays
         excludes:
           - GoogleService-Info.plist
+      # Keykie's settings, clipboard and dictionaries, shared with the keyboard through the App Group.
+      - path: Keykie/Shared
       # Written by the build from the GOOGLE_SERVICE_INFO_PLIST secret; without it tooc has no server.
       - path: WithDays/GoogleService-Info.plist
         buildPhase: resources
@@ -79,6 +85,7 @@ targets:
     dependencies:
       - target: WithDaysWidget
       - target: SubsReport
+      - target: Keykie
       - package: SlidesFeature
       - package: Firebase
         product: FirebaseCore
@@ -184,6 +191,44 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: NO
         SKIP_INSTALL: YES
+        CODE_SIGN_STYLE: Automatic
+
+  # Keykie: WithDays's Japanese keyboard (12-key flick, azooKey's converter). Its settings live in WithDays.
+  Keykie:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Keykie
+        excludes:
+          - Info.plist
+          - README.md
+    info:
+      path: Keykie/Info.plist
+      properties:
+        CFBundleDisplayName: Keykie
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDevelopmentRegion: ja
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeykieViewController
+          NSExtensionAttributes:
+            IsASCIICapable: false
+            PrefersRightToLeft: false
+            PrimaryLanguage: ja-JP
+            RequestsOpenAccess: true
+    dependencies:
+      - package: AzooKeyKanaKanjiConverter
+        product: KanaKanjiConverterModuleWithDefaultDictionary
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ffuime.withdays.keykie
+        PRODUCT_NAME: Keykie
+        CODE_SIGN_ENTITLEMENTS: Entitlements/Keykie.entitlements
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
         CODE_SIGN_STYLE: Automatic
 
   # Subscribes' Screen Time report: this month's time in a subscription's app.

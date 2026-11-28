@@ -15,7 +15,7 @@ enum AppGroup {
         if let bundleID = Bundle.main.bundleIdentifier {
             // The extensions' bundle IDs are the app's plus ".widget" / ".subsreport".
             var appID = bundleID
-            for suffix in [".widget", ".subsreport"] where appID.hasSuffix(suffix) {
+            for suffix in [".widget", ".subsreport", ".keykie"] where appID.hasSuffix(suffix) {
                 appID = String(appID.dropLast(suffix.count))
             }
             candidates.append("group." + appID)

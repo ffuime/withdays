@@ -23,6 +23,9 @@ enum AppInfo {
 
     /// Newest first. Add an entry here with each release.
     static let changelog: [Release] = [
+        Release(version: "1.34.0", date: "2026.11.28", notes: [
+            "Keykie：WithDays に日本語キーボードを追加（12キーのフリック、azooKey の変換、Delete と ⌫ の行単位スワイプ、候補バーでのカーソル移動、クリップボード履歴と定型文、絵文字と検索、顔文字、スキンと背景画像、ユーザー辞書と流行語辞書）。設定 › キーボード › Keykie から追加・設定できます",
+        ]),
         Release(version: "1.33.0", date: "2026.11.27", notes: [
             "Planner：入力・統計・カレンダーを見やすく作り直し（カテゴリを一覧で表示、記録する日を選べる、毎日の支出グラフ、先月との比較、カテゴリごとの記録）",
             "Subscribes：人気サービスにアーティストのファンクラブを追加、タブ切り替えのアニメーション、リストの左上をひとつのピルに",

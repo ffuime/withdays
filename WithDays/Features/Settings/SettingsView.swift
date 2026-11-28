@@ -71,6 +71,18 @@ struct SettingsView: View {
             }
 
             Section {
+                NavigationLink {
+                    KeykieSettingsView()
+                } label: {
+                    Label("Keykie", systemImage: "keyboard")
+                }
+            } header: {
+                Text("キーボード")
+            } footer: {
+                Text("WithDays に入っている日本語キーボードの設定です。")
+            }
+
+            Section {
                 Button("iPhoneの設定を開く") {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
                         UIApplication.shared.open(url)

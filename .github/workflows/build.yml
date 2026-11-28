@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+    # The daily trending-words commit (trending.yml) needs no new IPA.
+    paths-ignore:
+      - "trending/**"
   pull_request:
   workflow_dispatch:
 
@@ -88,6 +91,7 @@ jobs:
           grep -q "BUILD SUCCEEDED" build.log
           test -d build/Build/Products/Release-iphoneos/WithDays.app/PlugIns/WithDaysWidget.appex
           test -d build/Build/Products/Release-iphoneos/WithDays.app/PlugIns/SubsReport.appex
+          test -d build/Build/Products/Release-iphoneos/WithDays.app/PlugIns/Keykie.appex
 
       # tooc on its own: the same tooc, as tooc.app.
       - name: Build tooc (unsigned)
@@ -131,6 +135,7 @@ jobs:
           rm -rf Payload && mkdir Payload && cp -R "$APP" Payload/
           rm -rf Payload/WithDays.app/PlugIns/SubsReport.appex
           codesign -f -s - --entitlements Entitlements/WithDaysWidget.entitlements Payload/WithDays.app/PlugIns/WithDaysWidget.appex
+          codesign -f -s - --entitlements Entitlements/Keykie.entitlements Payload/WithDays.app/PlugIns/Keykie.appex
           codesign -f -s - --entitlements Entitlements/WithDays.entitlements Payload/WithDays.app
           codesign -d --entitlements - Payload/WithDays.app
           zip -qry WithDays.ipa Payload
