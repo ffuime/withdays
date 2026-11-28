@@ -63,8 +63,9 @@ struct KeykieRootView: View {
         if state.settings.oneHanded == 0 {
             content()
         } else {
+            let board = content()
             GeometryReader { geo in
-                content()
+                board
                     .frame(width: geo.size.width * 0.86)
                     .frame(maxWidth: .infinity, alignment: state.settings.oneHanded == 1 ? .leading : .trailing)
             }
